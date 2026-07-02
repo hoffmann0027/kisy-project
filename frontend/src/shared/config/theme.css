@@ -1,0 +1,56 @@
+/* Apple-inspired dark theme tokens. Dark mode only — see docs/spec/02-frontend-ux.md. */
+:root {
+  color-scheme: dark;
+
+  --color-bg: #0b0b0f;
+  --color-surface: #16161d;
+  --color-surface-glass: rgba(28, 28, 36, 0.6);
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-text-primary: #f5f5f7;
+  --color-text-secondary: #a1a1a6;
+  --color-accent: #0a84ff;
+  --color-accent-hover: #409cff;
+  --color-danger: #ff453a;
+  --color-success: #32d74b;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.45);
+
+  --blur-glass: 20px;
+
+  --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    Roboto, sans-serif;
+
+  --transition-fast: 150ms ease;
+  --transition-medium: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-family);
+  -webkit-font-smoothing: antialiased;
+}
+
+.glass-surface {
+  background: var(--color-surface-glass);
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-elevated);
+}

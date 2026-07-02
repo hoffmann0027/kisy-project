@@ -1,0 +1,11 @@
+# Normalize line endings. Files that run inside Linux containers must keep
+# LF regardless of the host OS, or shell scripts and configs break.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
