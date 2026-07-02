@@ -48,9 +48,11 @@ type Hub struct {
 	subscribers map[uuid.UUID]map[*Client]struct{} // presence target -> interested clients
 
 	// sender persists messages received over the socket; authorizeChat
-	// guards typing/read broadcasts to chats the actor may access.
+	// guards typing/read broadcasts to chats the actor may access;
+	// onRead persists a read receipt (best-effort, may be nil).
 	sender        Sender
 	authorizeChat ChatAuthorizer
+	onRead        func(ctx context.Context, userID uuid.UUID, chatType string, chatID, messageID uuid.UUID)
 }
 
 type fanoutEnvelope struct {
@@ -73,10 +75,12 @@ func NewHub(log *slog.Logger, rdb *redis.Client, resolve RecipientResolver) *Hub
 	}
 }
 
-// SetHandlers wires inbound-message behaviour after construction.
-func (h *Hub) SetHandlers(sender Sender, authorizeChat ChatAuthorizer) {
+// SetHandlers wires inbound-message behaviour after construction. onRead
+// may be nil to disable read-receipt persistence.
+func (h *Hub) SetHandlers(sender Sender, authorizeChat ChatAuthorizer, onRead func(ctx context.Context, userID uuid.UUID, chatType string, chatID, messageID uuid.UUID)) {
 	h.sender = sender
 	h.authorizeChat = authorizeChat
+	h.onRead = onRead
 }
 
 // Run subscribes to the Redis channels and delivers received events to

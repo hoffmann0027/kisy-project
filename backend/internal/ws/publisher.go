@@ -25,3 +25,25 @@ func (p *Publisher) PublishMessageDeleted(chatType string, chatID, messageID uui
 		"messageId": messageID,
 	}))
 }
+
+// PublishNotification pushes a notification.created event to one user's
+// connected clients; satisfies the notifications.WSPublisher port.
+func (p *Publisher) PublishNotification(userID uuid.UUID, data any) {
+	p.hub.publishToUsers([]uuid.UUID{userID}, encode(EventNotification, data))
+}
+
+// PublishReaction broadcasts a reaction change; satisfies the
+// reactions.Publisher port structurally.
+func (p *Publisher) PublishReaction(chatType string, chatID, messageID, userID uuid.UUID, emoji string, added bool) {
+	event := EventReactionAdded
+	if !added {
+		event = EventReactionRemoved
+	}
+	p.hub.publishToChat(chatType, chatID, encode(event, reactionData{
+		ChatType:  chatType,
+		ChatID:    chatID,
+		MessageID: messageID,
+		UserID:    userID,
+		Emoji:     emoji,
+	}))
+}

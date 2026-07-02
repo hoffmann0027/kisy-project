@@ -34,15 +34,10 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	list, err := h.svc.ListForUser(r.Context(), actor)
+	dtos, err := h.svc.ListDTOsForUser(r.Context(), actor)
 	if err != nil {
 		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "failed to list chats")
 		return
-	}
-
-	dtos := make([]DTO, 0, len(list))
-	for i := range list {
-		dtos = append(dtos, list[i].ToDTO(actor.UserID))
 	}
 	httpresponse.OK(w, r, http.StatusOK, map[string]any{"chats": dtos})
 }

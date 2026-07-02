@@ -12,14 +12,17 @@ import (
 
 // Server→Client event names.
 const (
-	EventMessageCreated = "message.created"
-	EventMessageDeleted = "message.deleted"
-	EventMessageRead    = "message.read"
-	EventTypingStarted  = "typing.started"
-	EventTypingStopped  = "typing.stopped"
-	EventUserOnline     = "user.online"
-	EventUserOffline    = "user.offline"
-	EventError          = "error"
+	EventMessageCreated  = "message.created"
+	EventMessageDeleted  = "message.deleted"
+	EventMessageRead     = "message.read"
+	EventTypingStarted   = "typing.started"
+	EventTypingStopped   = "typing.stopped"
+	EventUserOnline      = "user.online"
+	EventUserOffline     = "user.offline"
+	EventReactionAdded   = "reaction.added"
+	EventReactionRemoved = "reaction.removed"
+	EventNotification    = "notification.created"
+	EventError           = "error"
 )
 
 // Client→Server message types.
@@ -89,4 +92,12 @@ type readData struct {
 	ChatID    uuid.UUID `json:"chatId"`
 	MessageID uuid.UUID `json:"messageId"`
 	UserID    uuid.UUID `json:"userId"`
+}
+
+type reactionData struct {
+	ChatType  string    `json:"chatType"`
+	ChatID    uuid.UUID `json:"chatId"`
+	MessageID uuid.UUID `json:"messageId"`
+	UserID    uuid.UUID `json:"userId"`
+	Emoji     string    `json:"emoji"`
 }

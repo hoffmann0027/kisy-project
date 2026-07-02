@@ -38,23 +38,31 @@ type Message struct {
 	CreatedAt time.Time
 }
 
+// ReactionSummary aggregates one emoji on a message: how many users chose
+// it and whether the viewer is among them.
+type ReactionSummary struct {
+	Emoji   string `json:"emoji"`
+	Count   int    `json:"count"`
+	Reacted bool   `json:"reacted"`
+}
+
 // DTO follows the Message Object in docs/spec/09-api-contracts.md.
 // Attachments and mentions arrive in later stages but the fields are
 // present now so the contract is stable. A deleted message is returned as
 // a tombstone: its text is cleared but its slot in the timeline remains.
 type DTO struct {
-	ID          uuid.UUID  `json:"id"`
-	ChatID      uuid.UUID  `json:"chatId"`
-	ChatType    string     `json:"chatType"`
-	SenderID    uuid.UUID  `json:"senderId"`
-	Text        *string    `json:"text"`
-	ReplyTo     *uuid.UUID `json:"replyTo"`
-	Attachments []any      `json:"attachments"`
-	Reactions   []any      `json:"reactions"`
-	Mentions    []any      `json:"mentions"`
-	IsDeleted   bool       `json:"isDeleted"`
-	CreatedAt   time.Time  `json:"createdAt"`
-	DeletedAt   *time.Time `json:"deletedAt"`
+	ID          uuid.UUID         `json:"id"`
+	ChatID      uuid.UUID         `json:"chatId"`
+	ChatType    string            `json:"chatType"`
+	SenderID    uuid.UUID         `json:"senderId"`
+	Text        *string           `json:"text"`
+	ReplyTo     *uuid.UUID        `json:"replyTo"`
+	Attachments []any             `json:"attachments"`
+	Reactions   []ReactionSummary `json:"reactions"`
+	Mentions    []any             `json:"mentions"`
+	IsDeleted   bool              `json:"isDeleted"`
+	CreatedAt   time.Time         `json:"createdAt"`
+	DeletedAt   *time.Time        `json:"deletedAt"`
 }
 
 func (m *Message) ToDTO() DTO {
@@ -65,7 +73,7 @@ func (m *Message) ToDTO() DTO {
 		SenderID:    m.SenderID,
 		ReplyTo:     m.ReplyTo,
 		Attachments: []any{},
-		Reactions:   []any{},
+		Reactions:   []ReactionSummary{},
 		Mentions:    []any{},
 		IsDeleted:   m.IsDeleted,
 		CreatedAt:   m.CreatedAt,

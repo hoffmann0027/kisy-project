@@ -176,6 +176,19 @@ func newRouter(d routerDeps) http.Handler {
 				m.chatsHandler.Routes(r)
 			})
 
+			r.Route("/favorites", func(r chi.Router) {
+				m.favoritesHandler.Routes(r)
+			})
+
+			r.Route("/notifications", func(r chi.Router) {
+				m.notificationsHandler.Routes(r)
+			})
+
+			r.Route("/admin", func(r chi.Router) {
+				r.Use(m.authMW.RequireClearance(1)) // CEO only
+				m.adminHandler.Routes(r)
+			})
+
 			r.Route("/groups", func(r chi.Router) {
 				// Reads are visibility-filtered; creation is CEO-only.
 				r.Group(func(r chi.Router) {
@@ -185,9 +198,12 @@ func newRouter(d routerDeps) http.Handler {
 				m.groupsHandler.Routes(r)
 			})
 
-			// Message endpoints live at the /api/v1 root
-			// (POST/GET/DELETE /messages).
+			// Message, reaction and read-state endpoints live at the
+			// /api/v1 root (POST/GET/DELETE /messages,
+			// POST/DELETE /messages/{id}/reactions, POST /read).
 			m.messagesHandler.Routes(r)
+			m.reactionsHandler.Routes(r)
+			m.readstateHandler.Routes(r)
 		})
 
 		// WebSocket upgrade authenticates from the access cookie or an

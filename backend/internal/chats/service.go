@@ -24,14 +24,49 @@ type ActorMeta struct {
 // or is inactive.
 type TargetLookup func(ctx context.Context, id uuid.UUID) (level int, ok bool)
 
+// UnreadLoader returns unread counts keyed by chat id, injected to avoid a
+// chats→readstate import cycle.
+type UnreadLoader func(ctx context.Context, userID uuid.UUID, chatIDs []uuid.UUID) (map[uuid.UUID]int, error)
+
 type Service struct {
 	pool   *pgxpool.Pool
 	repo   Repository
 	lookup TargetLookup
+	unread UnreadLoader
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository, lookup TargetLookup) *Service {
 	return &Service{pool: pool, repo: repo, lookup: lookup}
+}
+
+// SetUnreadLoader wires unread-counter enrichment for chat listings.
+func (s *Service) SetUnreadLoader(l UnreadLoader) { s.unread = l }
+
+// ListDTOsForUser returns the actor's chats as DTOs, enriched with unread
+// counters when a loader is configured.
+func (s *Service) ListDTOsForUser(ctx context.Context, actor ActorMeta) ([]DTO, error) {
+	list, err := s.repo.ListForUser(ctx, s.pool, actor.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	dtos := make([]DTO, 0, len(list))
+	ids := make([]uuid.UUID, 0, len(list))
+	for i := range list {
+		dtos = append(dtos, list[i].ToDTO(actor.UserID))
+		ids = append(ids, list[i].ID)
+	}
+
+	if s.unread != nil && len(ids) > 0 {
+		counts, err := s.unread(ctx, actor.UserID, ids)
+		if err != nil {
+			return nil, err
+		}
+		for i := range dtos {
+			dtos[i].UnreadCount = counts[dtos[i].ID]
+		}
+	}
+	return dtos, nil
 }
 
 // OpenPrivateChat returns the existing conversation with target, or creates

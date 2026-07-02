@@ -24,6 +24,12 @@ type Repository interface {
 	Count(ctx context.Context, q db.DBTX) (int64, error)
 	UpdateUsername(ctx context.Context, q db.DBTX, id uuid.UUID, username string) error
 	UpdatePasswordHash(ctx context.Context, q db.DBTX, id uuid.UUID, hash string) error
+	// AdminResetPasswordHash sets a new hash and forces a change on next
+	// login (used when the CEO resets someone's credentials).
+	AdminResetPasswordHash(ctx context.Context, q db.DBTX, id uuid.UUID, hash string) error
+	UpdateRole(ctx context.Context, q db.DBTX, id uuid.UUID, roleID int) error
+	SetActive(ctx context.Context, q db.DBTX, id uuid.UUID, active bool) error
+	List(ctx context.Context, q db.DBTX, limit, offset int) ([]User, error)
 	// RegisterLoginFailure atomically increments the failure counter and,
 	// when maxAttempts is reached, sets locked_until to lockUntil.
 	// Returns the resulting lock timestamp (nil if not locked).
@@ -115,6 +121,65 @@ func (r *PostgresRepository) UpdatePasswordHash(ctx context.Context, q db.DBTX, 
 		return ErrNotFound
 	}
 	return nil
+}
+
+func (r *PostgresRepository) AdminResetPasswordHash(ctx context.Context, q db.DBTX, id uuid.UUID, hash string) error {
+	tag, err := q.Exec(ctx, `
+		UPDATE users SET password_hash = $2, must_change_password = true,
+			failed_login_attempts = 0, locked_until = NULL
+		WHERE id = $1`, id, hash)
+	if err != nil {
+		return fmt.Errorf("users: admin reset password: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *PostgresRepository) UpdateRole(ctx context.Context, q db.DBTX, id uuid.UUID, roleID int) error {
+	tag, err := q.Exec(ctx, `UPDATE users SET role_id = $2 WHERE id = $1`, id, roleID)
+	if err != nil {
+		return fmt.Errorf("users: update role: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *PostgresRepository) SetActive(ctx context.Context, q db.DBTX, id uuid.UUID, active bool) error {
+	tag, err := q.Exec(ctx, `UPDATE users SET is_active = $2 WHERE id = $1`, id, active)
+	if err != nil {
+		return fmt.Errorf("users: set active: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *PostgresRepository) List(ctx context.Context, q db.DBTX, limit, offset int) ([]User, error) {
+	rows, err := q.Query(ctx, `SELECT`+userColumns+`
+		FROM users ORDER BY created_at DESC, id DESC LIMIT $1 OFFSET $2`, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("users: list: %w", err)
+	}
+	defer rows.Close()
+
+	var out []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(
+			&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &u.RoleID, &u.AvatarURL,
+			&u.Status, &u.LastSeenAt, &u.IsActive, &u.FailedLoginAttempts, &u.LockedUntil,
+			&u.MustChangePassword, &u.CreatedAt, &u.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("users: scan list row: %w", err)
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
 }
 
 func (r *PostgresRepository) RegisterLoginFailure(ctx context.Context, q db.DBTX, id uuid.UUID, maxAttempts int, lockUntil time.Time) (*time.Time, error) {

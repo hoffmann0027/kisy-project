@@ -1,12 +1,13 @@
 openapi: 3.1.0
 info:
   title: KISY Enterprise Messenger API
-  version: 0.3.0
+  version: 0.4.0
   description: >
-    REST API for the KISY enterprise messenger. Covers stages 2–3:
+    REST API for the KISY enterprise messenger. Covers stages 2–4:
     authentication, access control, invitations, profile, groups, private
-    chats and messages, plus the WebSocket gateway. Files and admin
-    surfaces are added in later stages.
+    chats, messages, reactions, read state, favorites, notifications, the
+    CEO admin surface and the WebSocket gateway. File handling is added in a
+    later stage.
 servers:
   - url: /api/v1
     description: Versioned API root (behind the Nginx edge proxy)
@@ -24,6 +25,10 @@ tags:
     description: One-to-one private conversations
   - name: messages
     description: Chat messages (editing disabled by design)
+  - name: notifications
+    description: Per-user notifications (@mentions)
+  - name: admin
+    description: CEO administration (users, roles, credentials, audit)
   - name: websocket
     description: Real-time gateway
 
@@ -542,6 +547,278 @@ paths:
         '101': { description: Switching Protocols (WebSocket) }
         '401': { description: Authentication required or failed }
 
+  /messages/{messageID}/reactions:
+    post:
+      tags: [messages]
+      summary: Add an emoji reaction (idempotent)
+      parameters:
+        - { name: messageID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [emoji]
+              properties:
+                emoji: { type: string, maxLength: 32 }
+      responses:
+        '200': { description: Reaction added, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [messages]
+      summary: Remove your emoji reaction
+      parameters:
+        - { name: messageID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [emoji]
+              properties:
+                emoji: { type: string, maxLength: 32 }
+      responses:
+        '200': { description: Reaction removed, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /read:
+    post:
+      tags: [messages]
+      summary: Mark a chat read up to a message (updates unread counters)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [chatType, chatId, messageId]
+              properties:
+                chatType: { type: string, enum: [private, group] }
+                chatId: { type: string, format: uuid }
+                messageId: { type: string, format: uuid }
+      responses:
+        '200': { description: Read position stored, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /favorites:
+    get:
+      tags: [chats]
+      summary: List favorite/pinned chats
+      responses:
+        '200':
+          description: Favorites, pinned first
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          favorites:
+                            type: array
+                            items: { $ref: '#/components/schemas/Favorite' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      tags: [chats]
+      summary: Add or update a favorite/pin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [chatType, chatId]
+              properties:
+                chatType: { type: string, enum: [private, group] }
+                chatId: { type: string, format: uuid }
+                isPinned: { type: boolean }
+                pinnedOrder: { type: [integer, 'null'] }
+      responses:
+        '200': { description: Stored, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [chats]
+      summary: Remove a favorite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [chatType, chatId]
+              properties:
+                chatType: { type: string, enum: [private, group] }
+                chatId: { type: string, format: uuid }
+      responses:
+        '200': { description: Removed, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /notifications:
+    get:
+      tags: [notifications]
+      summary: List notifications with unread count
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 50, maximum: 100 } }
+      responses:
+        '200':
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          notifications:
+                            type: array
+                            items: { $ref: '#/components/schemas/Notification' }
+                          unreadCount: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /notifications/read:
+    post:
+      tags: [notifications]
+      summary: Mark one notification (by id) or all read
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { type: [string, 'null'], format: uuid }
+      responses:
+        '200': { description: Marked read, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /admin/users:
+    get:
+      tags: [admin]
+      summary: List accounts (CEO only)
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 50, maximum: 200 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, default: 0 } }
+      responses:
+        '200':
+          description: Users
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          users:
+                            type: array
+                            items: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/users/{userID}/role:
+    patch:
+      tags: [admin]
+      summary: Change a user's clearance level (CEO only)
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roleLevel]
+              properties:
+                roleLevel: { type: integer, minimum: 1, maximum: 10 }
+      responses:
+        '200': { description: Role changed, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/users/{userID}/reset-password:
+    post:
+      tags: [admin]
+      summary: Reset a user's password (CEO only); revokes their sessions
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newPassword]
+              properties:
+                newPassword: { type: string, minLength: 12, maxLength: 128 }
+      responses:
+        '200': { description: Password reset, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/users/{userID}/activate:
+    post:
+      tags: [admin]
+      summary: Activate a user (CEO only)
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Activated, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/users/{userID}/deactivate:
+    post:
+      tags: [admin]
+      summary: Deactivate a user (CEO only); revokes their sessions
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Deactivated, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/audit:
+    get:
+      tags: [admin]
+      summary: Read the audit log (CEO only)
+      parameters:
+        - { name: action, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 50 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, default: 0 } }
+      responses:
+        '200':
+          description: Audit entries, newest first
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          entries:
+                            type: array
+                            items: { $ref: '#/components/schemas/AuditEntry' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
 components:
   securitySchemes:
     accessCookie:
@@ -624,7 +901,9 @@ components:
         text: { type: [string, 'null'] }
         replyTo: { type: [string, 'null'], format: uuid }
         attachments: { type: array, items: {} }
-        reactions: { type: array, items: {} }
+        reactions:
+          type: array
+          items: { $ref: '#/components/schemas/ReactionSummary' }
         mentions: { type: array, items: {} }
         isDeleted: { type: boolean }
         createdAt: { type: string, format: date-time }
@@ -637,6 +916,38 @@ components:
           items: { $ref: '#/components/schemas/Message' }
         nextCursor: { type: string }
         hasMore: { type: boolean }
+    ReactionSummary:
+      type: object
+      properties:
+        emoji: { type: string }
+        count: { type: integer }
+        reacted: { type: boolean }
+    Favorite:
+      type: object
+      properties:
+        chatType: { type: string, enum: [private, group] }
+        chatId: { type: string, format: uuid }
+        isPinned: { type: boolean }
+        pinnedOrder: { type: [integer, 'null'] }
+    Notification:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string }
+        payload: { type: object }
+        isRead: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    AuditEntry:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        actorId: { type: [string, 'null'], format: uuid }
+        action: { type: string }
+        targetType: { type: [string, 'null'] }
+        targetId: { type: [string, 'null'], format: uuid }
+        requestId: { type: [string, 'null'] }
+        metadata: { type: object }
+        createdAt: { type: string, format: date-time }
 
   responses:
     ValidationError:

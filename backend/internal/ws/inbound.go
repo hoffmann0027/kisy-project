@@ -93,6 +93,11 @@ func (h *Hub) handleRead(ctx context.Context, c *Client, data json.RawMessage) {
 			return
 		}
 	}
+	// Persist the read position (best-effort) so unread counters reflect
+	// reads that arrive over the socket, not just via REST.
+	if h.onRead != nil {
+		h.onRead(ctx, c.userID, p.ChatType, p.ChatID, p.MessageID)
+	}
 	frame := encode(EventMessageRead, readData{
 		ChatType:  p.ChatType,
 		ChatID:    p.ChatID,

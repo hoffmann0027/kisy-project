@@ -10,16 +10,21 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
 
+	"kisy-backend/internal/admin"
 	"kisy-backend/internal/audit"
 	"kisy-backend/internal/auth"
 	"kisy-backend/internal/auth/token"
 	"kisy-backend/internal/bootstrap"
 	"kisy-backend/internal/chats"
 	"kisy-backend/internal/config"
+	"kisy-backend/internal/favorites"
 	"kisy-backend/internal/groups"
 	"kisy-backend/internal/invitations"
 	"kisy-backend/internal/messages"
+	"kisy-backend/internal/notifications"
 	"kisy-backend/internal/platform/ratelimit"
+	"kisy-backend/internal/reactions"
+	"kisy-backend/internal/readstate"
 	"kisy-backend/internal/users"
 	"kisy-backend/internal/ws"
 )
@@ -28,16 +33,21 @@ import (
 // router needs. buildModules is the composition root: it is the one place
 // that knows how the layers fit together.
 type modules struct {
-	authHandler     *auth.Handler
-	authMW          *auth.Middleware
-	usersHandler    *users.Handler
-	invitesHandler  *invitations.Handler
-	chatsHandler    *chats.Handler
-	groupsHandler   *groups.Handler
-	messagesHandler *messages.Handler
-	wsHandler       *ws.Handler
-	hub             *ws.Hub
-	limiter         *ratelimit.Limiter
+	authHandler          *auth.Handler
+	authMW               *auth.Middleware
+	usersHandler         *users.Handler
+	invitesHandler       *invitations.Handler
+	chatsHandler         *chats.Handler
+	groupsHandler        *groups.Handler
+	messagesHandler      *messages.Handler
+	reactionsHandler     *reactions.Handler
+	readstateHandler     *readstate.Handler
+	favoritesHandler     *favorites.Handler
+	notificationsHandler *notifications.Handler
+	adminHandler         *admin.Handler
+	wsHandler            *ws.Handler
+	hub                  *ws.Hub
+	limiter              *ratelimit.Limiter
 }
 
 func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, rdb *goredis.Client, log *slog.Logger) (*modules, error) {
@@ -176,8 +186,8 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		}
 	}
 	hub := ws.NewHub(log, rdb, recipientResolver)
-
-	messagesSvc.SetPublisher(ws.NewPublisher(hub))
+	wsPublisher := ws.NewPublisher(hub)
+	messagesSvc.SetPublisher(wsPublisher)
 
 	chatAuthorizer := ws.ChatAuthorizer(func(ctx context.Context, chatType string, chatID, actorID uuid.UUID, actorLevel int) error {
 		switch chatType {
@@ -196,7 +206,71 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 			return errors.New("ws: unknown chat type")
 		}
 	})
-	hub.SetHandlers(messagesSvc, chatAuthorizer)
+
+	// --- reactions ---
+	reactionsSvc := reactions.NewService(pool, reactions.NewPostgresRepository(), messagesSvc)
+	reactionsSvc.SetPublisher(wsPublisher)
+	messagesSvc.SetReactionLoader(reactionsSvc.Loader)
+	reactionsHandler := reactions.NewHandler(reactionsSvc, func(r *http.Request) (reactions.Actor, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return reactions.Actor{}, false
+		}
+		return reactions.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
+	})
+
+	// --- read state / unread counters ---
+	readstateSvc := readstate.NewService(pool, readstate.NewPostgresRepository(), readstate.ChatAuthorizer(chatAuthorizer))
+	chatsSvc.SetUnreadLoader(readstateSvc.UnreadForPrivateChats)
+	readstateHandler := readstate.NewHandler(readstateSvc, func(r *http.Request) (readstate.Actor, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return readstate.Actor{}, false
+		}
+		return readstate.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
+	})
+
+	// --- favorites / pinned chats ---
+	favoritesSvc := favorites.NewService(pool, favorites.NewPostgresRepository(), favorites.ChatAuthorizer(chatAuthorizer))
+	favoritesHandler := favorites.NewHandler(favoritesSvc, func(r *http.Request) (favorites.Actor, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return favorites.Actor{}, false
+		}
+		return favorites.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
+	})
+
+	// --- notifications (@mentions) ---
+	usernameResolver := func(ctx context.Context, username string) (uuid.UUID, bool) {
+		u, err := usersRepo.GetByUsername(ctx, pool, username)
+		if err != nil || !u.IsActive {
+			return uuid.Nil, false
+		}
+		return u.ID, true
+	}
+	notificationsRepo := notifications.NewPostgresRepository()
+	notificationsSvc := notifications.NewService(pool, notificationsRepo, recipientResolver, usernameResolver, notificationsRepo, wsPublisher)
+	messagesSvc.SetNotifier(notificationsSvc)
+	notificationsHandler := notifications.NewHandler(notificationsSvc, func(r *http.Request) (uuid.UUID, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return uuid.Nil, false
+		}
+		return claims.UserID, true
+	})
+
+	hub.SetHandlers(messagesSvc, chatAuthorizer, readstateSvc.PersistRead)
+
+	// --- admin (CEO) ---
+	adminSvc := admin.NewService(pool, usersRepo, sessionsRepo, auditRec)
+	adminHandler := admin.NewHandler(adminSvc, audit.NewReader(pool), func(r *http.Request) (admin.ActorMeta, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return admin.ActorMeta{}, false
+		}
+		m := authHandler.ClientMeta(r)
+		return admin.ActorMeta{UserID: claims.UserID, SessionID: claims.SessionID, IPHash: m.IPHash, RequestID: m.RequestID}, true
+	})
 
 	wsHandler := ws.NewHandler(hub, func(r *http.Request) (ws.Authenticated, bool) {
 		claims := authMW.Authenticate(r)
@@ -207,15 +281,20 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	}, cfg.WSAllowedOrigin)
 
 	return &modules{
-		authHandler:     authHandler,
-		authMW:          authMW,
-		usersHandler:    usersHandler,
-		invitesHandler:  invitesHandler,
-		chatsHandler:    chatsHandler,
-		groupsHandler:   groupsHandler,
-		messagesHandler: messagesHandler,
-		wsHandler:       wsHandler,
-		hub:             hub,
-		limiter:         ratelimit.NewLimiter(rdb, log),
+		authHandler:          authHandler,
+		authMW:               authMW,
+		usersHandler:         usersHandler,
+		invitesHandler:       invitesHandler,
+		chatsHandler:         chatsHandler,
+		groupsHandler:        groupsHandler,
+		messagesHandler:      messagesHandler,
+		reactionsHandler:     reactionsHandler,
+		readstateHandler:     readstateHandler,
+		favoritesHandler:     favoritesHandler,
+		notificationsHandler: notificationsHandler,
+		adminHandler:         adminHandler,
+		wsHandler:            wsHandler,
+		hub:                  hub,
+		limiter:              ratelimit.NewLimiter(rdb, log),
 	}, nil
 }

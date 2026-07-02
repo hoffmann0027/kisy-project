@@ -43,6 +43,7 @@ type DTO struct {
 	ID          uuid.UUID `json:"id"`
 	Type        string    `json:"type"` // always "private" here
 	OtherUserID uuid.UUID `json:"otherUserId"`
+	UnreadCount int       `json:"unreadCount"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
 

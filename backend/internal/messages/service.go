@@ -43,12 +43,26 @@ type Publisher interface {
 	PublishMessageDeleted(chatType string, chatID, messageID uuid.UUID)
 }
 
+// Notifier reacts to newly created messages (e.g. to raise @mention
+// notifications). Injected to avoid a messages→notifications import cycle;
+// a nil Notifier disables the hook.
+type Notifier interface {
+	OnMessage(ctx context.Context, m DTO)
+}
+
+// ReactionLoader returns the reaction summaries for a set of messages from
+// the viewer's perspective. Injected to avoid a messages→reactions import
+// cycle; a nil loader yields empty reaction lists.
+type ReactionLoader func(ctx context.Context, messageIDs []uuid.UUID, viewerID uuid.UUID) (map[uuid.UUID][]ReactionSummary, error)
+
 type Service struct {
-	pool  *pgxpool.Pool
-	repo  Repository
-	audit audit.Recorder
-	authz Authorizer
-	pub   Publisher
+	pool      *pgxpool.Pool
+	repo      Repository
+	audit     audit.Recorder
+	authz     Authorizer
+	pub       Publisher
+	reactions ReactionLoader
+	notifier  Notifier
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository, rec audit.Recorder, authz Authorizer) *Service {
@@ -58,6 +72,29 @@ func NewService(pool *pgxpool.Pool, repo Repository, rec audit.Recorder, authz A
 // SetPublisher wires the real-time publisher after construction (the hub
 // and this service are created together at startup).
 func (s *Service) SetPublisher(p Publisher) { s.pub = p }
+
+// SetReactionLoader wires reaction enrichment for message listings.
+func (s *Service) SetReactionLoader(l ReactionLoader) { s.reactions = l }
+
+// SetNotifier wires the @mention/notification hook.
+func (s *Service) SetNotifier(n Notifier) { s.notifier = n }
+
+// ResolveAccessible returns the chat coordinates of a message if the actor
+// may access its chat, otherwise ErrNotFound. Used by the reactions module
+// to authorize without duplicating the access rules.
+func (s *Service) ResolveAccessible(ctx context.Context, messageID uuid.UUID, actor ActorMeta) (string, uuid.UUID, error) {
+	m, err := s.repo.GetByID(ctx, s.pool, messageID)
+	if err != nil {
+		return "", uuid.Nil, err
+	}
+	if err := s.authorize(ctx, m.ChatType, m.ChatID, actor); err != nil {
+		return "", uuid.Nil, ErrNotFound
+	}
+	if m.IsDeleted {
+		return "", uuid.Nil, ErrNotFound
+	}
+	return m.ChatType, m.ChatID, nil
+}
 
 // authorize checks the actor may access the target chat, normalizing the
 // chat type.
@@ -117,8 +154,12 @@ func (s *Service) Send(ctx context.Context, in SendInput, actor ActorMeta) (*Mes
 		return nil, err
 	}
 
+	dto := m.ToDTO()
 	if s.pub != nil {
-		s.pub.PublishMessageCreated(m.ChatType, m.ChatID, m.ToDTO())
+		s.pub.PublishMessageCreated(m.ChatType, m.ChatID, dto)
+	}
+	if s.notifier != nil {
+		s.notifier.OnMessage(ctx, dto)
 	}
 	return m, nil
 }
@@ -153,6 +194,27 @@ func (s *Service) List(ctx context.Context, chatType string, chatID uuid.UUID, c
 	}
 	for i := range rows {
 		page.Items = append(page.Items, rows[i].ToDTO())
+	}
+
+	// Enrich live messages with reaction summaries in one batched query.
+	if s.reactions != nil && len(page.Items) > 0 {
+		ids := make([]uuid.UUID, 0, len(page.Items))
+		for i := range page.Items {
+			if !page.Items[i].IsDeleted {
+				ids = append(ids, page.Items[i].ID)
+			}
+		}
+		if len(ids) > 0 {
+			byMessage, err := s.reactions(ctx, ids, actor.UserID)
+			if err != nil {
+				return nil, err
+			}
+			for i := range page.Items {
+				if r, ok := byMessage[page.Items[i].ID]; ok {
+					page.Items[i].Reactions = r
+				}
+			}
+		}
 	}
 	return page, nil
 }

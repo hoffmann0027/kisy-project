@@ -27,6 +27,10 @@ const (
 	ActionInviteCreated      = "invite.created"
 	ActionInviteUsed         = "invite.used"
 	ActionSessionReuse       = "session.refresh_reuse_detected"
+	ActionRoleChanged        = "role.changed"
+	ActionUserPasswordReset  = "user.password_reset"
+	ActionUserActivated      = "user.activated"
+	ActionUserDeactivated    = "user.deactivated"
 )
 
 // Event is one audit record. Optional fields are pointers/empty strings.
