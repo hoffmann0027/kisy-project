@@ -24,15 +24,18 @@ type ErrorBody struct {
 	Details interface{} `json:"details,omitempty"`
 }
 
-// Known error codes from docs/spec/09-api-contracts.md.
+// Known error codes from docs/spec/09-api-contracts.md, plus
+// AUTH_INVALID_CREDENTIALS for login failures (the spec list is the
+// baseline, not exhaustive).
 const (
-	ErrAuthInvalidToken = "AUTH_INVALID_TOKEN"
-	ErrAuthExpired      = "AUTH_EXPIRED"
-	ErrAccessDenied     = "ACCESS_DENIED"
-	ErrResourceNotFound = "RESOURCE_NOT_FOUND"
-	ErrRateLimited      = "RATE_LIMITED"
-	ErrValidationFailed = "VALIDATION_FAILED"
-	ErrInternal         = "INTERNAL_ERROR"
+	ErrAuthInvalidToken       = "AUTH_INVALID_TOKEN"
+	ErrAuthInvalidCredentials = "AUTH_INVALID_CREDENTIALS"
+	ErrAuthExpired            = "AUTH_EXPIRED"
+	ErrAccessDenied           = "ACCESS_DENIED"
+	ErrResourceNotFound       = "RESOURCE_NOT_FOUND"
+	ErrRateLimited            = "RATE_LIMITED"
+	ErrValidationFailed       = "VALIDATION_FAILED"
+	ErrInternal               = "INTERNAL_ERROR"
 )
 
 func requestID(r *http.Request) string {

@@ -1,7 +1,5 @@
-// Command server is the KISY backend entrypoint. At this stage it only
-// establishes the platform foundation: configuration, database and cache
-// connectivity, and a health-checked HTTP server. Business modules
-// (auth, chats, messages, ...) are wired in subsequent stages.
+// Command server is the KISY backend entrypoint: configuration, database
+// and cache connectivity, module wiring and the HTTP server.
 package main
 
 import (
@@ -18,11 +16,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
+	goredis "github.com/redis/go-redis/v9"
 
 	"kisy-backend/internal/config"
 	"kisy-backend/internal/platform/logger"
 	"kisy-backend/internal/platform/postgres"
+	"kisy-backend/internal/platform/ratelimit"
 	kisyredis "kisy-backend/internal/platform/redis"
 	"kisy-backend/pkg/httpresponse"
 )
@@ -67,7 +66,20 @@ func run() error {
 	defer redisClient.Close()
 	log.Info("connected to redis")
 
-	router := newRouter(log, pgPool, redisClient)
+	mods, err := buildModules(ctx, cfg, pgPool, redisClient, log)
+	if err != nil {
+		return err
+	}
+
+	// The hub bridges real-time events across instances via Redis pub/sub.
+	go mods.hub.Run(ctx)
+
+	router := newRouter(routerDeps{
+		log:  log,
+		pg:   pgPool,
+		rdb:  redisClient,
+		mods: mods,
+	})
 
 	srv := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.HTTPPort),
@@ -100,13 +112,20 @@ func run() error {
 	return srv.Shutdown(shutdownCtx)
 }
 
-func newRouter(log *slog.Logger, pg *pgxpool.Pool, rdb *redis.Client) http.Handler {
+type routerDeps struct {
+	log  *slog.Logger
+	pg   *pgxpool.Pool
+	rdb  *goredis.Client
+	mods *modules
+}
+
+func newRouter(d routerDeps) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
-	r.Use(requestLogger(log))
+	r.Use(requestLogger(d.log))
 	r.Use(middleware.Timeout(30 * time.Second))
 
 	// Liveness: process is up, no dependency checks.
@@ -119,11 +138,11 @@ func newRouter(log *slog.Logger, pg *pgxpool.Pool, rdb *redis.Client) http.Handl
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 
-		if err := pg.Ping(ctx); err != nil {
+		if err := d.pg.Ping(ctx); err != nil {
 			httpresponse.Fail(w, r, http.StatusServiceUnavailable, httpresponse.ErrInternal, "database unavailable")
 			return
 		}
-		if err := rdb.Ping(ctx).Err(); err != nil {
+		if err := d.rdb.Ping(ctx).Err(); err != nil {
 			httpresponse.Fail(w, r, http.StatusServiceUnavailable, httpresponse.ErrInternal, "cache unavailable")
 			return
 		}
@@ -131,11 +150,75 @@ func newRouter(log *slog.Logger, pg *pgxpool.Pool, rdb *redis.Client) http.Handl
 		httpresponse.OK(w, r, http.StatusOK, map[string]string{"status": "ready"})
 	})
 
+	m := d.mods
+
 	r.Route("/api/v1", func(r chi.Router) {
-		// Business endpoints are added in subsequent stages.
+		r.Route("/auth", func(r chi.Router) {
+			// Brute-force protection on unauthenticated entry points.
+			r.Use(perRouteLimits(m.limiter))
+			m.authHandler.Routes(r)
+		})
+
+		// Everything below requires a valid session.
+		r.Group(func(r chi.Router) {
+			r.Use(m.authMW.RequireAuth)
+
+			r.Route("/users", func(r chi.Router) {
+				m.usersHandler.Routes(r)
+			})
+
+			r.Route("/invites", func(r chi.Router) {
+				r.Use(m.authMW.RequireClearance(1)) // CEO only
+				m.invitesHandler.Routes(r)
+			})
+
+			r.Route("/chats", func(r chi.Router) {
+				m.chatsHandler.Routes(r)
+			})
+
+			r.Route("/groups", func(r chi.Router) {
+				// Reads are visibility-filtered; creation is CEO-only.
+				r.Group(func(r chi.Router) {
+					r.Use(m.authMW.RequireClearance(1))
+					m.groupsHandler.CreateRoute(r)
+				})
+				m.groupsHandler.Routes(r)
+			})
+
+			// Message endpoints live at the /api/v1 root
+			// (POST/GET/DELETE /messages).
+			m.messagesHandler.Routes(r)
+		})
+
+		// WebSocket upgrade authenticates from the access cookie or an
+		// access_token query parameter, so it sits outside RequireAuth.
+		r.Handle("/ws", m.wsHandler)
 	})
 
 	return r
+}
+
+// perRouteLimits applies scoped rate limits inside /auth: login and
+// register are the brute-force targets, refresh is chattier by design.
+func perRouteLimits(l *ratelimit.Limiter) func(http.Handler) http.Handler {
+	login := l.Limit("auth-login", 10, time.Minute)
+	register := l.Limit("auth-register", 5, time.Minute)
+	refresh := l.Limit("auth-refresh", 60, time.Minute)
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/api/v1/auth/login":
+				login(next).ServeHTTP(w, r)
+			case "/api/v1/auth/register":
+				register(next).ServeHTTP(w, r)
+			case "/api/v1/auth/refresh":
+				refresh(next).ServeHTTP(w, r)
+			default:
+				next.ServeHTTP(w, r)
+			}
+		})
+	}
 }
 
 func requestLogger(log *slog.Logger) func(http.Handler) http.Handler {

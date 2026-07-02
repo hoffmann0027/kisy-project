@@ -1,0 +1,16 @@
+# Development-only override, auto-merged by `docker compose up` when no -f
+# flags are given. Publishes Postgres/Redis on loopback so host-side
+# integration tests can reach them. Production deploys must pass compose
+# files explicitly (see deploy/docker/README.md) so this never applies.
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:5432:5432"
+  redis:
+    ports:
+      - "127.0.0.1:6379:6379"
+  backend:
+    ports:
+      # Host 8080 is often taken (e.g. BlueStacks); publish on 18080 for
+      # direct host access. The full stack is also reachable via Nginx :80.
+      - "127.0.0.1:18080:8080"

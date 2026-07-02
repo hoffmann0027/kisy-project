@@ -25,6 +25,18 @@ type Config struct {
 	JWTRefreshTTL    time.Duration
 
 	InvitationTokenTTL time.Duration
+
+	// IPHashSalt salts IP digests stored in sessions and audit logs.
+	IPHashSalt string
+
+	// WSAllowedOrigin restricts WebSocket handshake origins in production.
+	// Empty (development) allows any origin.
+	WSAllowedOrigin string
+
+	// BootstrapCEOUsername/Password create the very first Level-1 account
+	// when the users table is empty. Optional after first launch.
+	BootstrapCEOUsername string
+	BootstrapCEOPassword string
 }
 
 type PostgresConfig struct {
@@ -114,6 +126,15 @@ func Load() (*Config, error) {
 	if cfg.InvitationTokenTTL, err = getEnvDuration("INVITATION_TOKEN_TTL", 120*time.Second); err != nil {
 		return nil, err
 	}
+
+	// Falling back to the refresh secret keeps IP digests stable across
+	// restarts without demanding one more mandatory variable.
+	cfg.IPHashSalt = getEnv("IP_HASH_SALT", cfg.JWTRefreshSecret)
+
+	cfg.BootstrapCEOUsername = os.Getenv("BOOTSTRAP_CEO_USERNAME")
+	cfg.BootstrapCEOPassword = os.Getenv("BOOTSTRAP_CEO_PASSWORD")
+
+	cfg.WSAllowedOrigin = os.Getenv("WS_ALLOWED_ORIGIN")
 
 	return cfg, nil
 }
