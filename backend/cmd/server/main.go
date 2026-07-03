@@ -198,11 +198,9 @@ func newRouter(d routerDeps) http.Handler {
 			})
 
 			r.Route("/groups", func(r chi.Router) {
-				// Reads are visibility-filtered; creation is CEO-only.
-				r.Group(func(r chi.Router) {
-					r.Use(m.authMW.RequireClearance(1))
-					m.groupsHandler.CreateRoute(r)
-				})
+				// Reads are visibility-filtered; creation is open to any
+				// user (the service caps the group's clearance at the
+				// creator's own level); deletion is CEO-or-founder.
 				m.groupsHandler.Routes(r)
 				// Task board endpoints under a group.
 				m.boardsHandler.GroupRoutes(r)

@@ -30,11 +30,36 @@ func NewHandler(svc *Service, actor func(*http.Request) (ActorMeta, bool), looku
 
 func (h *Handler) Routes(r chi.Router) {
 	r.Get("/", h.list)
+	r.Post("/", h.create) // any user may create (clearance validated in service)
 	r.Get("/{groupID}", h.get)
+	r.Delete("/{groupID}", h.delete)
 	r.Get("/{groupID}/members", h.listMembers)
 	r.Post("/{groupID}/members", h.addMember)
-	// Creation is CEO-only; the router wraps this sub-route with
-	// RequireClearance(1).
+}
+
+func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actor(r)
+	if !ok {
+		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "groupID"))
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "group not found")
+		return
+	}
+
+	err = h.svc.Delete(r.Context(), id, actor)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "group not found")
+	case errors.Is(err, ErrForbidden):
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "only the CEO or the group founder may delete this group")
+	case err != nil:
+		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "failed to delete group")
+	default:
+		httpresponse.OK(w, r, http.StatusOK, map[string]any{"deleted": true})
+	}
 }
 
 func (h *Handler) listMembers(w http.ResponseWriter, r *http.Request) {
@@ -58,12 +83,6 @@ func (h *Handler) listMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpresponse.OK(w, r, http.StatusOK, map[string]any{"members": members})
-}
-
-// CreateRoute is mounted separately so the router can gate it behind
-// RequireClearance(1) without gating reads.
-func (h *Handler) CreateRoute(r chi.Router) {
-	r.Post("/", h.create)
 }
 
 type createRequest struct {
@@ -98,6 +117,10 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Description:  req.Description,
 		MinRoleLevel: req.MinRoleLevel,
 	}, actor)
+	if errors.Is(err, ErrLevelTooHigh) {
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "нельзя создать группу с уровнем доступа выше вашего")
+		return
+	}
 	if err != nil {
 		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "failed to create group")
 		return

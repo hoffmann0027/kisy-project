@@ -7,7 +7,6 @@ import { roleLabel, type Chat, type Group } from "@shared/api/types";
 import { useChats } from "@entities/chat/queries";
 import { useGroups } from "@entities/group/queries";
 import { usePresenceStore } from "@shared/store/presence";
-import { useAuthStore } from "@shared/store/auth";
 
 interface Props {
   activeId: string | null;
@@ -20,7 +19,6 @@ interface Props {
 export function ChatList({ activeId, onSelect, onSelectGroup, onNewChat, onNewGroup }: Props) {
   const { data: chats, isPending } = useChats();
   const { data: groups } = useGroups();
-  const isCEO = useAuthStore((s) => s.user?.roleLevel === 1);
   const [query, setQuery] = useState("");
   const online = usePresenceStore((s) => s.online);
 
@@ -41,11 +39,9 @@ export function ChatList({ activeId, onSelect, onSelectGroup, onNewChat, onNewGr
       <div className="chatlist__header">
         <h1 className="chatlist__title">Сообщения</h1>
         <div style={{ display: "flex", gap: 2 }}>
-          {isCEO && (
-            <IconButton label="Новая группа" onClick={onNewGroup}>
-              <Icon.Users />
-            </IconButton>
-          )}
+          <IconButton label="Новая группа" onClick={onNewGroup}>
+            <Icon.Users />
+          </IconButton>
           <IconButton label="Новый чат" onClick={onNewChat}>
             <Icon.Plus />
           </IconButton>

@@ -24,6 +24,7 @@ type ActorMeta struct {
 const (
 	actionGroupCreated     = "group.created"
 	actionGroupMemberAdded = "group.member_added"
+	actionGroupDeleted     = "group.deleted"
 )
 
 // ProfileLoader resolves a user's public profile, injected to avoid a
@@ -73,9 +74,15 @@ type CreateInput struct {
 	MinRoleLevel int
 }
 
-// Create makes a new group and enrolls the creator as owner. The caller
-// (handler) has already verified the actor is the CEO.
+// Create makes a new group and enrolls the creator as owner. Any user may
+// create a group, but its minimum clearance cannot be stronger than the
+// creator's own (they must be able to belong to it): min_role_level must
+// be >= the creator's role level.
 func (s *Service) Create(ctx context.Context, in CreateInput, actor ActorMeta) (*Group, error) {
+	if in.MinRoleLevel < actor.RoleLevel {
+		return nil, ErrLevelTooHigh
+	}
+
 	g := &Group{
 		Name:         in.Name,
 		Description:  in.Description,
@@ -117,6 +124,62 @@ func (s *Service) Create(ctx context.Context, in CreateInput, actor ActorMeta) (
 // ListVisible returns the groups the actor is cleared to see.
 func (s *Service) ListVisible(ctx context.Context, actor ActorMeta) ([]Group, error) {
 	return s.repo.ListVisible(ctx, s.pool, actor.RoleLevel)
+}
+
+// Delete removes a group and everything cascading from it (members, board,
+// columns, cards). The CEO may delete any group; otherwise only the
+// group's founder may delete it. Group messages are removed too since
+// their polymorphic chat_id has no cascading foreign key.
+func (s *Service) Delete(ctx context.Context, groupID uuid.UUID, actor ActorMeta) error {
+	g, err := s.repo.GetByID(ctx, s.pool, groupID)
+	if err != nil {
+		return err // ErrNotFound propagates
+	}
+	// The CEO may delete any group; the founder may delete their own.
+	if !access.IsCEO(actor.RoleLevel) && g.CreatedBy != actor.UserID {
+		// For anyone else, only reveal a "forbidden" if they can actually
+		// see the group; otherwise mask its existence as not-found.
+		if g.IsArchived || !access.CanAccessGroup(actor.RoleLevel, g.MinRoleLevel) {
+			return ErrNotFound
+		}
+		return ErrForbidden
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("groups: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err := s.repo.DeleteGroupMessages(ctx, tx, groupID); err != nil {
+		return err
+	}
+	if err := s.repo.Delete(ctx, tx, groupID); err != nil {
+		return err
+	}
+	if err := s.audit.Record(ctx, tx, audit.Event{
+		ActorID:    &actor.UserID,
+		Action:     actionGroupDeleted,
+		TargetType: "group",
+		TargetID:   &groupID,
+		IPHash:     actor.IPHash,
+		SessionID:  &actor.SessionID,
+		RequestID:  actor.RequestID,
+		Metadata:   map[string]any{"name": g.Name, "founder": g.CreatedBy.String()},
+	}); err != nil {
+		return err
+	}
+
+	return commitTx(ctx, tx)
+}
+
+func commitTx(ctx context.Context, tx interface {
+	Commit(context.Context) error
+}) error {
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("groups: commit: %w", err)
+	}
+	return nil
 }
 
 // Get returns a group only if the actor is cleared to see it; otherwise it

@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { Avatar, Button, Modal, Spinner, toast } from "@shared/ui";
 import { roleLabel, type Group } from "@shared/api/types";
 import { usersApi } from "@shared/api/endpoints";
-import { useAddMember, useGroupMembers } from "@entities/group/queries";
+import { useAddMember, useDeleteGroup, useGroupMembers } from "@entities/group/queries";
+import { useAuthStore } from "@shared/store/auth";
 import { ApiError } from "@shared/api/envelope";
 
 interface Props {
@@ -16,6 +18,23 @@ interface Props {
 export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
   const { data: members, isPending } = useGroupMembers(open ? group.id : null);
   const [adding, setAdding] = useState(false);
+  const navigate = useNavigate();
+  const del = useDeleteGroup();
+  const me = useAuthStore((s) => s.user!);
+  // The CEO may delete any group; the founder may delete their own.
+  const canDelete = me.roleLevel === 1 || me.id === group.createdBy;
+
+  const removeGroup = () => {
+    if (!window.confirm(`Удалить группу «${group.name}»? Это удалит её чат и доску задач.`)) return;
+    del.mutate(group.id, {
+      onSuccess: () => {
+        toast.success("Группа удалена");
+        onClose();
+        navigate("/", { replace: true });
+      },
+      onError: () => toast.error("Не удалось удалить группу"),
+    });
+  };
 
   return (
     <Modal open={open} title={`Участники · ${group.name}`} onClose={onClose}>
@@ -45,6 +64,14 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
           </div>
         ))}
       </div>
+
+      {canDelete && (
+        <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 14 }}>
+          <Button variant="danger" block loading={del.isPending} onClick={removeGroup}>
+            Удалить группу
+          </Button>
+        </div>
+      )}
     </Modal>
   );
 }

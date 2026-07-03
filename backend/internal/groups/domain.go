@@ -12,6 +12,10 @@ var (
 	ErrNotFound      = errors.New("groups: not found")
 	ErrNotMember     = errors.New("groups: actor is not a member")
 	ErrAlreadyMember = errors.New("groups: user already a member")
+	ErrForbidden     = errors.New("groups: not permitted")
+	// ErrLevelTooHigh is returned when a user tries to create a group whose
+	// minimum clearance is stronger than their own (lower level number).
+	ErrLevelTooHigh = errors.New("groups: cannot create a group above your clearance")
 )
 
 // Group mirrors the groups table. MinRoleLevel is the weakest clearance

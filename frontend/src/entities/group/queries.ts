@@ -22,6 +22,16 @@ export function useCreateGroup() {
   });
 }
 
+export function useDeleteGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (groupId: string) => groupsApi.remove(groupId),
+    onSuccess: (_res, groupId) => {
+      qc.setQueryData<Group[]>(groupKeys.list, (prev) => prev?.filter((g) => g.id !== groupId));
+    },
+  });
+}
+
 export function useGroupMembers(groupId: string | null) {
   return useQuery({
     queryKey: ["group-members", groupId],

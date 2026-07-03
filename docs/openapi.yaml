@@ -325,7 +325,11 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
     post:
       tags: [groups]
-      summary: Create a group (CEO only)
+      summary: Create a group
+      description: >
+        Any authenticated user may create a group, but its minimum clearance
+        cannot be stronger than the creator's own (minRoleLevel must be >=
+        the creator's role level). The creator becomes the group founder.
       requestBody:
         required: true
         content:
@@ -352,7 +356,11 @@ paths:
                           group: { $ref: '#/components/schemas/Group' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '403':
+          description: Requested clearance is stronger than the creator's own
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
 
   /groups/{groupID}:
     get:
@@ -374,6 +382,20 @@ paths:
                         properties:
                           group: { $ref: '#/components/schemas/Group' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [groups]
+      summary: Delete a group (CEO or founder)
+      description: >
+        The CEO may delete any group; otherwise only the group's founder may
+        delete it. Cascades to members, the task board and group messages. A
+        group hidden from the caller's clearance returns 404 (not 403).
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
   /groups/{groupID}/members:
