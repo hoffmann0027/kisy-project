@@ -32,6 +32,13 @@ func (p *Publisher) PublishNotification(userID uuid.UUID, data any) {
 	p.hub.publishToUsers([]uuid.UUID{userID}, encode(EventNotification, data))
 }
 
+// PublishBoardChanged tells a group's members their task board changed so
+// they can refetch it; satisfies the boards.Publisher port. The group's
+// members are the recipients (chatType "group" resolves to them).
+func (p *Publisher) PublishBoardChanged(groupID uuid.UUID) {
+	p.hub.publishToChat("group", groupID, encode(EventBoardChanged, map[string]any{"groupId": groupID}))
+}
+
 // PublishReaction broadcasts a reaction change; satisfies the
 // reactions.Publisher port structurally.
 func (p *Publisher) PublishReaction(chatType string, chatID, messageID, userID uuid.UUID, emoji string, added bool) {

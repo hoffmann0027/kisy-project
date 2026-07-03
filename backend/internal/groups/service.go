@@ -26,14 +26,44 @@ const (
 	actionGroupMemberAdded = "group.member_added"
 )
 
+// ProfileLoader resolves a user's public profile, injected to avoid a
+// groups→users import cycle.
+type ProfileLoader func(ctx context.Context, userID uuid.UUID) (any, bool)
+
 type Service struct {
-	pool  *pgxpool.Pool
-	repo  Repository
-	audit audit.Recorder
+	pool     *pgxpool.Pool
+	repo     Repository
+	audit    audit.Recorder
+	profiles ProfileLoader
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository, rec audit.Recorder) *Service {
 	return &Service{pool: pool, repo: repo, audit: rec}
+}
+
+// SetProfileLoader wires member-profile resolution for ListMembers.
+func (s *Service) SetProfileLoader(l ProfileLoader) { s.profiles = l }
+
+// ListMembers returns the public profiles of a group's members, if the
+// actor may see the group.
+func (s *Service) ListMembers(ctx context.Context, groupID uuid.UUID, actor ActorMeta) ([]any, error) {
+	if _, err := s.Get(ctx, groupID, actor); err != nil {
+		return nil, err
+	}
+	ids, err := s.repo.ListMemberIDs(ctx, s.pool, groupID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]any, 0, len(ids))
+	if s.profiles == nil {
+		return out, nil
+	}
+	for _, id := range ids {
+		if profile, ok := s.profiles(ctx, id); ok {
+			out = append(out, profile)
+		}
+	}
+	return out, nil
 }
 
 // CreateInput is validated by the handler before reaching the service.
@@ -162,4 +192,18 @@ func (s *Service) EnsureMember(ctx context.Context, groupID uuid.UUID, actor Act
 // fan-out.
 func (s *Service) MemberIDs(ctx context.Context, groupID uuid.UUID) ([]uuid.UUID, error) {
 	return s.repo.ListMemberIDs(ctx, s.pool, groupID)
+}
+
+// IsFounder reports whether the user created the group.
+func (s *Service) IsFounder(ctx context.Context, groupID, userID uuid.UUID) (bool, error) {
+	g, err := s.repo.GetByID(ctx, s.pool, groupID)
+	if err != nil {
+		return false, err
+	}
+	return g.CreatedBy == userID, nil
+}
+
+// IsMember reports whether the user is a member of the group.
+func (s *Service) IsMember(ctx context.Context, groupID, userID uuid.UUID) (bool, error) {
+	return s.repo.IsMember(ctx, s.pool, groupID, userID)
 }

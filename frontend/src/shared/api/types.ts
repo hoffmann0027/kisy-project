@@ -29,6 +29,7 @@ export interface Group {
   description: string | null;
   avatarUrl: string | null;
   minRoleLevel: number;
+  createdBy: string;
   createdAt: string;
 }
 
@@ -81,6 +82,52 @@ export interface Invitation {
   creatorId: string;
   expiresAt: string;
 }
+
+export interface BoardCard {
+  id: string;
+  columnId: string;
+  title: string;
+  description: string | null;
+  position: number;
+  assigneeId: string | null;
+  label: string | null;
+  dueDate: string | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface BoardColumn {
+  id: string;
+  title: string;
+  position: number;
+  cards: BoardCard[];
+}
+
+export interface Board {
+  id: string;
+  groupId: string;
+  title: string;
+  createdBy: string;
+  columns: BoardColumn[];
+}
+
+export interface CardInput {
+  title: string;
+  description?: string | null;
+  assigneeId?: string | null;
+  label?: string | null;
+  dueDate?: string | null;
+}
+
+// Card label palette (key → display color), used by the board UI.
+export const CARD_LABELS: Record<string, string> = {
+  blue: "#0a84ff",
+  green: "#32d74b",
+  yellow: "#ffd60a",
+  red: "#ff453a",
+  purple: "#bf5af2",
+  gray: "#8e8e93",
+};
 
 export interface AuditEntry {
   id: string;

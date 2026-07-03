@@ -43,6 +43,7 @@ type DTO struct {
 	Description  *string   `json:"description"`
 	AvatarURL    *string   `json:"avatarUrl"`
 	MinRoleLevel int       `json:"minRoleLevel"`
+	CreatedBy    uuid.UUID `json:"createdBy"`
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
@@ -53,6 +54,7 @@ func (g *Group) ToDTO() DTO {
 		Description:  g.Description,
 		AvatarURL:    g.AvatarURL,
 		MinRoleLevel: g.MinRoleLevel,
+		CreatedBy:    g.CreatedBy,
 		CreatedAt:    g.CreatedAt,
 	}
 }

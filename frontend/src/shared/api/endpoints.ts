@@ -1,6 +1,8 @@
 import { apiClient } from "./client";
 import type {
   AuditEntry,
+  Board,
+  CardInput,
   Chat,
   ChatType,
   Favorite,
@@ -49,8 +51,27 @@ export const groupsApi = {
   create: (name: string, minRoleLevel: number, description?: string) =>
     apiClient.post<{ group: Group }>("/groups", { name, minRoleLevel, description }),
   get: (groupId: string) => apiClient.get<{ group: Group }>(`/groups/${groupId}`),
+  members: (groupId: string) => apiClient.get<{ members: User[] }>(`/groups/${groupId}/members`),
   addMember: (groupId: string, userId: string) =>
     apiClient.post<{ added: boolean }>(`/groups/${groupId}/members`, { userId }),
+};
+
+export const boardsApi = {
+  get: (groupId: string) => apiClient.get<{ board: Board }>(`/groups/${groupId}/board`),
+  create: (groupId: string, title: string) =>
+    apiClient.post<{ board: Board }>(`/groups/${groupId}/board`, { title }),
+  addColumn: (boardId: string, title: string) =>
+    apiClient.post<{ ok: boolean }>(`/boards/${boardId}/columns`, { title }),
+  renameColumn: (columnId: string, title: string) =>
+    apiClient.patch<{ ok: boolean }>(`/boards/columns/${columnId}`, { title }),
+  deleteColumn: (columnId: string) => apiClient.del<{ ok: boolean }>(`/boards/columns/${columnId}`),
+  createCard: (columnId: string, input: CardInput) =>
+    apiClient.post<{ card: unknown }>(`/boards/columns/${columnId}/cards`, input),
+  updateCard: (cardId: string, input: CardInput) =>
+    apiClient.patch<{ ok: boolean }>(`/boards/cards/${cardId}`, input),
+  moveCard: (cardId: string, columnId: string, index: number) =>
+    apiClient.post<{ ok: boolean }>(`/boards/cards/${cardId}/move`, { columnId, index }),
+  deleteCard: (cardId: string) => apiClient.del<{ ok: boolean }>(`/boards/cards/${cardId}`),
 };
 
 export const messagesApi = {

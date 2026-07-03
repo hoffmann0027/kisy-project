@@ -3,35 +3,53 @@ import { cn } from "@shared/lib/cn";
 import { formatRelative } from "@shared/lib/format";
 import { Avatar, Badge, IconButton, Spinner } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
-import type { Chat } from "@shared/api/types";
+import { roleLabel, type Chat, type Group } from "@shared/api/types";
 import { useChats } from "@entities/chat/queries";
+import { useGroups } from "@entities/group/queries";
 import { usePresenceStore } from "@shared/store/presence";
+import { useAuthStore } from "@shared/store/auth";
 
 interface Props {
-  activeChatId: string | null;
+  activeId: string | null;
   onSelect: (chat: Chat) => void;
+  onSelectGroup: (group: Group) => void;
   onNewChat: () => void;
+  onNewGroup: () => void;
 }
 
-export function ChatList({ activeChatId, onSelect, onNewChat }: Props) {
+export function ChatList({ activeId, onSelect, onSelectGroup, onNewChat, onNewGroup }: Props) {
   const { data: chats, isPending } = useChats();
+  const { data: groups } = useGroups();
+  const isCEO = useAuthStore((s) => s.user?.roleLevel === 1);
   const [query, setQuery] = useState("");
   const online = usePresenceStore((s) => s.online);
 
+  const q = query.trim().toLowerCase();
   const filtered = useMemo(() => {
     const list = chats ?? [];
-    if (!query.trim()) return list;
-    const q = query.toLowerCase();
+    if (!q) return list;
     return list.filter((c) => c.otherUser?.displayName.toLowerCase().includes(q) || c.otherUser?.username.toLowerCase().includes(q));
-  }, [chats, query]);
+  }, [chats, q]);
+  const filteredGroups = useMemo(() => {
+    const list = groups ?? [];
+    if (!q) return list;
+    return list.filter((g) => g.name.toLowerCase().includes(q));
+  }, [groups, q]);
 
   return (
     <aside className="chatlist">
       <div className="chatlist__header">
-        <h1 className="chatlist__title">Чаты</h1>
-        <IconButton label="Новый чат" onClick={onNewChat}>
-          <Icon.Plus />
-        </IconButton>
+        <h1 className="chatlist__title">Сообщения</h1>
+        <div style={{ display: "flex", gap: 2 }}>
+          {isCEO && (
+            <IconButton label="Новая группа" onClick={onNewGroup}>
+              <Icon.Users />
+            </IconButton>
+          )}
+          <IconButton label="Новый чат" onClick={onNewChat}>
+            <Icon.Plus />
+          </IconButton>
+        </div>
       </div>
       <div className="chatlist__search">
         <div style={{ position: "relative" }}>
@@ -54,7 +72,26 @@ export function ChatList({ activeChatId, onSelect, onNewChat }: Props) {
             <Spinner />
           </div>
         )}
-        {!isPending && filtered.length === 0 && (
+
+        {filteredGroups.length > 0 && <div className="chatlist__section">Группы</div>}
+        {filteredGroups.map((group) => (
+          <button
+            key={group.id}
+            className={cn("chat-item", group.id === activeId && "chat-item--active")}
+            onClick={() => onSelectGroup(group)}
+          >
+            <Avatar name={group.name} url={group.avatarUrl} size={44} />
+            <div className="chat-item__body">
+              <div className="chat-item__row">
+                <span className="chat-item__name">{group.name}</span>
+              </div>
+              <div className="chat-item__preview">Группа · от {roleLabel(group.minRoleLevel)} и выше</div>
+            </div>
+          </button>
+        ))}
+
+        {filtered.length > 0 && <div className="chatlist__section">Личные чаты</div>}
+        {!isPending && filtered.length === 0 && filteredGroups.length === 0 && (
           <div style={{ padding: 24, textAlign: "center", color: "var(--color-text-secondary)", fontSize: 14 }}>
             {query ? "Ничего не найдено" : "Пока нет чатов. Начните новый диалог."}
           </div>
@@ -65,7 +102,7 @@ export function ChatList({ activeChatId, onSelect, onNewChat }: Props) {
           return (
             <button
               key={chat.id}
-              className={cn("chat-item", chat.id === activeChatId && "chat-item--active")}
+              className={cn("chat-item", chat.id === activeId && "chat-item--active")}
               onClick={() => onSelect(chat)}
             >
               <Avatar name={name} url={chat.otherUser?.avatarUrl} presence={isOnline ? "online" : undefined} />

@@ -31,9 +31,33 @@ func NewHandler(svc *Service, actor func(*http.Request) (ActorMeta, bool), looku
 func (h *Handler) Routes(r chi.Router) {
 	r.Get("/", h.list)
 	r.Get("/{groupID}", h.get)
+	r.Get("/{groupID}/members", h.listMembers)
 	r.Post("/{groupID}/members", h.addMember)
 	// Creation is CEO-only; the router wraps this sub-route with
 	// RequireClearance(1).
+}
+
+func (h *Handler) listMembers(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actor(r)
+	if !ok {
+		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "groupID"))
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "group not found")
+		return
+	}
+	members, err := h.svc.ListMembers(r.Context(), id, actor)
+	if errors.Is(err, ErrNotFound) {
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "group not found")
+		return
+	}
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
+		return
+	}
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"members": members})
 }
 
 // CreateRoute is mounted separately so the router can gate it behind

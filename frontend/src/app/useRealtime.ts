@@ -61,6 +61,9 @@ export function useRealtime() {
         case "notification.created":
           qc.invalidateQueries({ queryKey: notificationKeys.list });
           break;
+        case "board.changed":
+          qc.invalidateQueries({ queryKey: ["board", ev.data.groupId] });
+          break;
       }
     });
 

@@ -14,6 +14,7 @@ import (
 	"kisy-backend/internal/audit"
 	"kisy-backend/internal/auth"
 	"kisy-backend/internal/auth/token"
+	"kisy-backend/internal/boards"
 	"kisy-backend/internal/bootstrap"
 	"kisy-backend/internal/chats"
 	"kisy-backend/internal/config"
@@ -44,6 +45,7 @@ type modules struct {
 	readstateHandler     *readstate.Handler
 	favoritesHandler     *favorites.Handler
 	notificationsHandler *notifications.Handler
+	boardsHandler        *boards.Handler
 	adminHandler         *admin.Handler
 	wsHandler            *ws.Handler
 	hub                  *ws.Hub
@@ -138,6 +140,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 
 	// --- groups ---
 	groupsSvc := groups.NewService(pool, groupsRepo, auditRec)
+	groupsSvc.SetProfileLoader(groups.ProfileLoader(usersProfile))
 	groupsHandler := groups.NewHandler(groupsSvc,
 		func(r *http.Request) (groups.ActorMeta, bool) {
 			claims, ok := auth.ClaimsFromContext(r.Context())
@@ -271,6 +274,23 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 
 	hub.SetHandlers(messagesSvc, chatAuthorizer, readstateSvc.PersistRead)
 
+	// --- task boards (per group) ---
+	boardsSvc := boards.NewService(pool, boards.NewPostgresRepository(), boards.Access{
+		EnsureActorMember: func(ctx context.Context, groupID, actorID uuid.UUID, actorLevel int) error {
+			return groupsSvc.EnsureMember(ctx, groupID, groups.ActorMeta{UserID: actorID, RoleLevel: actorLevel})
+		},
+		IsFounder: groupsSvc.IsFounder,
+		IsMember:  groupsSvc.IsMember,
+	})
+	boardsSvc.SetPublisher(wsPublisher)
+	boardsHandler := boards.NewHandler(boardsSvc, func(r *http.Request) (boards.Actor, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return boards.Actor{}, false
+		}
+		return boards.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
+	})
+
 	// --- admin (CEO) ---
 	adminSvc := admin.NewService(pool, usersRepo, sessionsRepo, auditRec)
 	adminHandler := admin.NewHandler(adminSvc, audit.NewReader(pool), func(r *http.Request) (admin.ActorMeta, bool) {
@@ -302,6 +322,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		readstateHandler:     readstateHandler,
 		favoritesHandler:     favoritesHandler,
 		notificationsHandler: notificationsHandler,
+		boardsHandler:        boardsHandler,
 		adminHandler:         adminHandler,
 		wsHandler:            wsHandler,
 		hub:                  hub,

@@ -22,6 +22,7 @@ const (
 	EventReactionAdded   = "reaction.added"
 	EventReactionRemoved = "reaction.removed"
 	EventNotification    = "notification.created"
+	EventBoardChanged    = "board.changed"
 	EventError           = "error"
 )
 

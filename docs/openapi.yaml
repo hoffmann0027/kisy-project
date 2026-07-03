@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: KISY Enterprise Messenger API
-  version: 0.5.0
+  version: 0.6.0
   description: >
     REST API for the KISY enterprise messenger. Covers stages 2–4:
     authentication, access control, invitations, profile, groups, private
@@ -23,6 +23,8 @@ tags:
     description: Group chats with clearance-gated visibility
   - name: chats
     description: One-to-one private conversations
+  - name: boards
+    description: Trello-style task boards attached to groups
   - name: messages
     description: Chat messages (editing disabled by design)
   - name: notifications
@@ -398,6 +400,188 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+
+  /groups/{groupID}/members:
+    get:
+      tags: [groups]
+      summary: List a group's members (visible to members)
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Members
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          members: { type: array, items: { $ref: '#/components/schemas/User' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /groups/{groupID}/board:
+    get:
+      tags: [boards]
+      summary: Get the group's task board (404 if not created yet)
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Board with columns and cards
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          board: { $ref: '#/components/schemas/Board' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [boards]
+      summary: Create the task board (group founder only)
+      description: Seeds three default columns. Only the group's founder may create it.
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { title: { type: string } }
+      responses:
+        '201':
+          description: Board created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          board: { $ref: '#/components/schemas/Board' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /boards/{boardID}/columns:
+    post:
+      tags: [boards]
+      summary: Add a column (founder only)
+      parameters:
+        - { name: boardID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [title], properties: { title: { type: string } } }
+      responses:
+        '200': { description: Column added, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /boards/columns/{columnID}:
+    patch:
+      tags: [boards]
+      summary: Rename a column (founder only)
+      parameters:
+        - { name: columnID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [title], properties: { title: { type: string } } }
+      responses:
+        '200': { description: Renamed, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    delete:
+      tags: [boards]
+      summary: Delete a column and its cards (founder only)
+      parameters:
+        - { name: columnID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /boards/columns/{columnID}/cards:
+    post:
+      tags: [boards]
+      summary: Create a card in a column (any group member)
+      parameters:
+        - { name: columnID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CardInput' }
+      responses:
+        '201':
+          description: Card created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties: { card: { $ref: '#/components/schemas/BoardCard' } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /boards/cards/{cardID}:
+    patch:
+      tags: [boards]
+      summary: Update a card (any group member)
+      parameters:
+        - { name: cardID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CardInput' }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [boards]
+      summary: Delete a card (creator or founder)
+      parameters:
+        - { name: cardID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /boards/cards/{cardID}/move:
+    post:
+      tags: [boards]
+      summary: Move a card to a column and index (drag-and-drop)
+      parameters:
+        - { name: cardID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [columnId, index]
+              properties:
+                columnId: { type: string, format: uuid }
+                index: { type: integer, minimum: 0 }
+      responses:
+        '200': { description: Moved, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /chats:
     get:
@@ -908,7 +1092,45 @@ components:
         description: { type: [string, 'null'] }
         avatarUrl: { type: [string, 'null'] }
         minRoleLevel: { type: integer, minimum: 1, maximum: 10 }
+        createdBy: { type: string, format: uuid }
         createdAt: { type: string, format: date-time }
+    BoardCard:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        columnId: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: [string, 'null'] }
+        position: { type: integer }
+        assigneeId: { type: [string, 'null'], format: uuid }
+        label: { type: [string, 'null'] }
+        dueDate: { type: [string, 'null'], format: date-time }
+        createdBy: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+    BoardColumn:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        position: { type: integer }
+        cards: { type: array, items: { $ref: '#/components/schemas/BoardCard' } }
+    Board:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        groupId: { type: string, format: uuid }
+        title: { type: string }
+        createdBy: { type: string, format: uuid }
+        columns: { type: array, items: { $ref: '#/components/schemas/BoardColumn' } }
+    CardInput:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, maxLength: 256 }
+        description: { type: [string, 'null'] }
+        assigneeId: { type: [string, 'null'], format: uuid }
+        label: { type: [string, 'null'] }
+        dueDate: { type: [string, 'null'], format: date-time }
     Chat:
       type: object
       properties:

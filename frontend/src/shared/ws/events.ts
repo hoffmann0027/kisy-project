@@ -12,6 +12,7 @@ export type ServerEvent =
   | { event: "reaction.added"; data: ReactionEvent }
   | { event: "reaction.removed"; data: ReactionEvent }
   | { event: "notification.created"; data: Record<string, unknown> }
+  | { event: "board.changed"; data: { groupId: string } }
   | { event: "error"; data: { message: string } };
 
 export interface TypingData {

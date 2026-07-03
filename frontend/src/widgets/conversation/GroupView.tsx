@@ -1,0 +1,69 @@
+import { useState } from "react";
+import { cn } from "@shared/lib/cn";
+import { Icon } from "@shared/ui/icons";
+import type { Group } from "@shared/api/types";
+import { useAuthStore } from "@shared/store/auth";
+import { Conversation } from "./Conversation";
+import { BoardView } from "@widgets/board/BoardView";
+import { GroupMembersModal } from "@features/profile/GroupMembersModal";
+
+type Tab = "chat" | "board";
+
+export function GroupView({ group }: { group: Group }) {
+  const [tab, setTab] = useState<Tab>("chat");
+  const [membersOpen, setMembersOpen] = useState(false);
+  const isFounder = useAuthStore((s) => s.user?.id === group.createdBy);
+
+  const tabs = (
+    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+      <button
+        className={cn("group-tab", tab === "chat" && "group-tab--active")}
+        onClick={() => setTab("chat")}
+      >
+        Чат
+      </button>
+      <button
+        className={cn("group-tab", tab === "board" && "group-tab--active")}
+        onClick={() => setTab("board")}
+      >
+        <Icon.Board size={16} /> Доска
+      </button>
+      <button className="group-tab" onClick={() => setMembersOpen(true)} title="Участники">
+        <Icon.Users size={16} />
+      </button>
+    </div>
+  );
+
+  if (tab === "board") {
+    return (
+      <section className="conv">
+        <header className="conv__header">
+          <div className="conv__header-body">
+            <div className="conv__title">{group.name}</div>
+            <div className="conv__status">Доска задач</div>
+          </div>
+          {tabs}
+        </header>
+        <BoardView group={group} />
+        <GroupMembersModal group={group} canAdd={isFounder} open={membersOpen} onClose={() => setMembersOpen(false)} />
+      </section>
+    );
+  }
+
+  return (
+    <>
+      <Conversation
+        target={{
+          chatType: "group",
+          chatId: group.id,
+          title: group.name,
+          avatarName: group.name,
+          avatarUrl: group.avatarUrl,
+          offlineLabel: "Группа",
+        }}
+        headerActions={tabs}
+      />
+      <GroupMembersModal group={group} canAdd={isFounder} open={membersOpen} onClose={() => setMembersOpen(false)} />
+    </>
+  );
+}

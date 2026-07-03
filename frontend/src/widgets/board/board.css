@@ -1,0 +1,201 @@
+.board {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.board__empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  text-align: center;
+  color: var(--color-text-secondary);
+  padding: var(--space-6);
+}
+
+.board__scroll {
+  flex: 1;
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  overflow-x: auto;
+  overflow-y: hidden;
+  align-items: flex-start;
+}
+
+.board-col {
+  flex: 0 0 300px;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface-glass);
+  backdrop-filter: blur(var(--blur-glass));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.board-col--drop {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+.board-col__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 12px 14px;
+  font-weight: 620;
+  font-size: 15px;
+}
+.board-col__count {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  background: var(--color-surface-2);
+  border-radius: var(--radius-round);
+  padding: 1px 8px;
+}
+.board-col__title-input {
+  flex: 1;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  padding: 4px 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.board-col__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 40px;
+}
+.board-col__add {
+  padding: 8px 10px 12px;
+}
+.board-col__add-input {
+  width: 100%;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  padding: 8px 10px;
+  font-size: 14px;
+  resize: vertical;
+}
+.board-col__add-btn {
+  width: 100%;
+  margin-top: 6px;
+  background: transparent;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  padding: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all var(--transition-fast);
+}
+.board-col__add-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.board-card {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  cursor: grab;
+  transition: border-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+  animation: pop-in 0.15s ease;
+}
+.board-card:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-soft);
+}
+.board-card:active {
+  cursor: grabbing;
+}
+.board-card--dragging {
+  opacity: 0.4;
+}
+.board-card__label {
+  height: 6px;
+  width: 40px;
+  border-radius: var(--radius-round);
+  margin-bottom: 8px;
+}
+.board-card__title {
+  font-size: 14px;
+  font-weight: 520;
+  line-height: 1.35;
+  word-break: break-word;
+}
+.board-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  gap: 8px;
+}
+.board-card__due {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+  padding: 2px 7px;
+}
+.board-card__due--overdue {
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+.board-card__due--soon {
+  color: var(--color-warning);
+}
+
+.board-add-col {
+  flex: 0 0 300px;
+}
+.board-add-col button {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-secondary);
+  padding: 14px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all var(--transition-fast);
+}
+.board-add-col button:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* Card detail modal extras */
+.card-labels {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.card-label-swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+.card-label-swatch--active {
+  border-color: var(--color-text-primary);
+}

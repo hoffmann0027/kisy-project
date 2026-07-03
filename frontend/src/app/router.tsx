@@ -39,6 +39,14 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    path: "/group/:groupId",
+    element: (
+      <RequireAuth>
+        <MessengerPage />
+      </RequireAuth>
+    ),
+  },
+  {
     path: "/admin",
     element: (
       <RequireCEO>
