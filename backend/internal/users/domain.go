@@ -42,6 +42,7 @@ type DTO struct {
 	RoleLevel   int        `json:"roleLevel"`
 	AvatarURL   *string    `json:"avatarUrl"`
 	Status      string     `json:"status"`
+	IsActive    bool       `json:"isActive"`
 	LastSeen    *time.Time `json:"lastSeen"`
 	CreatedAt   time.Time  `json:"createdAt"`
 }
@@ -54,6 +55,7 @@ func (u *User) ToDTO() DTO {
 		RoleLevel:   u.RoleID,
 		AvatarURL:   u.AvatarURL,
 		Status:      u.Status,
+		IsActive:    u.IsActive,
 		LastSeen:    u.LastSeenAt,
 		CreatedAt:   u.CreatedAt,
 	}

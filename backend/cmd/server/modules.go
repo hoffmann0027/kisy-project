@@ -115,8 +115,18 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		return invitations.CreatorMeta{ActorID: claims.UserID, SessionID: claims.SessionID, IPHash: m.IPHash, RequestID: m.RequestID}, true
 	})
 
+	// --- users service (needed by chats enrichment below) ---
+	usersProfile := func(ctx context.Context, id uuid.UUID) (any, bool) {
+		u, err := usersRepo.GetByID(ctx, pool, id)
+		if err != nil {
+			return nil, false
+		}
+		return u.ToDTO(), true
+	}
+
 	// --- chats ---
 	chatsSvc := chats.NewService(pool, chatsRepo, userLevel)
+	chatsSvc.SetProfileLoader(chats.ProfileLoader(usersProfile))
 	chatsHandler := chats.NewHandler(chatsSvc, func(r *http.Request) (chats.ActorMeta, bool) {
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {

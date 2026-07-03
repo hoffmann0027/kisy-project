@@ -3,26 +3,48 @@
   color-scheme: dark;
 
   --color-bg: #0b0b0f;
+  --color-bg-deep: #060608;
   --color-surface: #16161d;
-  --color-surface-glass: rgba(28, 28, 36, 0.6);
+  --color-surface-2: #1c1c25;
+  --color-surface-glass: rgba(28, 28, 36, 0.62);
+  --color-surface-glass-strong: rgba(20, 20, 27, 0.86);
   --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-strong: rgba(255, 255, 255, 0.14);
   --color-text-primary: #f5f5f7;
   --color-text-secondary: #a1a1a6;
+  --color-text-tertiary: #6e6e77;
   --color-accent: #0a84ff;
   --color-accent-hover: #409cff;
+  --color-accent-soft: rgba(10, 132, 255, 0.16);
   --color-danger: #ff453a;
+  --color-danger-soft: rgba(255, 69, 58, 0.16);
   --color-success: #32d74b;
+  --color-warning: #ffd60a;
+
+  /* Bubble colors */
+  --color-bubble-out: linear-gradient(135deg, #0a84ff 0%, #0066d6 100%);
+  --color-bubble-in: #26262f;
 
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-round: 999px;
 
   --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.3);
 
-  --blur-glass: 20px;
+  --blur-glass: 22px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
 
   --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
-    Roboto, sans-serif;
+    Roboto, "Helvetica Neue", sans-serif;
 
   --transition-fast: 150ms ease;
   --transition-medium: 250ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -40,10 +62,37 @@ body,
 
 body {
   margin: 0;
-  background: var(--color-bg);
+  background:
+    radial-gradient(1200px 800px at 15% -10%, rgba(10, 132, 255, 0.10), transparent 60%),
+    radial-gradient(1000px 700px at 110% 10%, rgba(120, 80, 255, 0.08), transparent 55%),
+    var(--color-bg);
   color: var(--color-text-primary);
   font-family: var(--font-family);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+textarea {
+  font-family: inherit;
+}
+
+/* Scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-round);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.24);
 }
 
 .glass-surface {
@@ -53,4 +102,24 @@ body {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-elevated);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+  30% { transform: translateY(-4px); opacity: 1; }
 }

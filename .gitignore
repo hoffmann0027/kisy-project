@@ -16,6 +16,7 @@ frontend/dist/
 frontend/.vite/
 frontend/coverage/
 frontend/*.tsbuildinfo
+frontend/.env.local
 npm-debug.log*
 
 # Docker volumes / local data

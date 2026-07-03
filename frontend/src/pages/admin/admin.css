@@ -1,0 +1,103 @@
+.admin {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+  padding: var(--space-5);
+  gap: var(--space-4);
+}
+.admin__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.admin__title {
+  font-size: 24px;
+  font-weight: 680;
+  margin: 0;
+}
+.admin__tabs {
+  display: flex;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+.admin__tab {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  padding: 10px 4px;
+  font-size: 15px;
+  font-weight: 560;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.admin__tab--active {
+  color: var(--color-text-primary);
+  border-bottom-color: var(--color-accent);
+}
+.admin__content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.table th {
+  text-align: left;
+  color: var(--color-text-secondary);
+  font-weight: 560;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  background: var(--color-bg);
+}
+.table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+.table tr:hover td {
+  background: rgba(255, 255, 255, 0.03);
+}
+.role-select {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.pill {
+  display: inline-flex;
+  padding: 2px 10px;
+  border-radius: var(--radius-round);
+  font-size: 12px;
+  font-weight: 560;
+}
+.pill--active { background: rgba(50, 215, 75, 0.16); color: var(--color-success); }
+.pill--inactive { background: var(--color-danger-soft); color: var(--color-danger); }
+
+.invite-box {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  font-family: ui-monospace, monospace;
+  font-size: 14px;
+  word-break: break-all;
+}
+.audit-action {
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  color: var(--color-accent);
+}

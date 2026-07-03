@@ -1,0 +1,76 @@
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { messagesApi } from "@shared/api/endpoints";
+import type { ChatType, Message, MessagePage } from "@shared/api/types";
+
+export const messageKeys = {
+  list: (chatType: ChatType, chatId: string) => ["messages", chatType, chatId] as const,
+};
+
+// useMessages loads a chat's history newest-first, paging backwards.
+export function useMessages(chatType: ChatType, chatId: string | null) {
+  return useInfiniteQuery({
+    queryKey: chatId ? messageKeys.list(chatType, chatId) : ["messages", "none"],
+    enabled: !!chatId,
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => messagesApi.list(chatType, chatId as string, pageParam),
+    getNextPageParam: (last: MessagePage) => (last.hasMore ? last.nextCursor : undefined),
+  });
+}
+
+// flattenMessages merges the pages (each newest-first) into a single
+// oldest-first array for rendering.
+export function flattenMessages(pages: MessagePage[] | undefined): Message[] {
+  if (!pages) return [];
+  const all = pages.flatMap((p) => p.items);
+  return all.slice().reverse();
+}
+
+export function useSendMessage(chatType: ChatType, chatId: string) {
+  return useMutation({
+    mutationFn: (args: { text: string; replyTo?: string }) =>
+      messagesApi.send(chatType, chatId, args.text, args.replyTo),
+    // The created message arrives via WebSocket and is inserted there, so
+    // we do not optimistically duplicate it here.
+  });
+}
+
+export function useDeleteMessage() {
+  return useMutation({ mutationFn: (messageId: string) => messagesApi.remove(messageId) });
+}
+
+export function useReaction() {
+  return useMutation({
+    mutationFn: (args: { messageId: string; emoji: string; remove: boolean }) =>
+      args.remove
+        ? messagesApi.removeReaction(args.messageId, args.emoji)
+        : messagesApi.addReaction(args.messageId, args.emoji),
+  });
+}
+
+// upsertMessage inserts or replaces a message in the infinite-query cache
+// (used by the WebSocket layer for realtime delivery).
+export function useMessageCacheWriter() {
+  const qc = useQueryClient();
+
+  return {
+    insert(msg: Message) {
+      qc.setQueryData(messageKeys.list(msg.chatType, msg.chatId), (old: any) => {
+        if (!old) return old;
+        const pages = old.pages as MessagePage[];
+        if (pages.some((p) => p.items.some((m) => m.id === msg.id))) return old;
+        const first = { ...pages[0], items: [msg, ...pages[0].items] };
+        return { ...old, pages: [first, ...pages.slice(1)] };
+      });
+    },
+    patch(chatType: ChatType, chatId: string, messageId: string, fn: (m: Message) => Message) {
+      qc.setQueryData(messageKeys.list(chatType, chatId), (old: any) => {
+        if (!old) return old;
+        const pages = (old.pages as MessagePage[]).map((p) => ({
+          ...p,
+          items: p.items.map((m) => (m.id === messageId ? fn(m) : m)),
+        }));
+        return { ...old, pages };
+      });
+    },
+  };
+}

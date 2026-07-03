@@ -28,11 +28,16 @@ type TargetLookup func(ctx context.Context, id uuid.UUID) (level int, ok bool)
 // chats→readstate import cycle.
 type UnreadLoader func(ctx context.Context, userID uuid.UUID, chatIDs []uuid.UUID) (map[uuid.UUID]int, error)
 
+// ProfileLoader returns a user's public profile for chat enrichment,
+// injected to avoid a chats→users import cycle.
+type ProfileLoader func(ctx context.Context, userID uuid.UUID) (any, bool)
+
 type Service struct {
-	pool   *pgxpool.Pool
-	repo   Repository
-	lookup TargetLookup
-	unread UnreadLoader
+	pool     *pgxpool.Pool
+	repo     Repository
+	lookup   TargetLookup
+	unread   UnreadLoader
+	profiles ProfileLoader
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository, lookup TargetLookup) *Service {
@@ -41,6 +46,20 @@ func NewService(pool *pgxpool.Pool, repo Repository, lookup TargetLookup) *Servi
 
 // SetUnreadLoader wires unread-counter enrichment for chat listings.
 func (s *Service) SetUnreadLoader(l UnreadLoader) { s.unread = l }
+
+// SetProfileLoader wires other-participant enrichment.
+func (s *Service) SetProfileLoader(l ProfileLoader) { s.profiles = l }
+
+// DTO builds an enriched DTO for one chat from the actor's perspective.
+func (s *Service) DTO(ctx context.Context, chat *PrivateChat, self uuid.UUID) DTO {
+	dto := chat.ToDTO(self)
+	if s.profiles != nil {
+		if profile, ok := s.profiles(ctx, dto.OtherUserID); ok {
+			dto.OtherUser = profile
+		}
+	}
+	return dto
+}
 
 // ListDTOsForUser returns the actor's chats as DTOs, enriched with unread
 // counters when a loader is configured.
@@ -53,7 +72,7 @@ func (s *Service) ListDTOsForUser(ctx context.Context, actor ActorMeta) ([]DTO, 
 	dtos := make([]DTO, 0, len(list))
 	ids := make([]uuid.UUID, 0, len(list))
 	for i := range list {
-		dtos = append(dtos, list[i].ToDTO(actor.UserID))
+		dtos = append(dtos, s.DTO(ctx, &list[i], actor.UserID))
 		ids = append(ids, list[i].ID)
 	}
 

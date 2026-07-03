@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "@app/App";
 import "@shared/config/theme.css";
+import "@shared/ui/ui.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -38,6 +39,32 @@ func NewHandler(svc *Service, identity func(*http.Request) (Identity, bool), met
 func (h *Handler) Routes(r chi.Router) {
 	r.Get("/me", h.getMe)
 	r.Patch("/me", h.patchMe)
+	r.Get("/directory", h.directory)
+}
+
+// directory lists users the actor may start a chat with (same or lower
+// clearance), for the new-chat picker.
+func (h *Handler) directory(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.identity(r)
+	if !ok {
+		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
+		return
+	}
+	query := r.URL.Query().Get("search")
+	limit := 0
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		limit, _ = strconv.Atoi(raw)
+	}
+
+	list, err := h.svc.Directory(r.Context(), id.UserID, id.RoleLevel, query, limit)
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "failed to search users")
+		return
+	}
+	if list == nil {
+		list = []DTO{}
+	}
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"users": list})
 }
 
 func (h *Handler) getMe(w http.ResponseWriter, r *http.Request) {

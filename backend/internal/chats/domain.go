@@ -38,11 +38,14 @@ func (c *PrivateChat) HasParticipant(userID uuid.UUID) bool {
 	return c.UserAID == userID || c.UserBID == userID
 }
 
-// DTO is the API representation of a private chat.
+// DTO is the API representation of a private chat. OtherUser carries the
+// counterpart's public profile so clients can render the chat without a
+// separate lookup; it is nil only if that account was removed.
 type DTO struct {
 	ID          uuid.UUID `json:"id"`
 	Type        string    `json:"type"` // always "private" here
 	OtherUserID uuid.UUID `json:"otherUserId"`
+	OtherUser   any       `json:"otherUser"`
 	UnreadCount int       `json:"unreadCount"`
 	CreatedAt   time.Time `json:"createdAt"`
 }

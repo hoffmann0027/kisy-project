@@ -77,7 +77,7 @@ func (h *Handler) open(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "failed to open chat")
 	default:
-		httpresponse.OK(w, r, http.StatusOK, map[string]any{"chat": chat.ToDTO(actor.UserID)})
+		httpresponse.OK(w, r, http.StatusOK, map[string]any{"chat": h.svc.DTO(r.Context(), chat, actor.UserID)})
 	}
 }
 

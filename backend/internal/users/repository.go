@@ -30,6 +30,10 @@ type Repository interface {
 	UpdateRole(ctx context.Context, q db.DBTX, id uuid.UUID, roleID int) error
 	SetActive(ctx context.Context, q db.DBTX, id uuid.UUID, active bool) error
 	List(ctx context.Context, q db.DBTX, limit, offset int) ([]User, error)
+	// Search returns active users the actor may start a chat with (same or
+	// lower clearance: role_id >= actorLevel), matching a username prefix,
+	// excluding the actor themselves.
+	Search(ctx context.Context, q db.DBTX, actorID uuid.UUID, actorLevel int, query string, limit int) ([]User, error)
 	// RegisterLoginFailure atomically increments the failure counter and,
 	// when maxAttempts is reached, sets locked_until to lockUntil.
 	// Returns the resulting lock timestamp (nil if not locked).
@@ -176,6 +180,35 @@ func (r *PostgresRepository) List(ctx context.Context, q db.DBTX, limit, offset 
 			&u.MustChangePassword, &u.CreatedAt, &u.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("users: scan list row: %w", err)
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+func (r *PostgresRepository) Search(ctx context.Context, q db.DBTX, actorID uuid.UUID, actorLevel int, query string, limit int) ([]User, error) {
+	// citext username makes the prefix match case-insensitive. A blank
+	// query lists the directory.
+	rows, err := q.Query(ctx, `SELECT`+userColumns+`
+		FROM users
+		WHERE is_active = true AND role_id >= $1 AND id <> $2
+		  AND ($3 = '' OR username LIKE $3 || '%')
+		ORDER BY username ASC
+		LIMIT $4`, actorLevel, actorID, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("users: search: %w", err)
+	}
+	defer rows.Close()
+
+	var out []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(
+			&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &u.RoleID, &u.AvatarURL,
+			&u.Status, &u.LastSeenAt, &u.IsActive, &u.FailedLoginAttempts, &u.LockedUntil,
+			&u.MustChangePassword, &u.CreatedAt, &u.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("users: scan search row: %w", err)
 		}
 		out = append(out, u)
 	}

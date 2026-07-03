@@ -1,9 +1,50 @@
-import { createBrowserRouter } from "react-router-dom";
-import { StatusPage } from "@pages/status/StatusPage";
+import { createBrowserRouter, Navigate } from "react-router-dom";
+import { LoginPage } from "@pages/auth/LoginPage";
+import { RegisterPage } from "@pages/auth/RegisterPage";
+import { MessengerPage } from "@pages/messenger/MessengerPage";
+import { AdminPage } from "@pages/admin/AdminPage";
+import { RequireAuth, RequireCEO, RedirectIfAuth } from "./guards";
 
 export const router = createBrowserRouter([
   {
-    path: "/",
-    element: <StatusPage />,
+    path: "/login",
+    element: (
+      <RedirectIfAuth>
+        <LoginPage />
+      </RedirectIfAuth>
+    ),
   },
+  {
+    path: "/register",
+    element: (
+      <RedirectIfAuth>
+        <RegisterPage />
+      </RedirectIfAuth>
+    ),
+  },
+  {
+    path: "/",
+    element: (
+      <RequireAuth>
+        <MessengerPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: "/chat/:chatId",
+    element: (
+      <RequireAuth>
+        <MessengerPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: "/admin",
+    element: (
+      <RequireCEO>
+        <AdminPage />
+      </RequireCEO>
+    ),
+  },
+  { path: "*", element: <Navigate to="/" replace /> },
 ]);
