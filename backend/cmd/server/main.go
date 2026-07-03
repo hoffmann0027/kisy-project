@@ -23,6 +23,7 @@ import (
 	"kisy-backend/internal/platform/postgres"
 	"kisy-backend/internal/platform/ratelimit"
 	kisyredis "kisy-backend/internal/platform/redis"
+	"kisy-backend/internal/platform/security"
 	"kisy-backend/pkg/httpresponse"
 )
 
@@ -75,10 +76,11 @@ func run() error {
 	go mods.hub.Run(ctx)
 
 	router := newRouter(routerDeps{
-		log:  log,
-		pg:   pgPool,
-		rdb:  redisClient,
-		mods: mods,
+		log:           log,
+		pg:            pgPool,
+		rdb:           redisClient,
+		mods:          mods,
+		allowedOrigin: cfg.WSAllowedOrigin,
 	})
 
 	srv := &http.Server{
@@ -113,10 +115,11 @@ func run() error {
 }
 
 type routerDeps struct {
-	log  *slog.Logger
-	pg   *pgxpool.Pool
-	rdb  *goredis.Client
-	mods *modules
+	log           *slog.Logger
+	pg            *pgxpool.Pool
+	rdb           *goredis.Client
+	mods          *modules
+	allowedOrigin string
 }
 
 func newRouter(d routerDeps) http.Handler {
@@ -125,6 +128,7 @@ func newRouter(d routerDeps) http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
+	r.Use(security.Headers)
 	r.Use(requestLogger(d.log))
 	r.Use(middleware.Timeout(30 * time.Second))
 
@@ -153,6 +157,10 @@ func newRouter(d routerDeps) http.Handler {
 	m := d.mods
 
 	r.Route("/api/v1", func(r chi.Router) {
+		// CSRF protection on every state-changing API request
+		// (defense-in-depth alongside SameSite=Strict cookies).
+		r.Use(security.CSRF(d.allowedOrigin))
+
 		r.Route("/auth", func(r chi.Router) {
 			// Brute-force protection on unauthenticated entry points.
 			r.Use(perRouteLimits(m.limiter))

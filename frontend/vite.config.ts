@@ -27,7 +27,10 @@ export default defineConfig(({ mode }) => {
       host: true,
       port: 5173,
       proxy: {
-        "/api": { target: backendTarget, changeOrigin: true },
+        // changeOrigin is intentionally left false so the browser's Host
+        // header is preserved end-to-end; the backend CSRF check compares
+        // Origin against Host, which must therefore stay consistent.
+        "/api": { target: backendTarget },
         "/ws": { target: wsTarget, ws: true },
       },
     },

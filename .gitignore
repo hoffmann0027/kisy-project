@@ -24,6 +24,9 @@ deploy/docker/data/
 postgres-data/
 redis-data/
 
+# TLS certificates (generated locally / provided by CA in prod)
+deploy/nginx/certs/
+
 # IDE
 .vscode/
 .idea/
