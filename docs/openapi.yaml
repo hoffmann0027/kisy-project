@@ -1087,6 +1087,128 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /rating/board:
+    get:
+      tags: [rating]
+      summary: Full rating board (projects with tasks embedded)
+      responses:
+        '200':
+          description: Board
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          projects: { type: array, items: { $ref: '#/components/schemas/RatingProject' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /rating/analytics:
+    get:
+      tags: [rating]
+      summary: Profit analytics (per-project share + monthly totals)
+      responses:
+        '200':
+          description: Analytics
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/RatingAnalytics' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /rating/projects:
+    post:
+      tags: [rating]
+      summary: Create a project (CEO only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string, minLength: 1, maxLength: 128 }
+                description: { type: [string, 'null'] }
+                difficulty: { type: string, enum: [easy, medium, hard] }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /rating/projects/{id}:
+    delete:
+      tags: [rating]
+      summary: Delete a project and its tasks/ledger (CEO only)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /rating/projects/{id}/tasks:
+    post:
+      tags: [rating]
+      summary: Add a task to a project (CEO only)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [title], properties: { title: { type: string, minLength: 1, maxLength: 200 } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /rating/tasks/{id}/assign:
+    post:
+      tags: [rating]
+      summary: Assign yourself to a backlog task (moves it to in progress)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Assigned, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /rating/tasks/{id}/progress:
+    patch:
+      tags: [rating]
+      summary: Update task progress (assignee only; 100 → done)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [progress], properties: { progress: { type: integer, minimum: 0, maximum: 100 } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /rating/tasks/{id}/finance:
+    post:
+      tags: [rating]
+      summary: Record income/expense for a done task (assignee or CEO)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                incomeKopecks: { type: integer, format: int64, minimum: 0 }
+                expenseKopecks: { type: integer, format: int64, minimum: 0 }
+                note: { type: [string, 'null'] }
+      responses:
+        '201': { description: Recorded, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /admin/users:
     get:
       tags: [admin]
@@ -1378,6 +1500,54 @@ components:
             username: { type: string }
             avatarUrl: { type: [string, 'null'] }
             roleLevel: { type: integer }
+    RatingTask:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        projectId: { type: string, format: uuid }
+        projectTitle: { type: string }
+        title: { type: string }
+        assignee:
+          oneOf:
+            - type: object
+              properties:
+                id: { type: string, format: uuid }
+                displayName: { type: string }
+                avatarUrl: { type: [string, 'null'] }
+            - type: 'null'
+        progress: { type: integer, minimum: 0, maximum: 100 }
+        status: { type: string, enum: [backlog, in_progress, done] }
+        totalProfitKopecks: { type: integer, format: int64 }
+        createdAt: { type: string, format: date-time }
+    RatingProject:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: [string, 'null'] }
+        difficulty: { type: string, enum: [easy, medium, hard] }
+        createdBy: { type: string, format: uuid }
+        totalProfitKopecks: { type: integer, format: int64 }
+        tasks: { type: array, items: { $ref: '#/components/schemas/RatingTask' } }
+        createdAt: { type: string, format: date-time }
+    RatingAnalytics:
+      type: object
+      properties:
+        perProject:
+          type: array
+          items:
+            type: object
+            properties:
+              projectId: { type: string, format: uuid }
+              title: { type: string }
+              profitKopecks: { type: integer, format: int64 }
+        monthly:
+          type: array
+          items:
+            type: object
+            properties:
+              month: { type: string, example: "2026-01" }
+              profitKopecks: { type: integer, format: int64 }
     AuditEntry:
       type: object
       properties:
