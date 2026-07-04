@@ -1,5 +1,6 @@
 # widgets
 
-Composite, reusable UI blocks assembled from `features` and `entities`
-(e.g. chat list, message thread, member panel) — the pieces that make up
-the three-column messenger layout in `docs/spec/02-frontend-ux.md`.
+Композитные переиспользуемые UI-блоки, собранные из `features` и `entities`
+(например, список чатов, лента сообщений, панель участников) — части,
+образующие трёхколоночный layout мессенджера из
+`docs/spec/02-frontend-ux.md`.

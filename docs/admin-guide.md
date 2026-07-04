@@ -1,83 +1,86 @@
-# KISY Administrator Guide
+# KISY — Руководство администратора
 
-For the **CEO** (clearance level 1), the only account with unrestricted
-access. Everything here maps to the Admin panel (shield icon) and the
-`/admin` API.
+Для **CEO** (уровень допуска 1) — единственного аккаунта с неограниченным
+доступом. Всё описанное здесь соответствует панели администрирования
+(иконка щита) и API `/admin`.
 
-## The clearance model
+## Модель допуска
 
-Ten levels, 1 (CEO) strongest … 10 (Guest) weakest. A **lower number means
-higher clearance**. Visibility flows downward:
+Десять уровней: 1 (CEO) — самый сильный … 10 (Гость) — самый слабый.
+**Меньший номер означает более высокий допуск.** Видимость направлена
+сверху вниз:
 
-- A group has a **minimum clearance** (`minRoleLevel`). It is visible only
-  to users at that level or **stronger**. Weaker users cannot see it — and
-  the API returns *not found*, never *forbidden*, so they cannot even infer
-  it exists.
-- Higher clearance may start a private chat with same-or-lower users; a
-  weaker user cannot initiate a conversation "upward".
+- У группы есть **минимальный допуск** (`minRoleLevel`). Она видна только
+  пользователям этого уровня или **сильнее**. Более слабые пользователи её
+  не видят — причём API возвращает *не найдено*, а не *запрещено*, чтобы
+  нельзя было даже узнать о её существовании.
+- Более высокий уровень может начать личный чат с равными или более
+  слабыми пользователями; слабый пользователь не может инициировать диалог
+  «наверх».
 
-## Onboarding a user (invitations)
+## Онбординг пользователя (приглашения)
 
-Registration is impossible without an invitation.
+Регистрация невозможна без приглашения.
 
-1. Admin panel → **Приглашения** → *Создать приглашение*.
-2. Copy the **token** or the ready **registration link**.
-3. Send it to the new employee. The token is valid **exactly 120 seconds**
-   and works **once**. If it expires, generate a new one.
+1. Панель администрирования → **Приглашения** → *Создать приглашение*.
+2. Скопируйте **токен** или готовую **ссылку регистрации**.
+3. Передайте новому сотруднику. Токен действует **ровно 120 секунд** и
+   работает **один раз**. Если истёк — создайте новый.
 
-The new account starts at the lowest clearance (level 10). Promote it as
-needed (below).
+Новый аккаунт создаётся с минимальным допуском (уровень 10). Повысьте его
+при необходимости (см. ниже).
 
-## Managing users
+## Управление пользователями
 
-Admin panel → **Пользователи**:
+Панель администрирования → **Пользователи**:
 
-- **Change role** — pick a new level in the dropdown. You cannot change
-  your own role (prevents locking the last CEO out).
-- **Reset password** — set a new password; this **ends all of that user's
-  sessions** and forces a change on next login. Use for lockouts or lost
-  credentials.
-- **Deactivate / Activate** — deactivating blocks login and ends the
-  user's sessions immediately. You cannot deactivate yourself. Accounts are
-  never deleted, only deactivated.
+- **Смена роли** — выберите новый уровень в выпадающем списке. Свою
+  собственную роль изменить нельзя (защита от блокировки последнего CEO).
+- **Сброс пароля** — задаёт новый пароль; при этом **завершаются все
+  сессии пользователя** и на следующем входе требуется сменить пароль.
+  Используйте при блокировках или утере доступа.
+- **Деактивация / Активация** — деактивация блокирует вход и немедленно
+  завершает сессии пользователя. Себя деактивировать нельзя. Аккаунты
+  никогда не удаляются, только деактивируются.
 
-## Groups & task boards
+## Группы и доски задач
 
-- Any user may create a group, but its minimum clearance **cannot exceed
-  their own** — they must be able to belong to it.
-- **Deleting a group:** the **CEO may delete any group**; otherwise only
-  the group's **founder** may delete theirs. Deletion removes the group's
-  chat, members and task board.
-- Each group can have a **Trello-style task board**. Only the founder
-  creates the board and manages its columns; any member adds and moves
-  cards.
+- Любой пользователь может создать группу, но её минимальный допуск **не
+  может превышать его собственный** — он должен иметь возможность в ней
+  состоять.
+- **Удаление группы:** **CEO может удалить любую группу**; в остальных
+  случаях группу может удалить только её **основатель**. Удаление сносит
+  чат группы, участников и доску задач.
+- У каждой группы может быть **доска задач в стиле Trello**. Доску создаёт
+  и управляет колонками только основатель; любой участник добавляет и
+  перемещает карточки.
 
-## Audit log
+## Журнал аудита
 
-Admin panel → **Аудит** (API: `GET /admin/audit`). Every privileged action
-is recorded immutably: logins and failures, lockouts, invitation
-create/use, registrations, role changes, password resets,
-activate/deactivate, group create/delete, message deletions and refresh
-token-reuse security events. Each row carries the actor, target, hashed IP,
-session and request id, and a UTC timestamp. The log **cannot be edited or
-deleted** — the database rejects any such attempt.
+Панель администрирования → **Аудит** (API: `GET /admin/audit`). Каждое
+привилегированное действие записывается неизменяемо: входы и неудачные
+попытки, блокировки, создание/использование приглашений, регистрации,
+смены ролей, сбросы паролей, активация/деактивация, создание/удаление
+групп, удаление сообщений и события повторного использования refresh-токена.
+Каждая запись содержит актора, цель, хешированный IP, идентификаторы сессии
+и запроса, метку времени в UTC. Журнал **нельзя редактировать или
+удалять** — база данных отклоняет любую такую попытку.
 
-## Security notes
+## О безопасности
 
-- Passwords are Argon2id-hashed; the system never stores or shows them.
-- Five failed logins lock an account for 15 minutes; rate limits also apply
-  per IP.
-- Sessions use HTTPOnly, SameSite=Strict cookies; "log out everywhere"
-  revokes every device.
+- Пароли хешируются Argon2id; система никогда не хранит и не показывает их.
+- Пять неудачных входов блокируют аккаунт на 15 минут; также действуют
+  ограничения по частоте запросов на один IP.
+- Сессии используют HTTPOnly, SameSite=Strict cookie; «выйти со всех
+  устройств» отзывает все сессии.
 
-## Backups
+## Резервные копии
 
-Operators run `make backup` (nightly via cron in production) to dump the
-database, and `make restore` to recover. See `docs/devops.md`.
+Операторы запускают `make backup` (в проде — ночью через cron) для дампа
+базы и `make restore` для восстановления. См. `docs/devops.md`.
 
-## First-run bootstrap
+## Первичная инициализация (bootstrap)
 
-The very first CEO account is created from `BOOTSTRAP_CEO_USERNAME` /
-`BOOTSTRAP_CEO_PASSWORD` in `.env` when the database is empty. Remove those
-variables after the first successful start and change the password from the
-profile screen.
+Самый первый аккаунт CEO создаётся из `BOOTSTRAP_CEO_USERNAME` /
+`BOOTSTRAP_CEO_PASSWORD` в `.env`, когда база пуста. После первого успешного
+запуска удалите эти переменные и смените пароль на экране профиля.

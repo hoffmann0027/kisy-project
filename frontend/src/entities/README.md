@@ -1,5 +1,5 @@
 # entities
 
-Business domain models and their canonical UI representation (e.g. `user`,
-`message`, `chat`, `group`) mirroring the API objects in
-`docs/spec/09-api-contracts.md`. Depends only on `shared`.
+Доменные модели и их каноническое UI-представление (например, `user`,
+`message`, `chat`, `group`), отражающие объекты API из
+`docs/spec/09-api-contracts.md`. Зависит только от `shared`.

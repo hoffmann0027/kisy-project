@@ -1,108 +1,114 @@
-# KISY Developer Guide
+# KISY — Руководство разработчика
 
-How the codebase is organized and how to extend it. Pair this with
-`docs/security.md`, `docs/devops.md` and `docs/openapi.yaml`.
+Как устроен код и как его расширять. Читайте вместе с
+`docs/security.md`, `docs/devops.md` и `docs/openapi.yaml`.
 
-## Stack & layout
+## Стек и структура
 
-Monorepo: `backend/` (Go), `frontend/` (React + TS + Vite), `deploy/`
-(Nginx, monitoring), `docs/`, `scripts/`, `.github/`.
+Монорепозиторий: `backend/` (Go), `frontend/` (React + TS + Vite),
+`deploy/` (Nginx, мониторинг), `docs/`, `scripts/`, `.github/`.
 
 ```
 backend/
-  cmd/server/          entrypoint + composition root (main.go, modules.go)
+  cmd/server/          точка входа + композиционный корень (main.go, modules.go)
   internal/
-    <domain>/          one package per module: domain.go, repository.go,
+    <domain>/          по пакету на модуль: domain.go, repository.go,
                        service.go, handler.go (+ *_test.go)
-    platform/          cross-cutting infra: postgres, redis, logger, db,
+    platform/          сквозная инфраструктура: postgres, redis, logger, db,
                        ratelimit, security, metrics, testdb
-  pkg/                 reusable, app-agnostic (httpresponse, httpjson,
-                       pagination)
-  migrations/          golang-migrate SQL (NNNNNN_name.up/.down.sql)
+  pkg/                 переиспользуемое, не зависящее от приложения
+                       (httpresponse, httpjson, pagination)
+  migrations/          SQL для golang-migrate (NNNNNN_name.up/.down.sql)
 frontend/src/
   app/ pages/ widgets/ features/ entities/ shared/   (feature-sliced)
 ```
 
-## Backend architecture
+## Архитектура бэкенда
 
-Clean-ish layering per module:
+Чистое послойное разделение внутри каждого модуля:
 
-- **domain.go** — entities, DTOs, sentinel errors. No I/O.
-- **repository.go** — a `Repository` interface + a Postgres implementation.
-  Every method takes a `db.DBTX` (satisfied by both `*pgxpool.Pool` and
-  `pgx.Tx`) so a call can run standalone or inside a transaction.
-- **service.go** — use-cases, permission checks, transaction boundaries,
-  auditing, publishing.
-- **handler.go** — HTTP: decode/validate, map domain errors to the API
-  contract, never leak internals.
+- **domain.go** — сущности, DTO, sentinel-ошибки. Без I/O.
+- **repository.go** — интерфейс `Repository` + реализация на Postgres.
+  Каждый метод принимает `db.DBTX` (реализуется и `*pgxpool.Pool`, и
+  `pgx.Tx`), поэтому вызов может выполняться сам по себе или внутри
+  транзакции.
+- **service.go** — сценарии использования, проверки прав, границы
+  транзакций, аудит, публикация событий.
+- **handler.go** — HTTP: декодирование/валидация, маппинг доменных ошибок
+  на контракт API, никогда не раскрывает внутренние детали.
 
-### The composition root
+### Композиционный корень
 
-`cmd/server/modules.go` is the **one place** that wires everything. To keep
-the dependency graph acyclic, cross-module dependencies are injected as
-**function/interface values**, not imports. Examples:
+`cmd/server/modules.go` — **единственное место**, где всё связывается.
+Чтобы граф зависимостей оставался ацикличным, межмодульные зависимости
+внедряются как **значения функций/интерфейсов**, а не через импорты.
+Примеры:
 
-- `chats` gets a `ProfileLoader` and `UnreadLoader` (from users/readstate)
-  instead of importing them.
-- `messages` gets an `Authorizer{Private, Group}` and a `ReactionLoader`.
-- `boards` gets an `Access{EnsureActorMember, IsFounder, IsMember}` backed
-  by the groups service.
-- The WebSocket hub is the `Publisher` for messages/reactions/boards.
+- `chats` получает `ProfileLoader` и `UnreadLoader` (из users/readstate)
+  вместо их импорта.
+- `messages` получает `Authorizer{Private, Group}` и `ReactionLoader`.
+- `boards` получает `Access{EnsureActorMember, IsFounder, IsMember}` на
+  основе сервиса групп.
+- WebSocket-хаб выступает `Publisher` для messages/reactions/boards.
 
-When a new module needs another, prefer an injected func/interface over a
-direct import.
+Когда новому модулю нужен другой — предпочитайте внедрённую
+функцию/интерфейс прямому импорту.
 
-### Response & error conventions
+### Соглашения об ответах и ошибках
 
-- Every response is a `pkg/httpresponse.Envelope`
+- Каждый ответ — это `pkg/httpresponse.Envelope`
   (`success/data/error/requestId/timestamp`).
-- Hidden-resource rule: something above the caller's clearance returns the
-  **same 404 as a nonexistent resource** — never 403 — so existence cannot
-  be probed.
-- Never surface internal error text; log server-side, return a generic code.
+- Правило сокрытия ресурсов: то, что выше допуска вызывающего, возвращает
+  **тот же 404, что и несуществующий ресурс** — никогда 403 — чтобы нельзя
+  было проверить существование.
+- Никогда не раскрывайте текст внутренней ошибки; логируйте на сервере,
+  возвращайте обобщённый код.
 
-## Adding a feature (backend)
+## Как добавить фичу (бэкенд)
 
-1. If it needs storage, add a migration pair in `backend/migrations`.
-2. Create `internal/<feature>/` with domain/repository/service/handler.
-3. Take a `db.DBTX` in repository methods; wrap multi-step writes in a tx.
-4. Wire it in `cmd/server/modules.go` and mount routes in `main.go`, behind
-   `RequireAuth` (and `RequireClearance` where needed).
-5. Add unit tests (pure logic) and an `//go:build integration` test using
-   `internal/platform/testdb`.
-6. Document endpoints in `docs/openapi.yaml`.
+1. Если нужно хранение — добавьте пару миграций в `backend/migrations`.
+2. Создайте `internal/<feature>/` с domain/repository/service/handler.
+3. Принимайте `db.DBTX` в методах репозитория; оборачивайте многошаговые
+   записи в транзакцию.
+4. Свяжите в `cmd/server/modules.go` и смонтируйте маршруты в `main.go`,
+   за `RequireAuth` (и `RequireClearance`, где нужно).
+5. Добавьте unit-тесты (чистая логика) и интеграционный тест с тегом
+   `//go:build integration`, используя `internal/platform/testdb`.
+6. Задокументируйте эндпоинты в `docs/openapi.yaml`.
 
-## Frontend architecture
+## Архитектура фронтенда
 
-Feature-sliced. `shared/api` holds the typed client, `endpoints.ts` and
-`types.ts` (the single source of API shape). Server state lives in TanStack
-Query hooks under `entities/*/queries.ts`; UI-only state in Zustand stores
-(`shared/store`). The WebSocket client is isolated in `shared/ws` and routed
-into the query cache by `app/useRealtime.ts`. Styling uses CSS variables
-from `shared/config/theme.css` (dark glassmorphism).
+Feature-sliced. `shared/api` содержит типизированный клиент, `endpoints.ts`
+и `types.ts` (единый источник формы API). Серверное состояние живёт в
+хуках TanStack Query под `entities/*/queries.ts`; чисто UI-состояние — в
+Zustand-сторах (`shared/store`). WebSocket-клиент изолирован в `shared/ws`
+и раздаётся в кэш запросов через `app/useRealtime.ts`. Стилизация — на
+CSS-переменных из `shared/config/theme.css` (тёмный glassmorphism).
 
-## Running & testing
+## Запуск и тесты
 
 ```bash
-make up                 # full stack at http://localhost
-make test               # backend unit tests (race)
+make up                 # весь стек на http://localhost
+make test               # unit-тесты бэкенда (race)
 make lint               # gofmt + vet + tsc
-cd frontend && npm test # frontend unit tests (Vitest)
+cd frontend && npm test # unit-тесты фронтенда (Vitest)
 
-# integration tests (need a database):
+# интеграционные тесты (нужна БД):
 cd backend
 TEST_DATABASE_URL=postgres://kisy:<pw>@localhost:5432/kisy?sslmode=disable \
   go test -tags integration ./...
 ```
 
-`TEST_DATABASE_URL` points at a maintenance DB; the harness creates and
-drops a uniquely-named database per test, so runs are isolated and
-repeatable. CI runs the same commands (`.github/workflows/ci.yml`).
+`TEST_DATABASE_URL` указывает на служебную БД; харнесс создаёт и удаляет
+уникально названную базу для каждого теста, поэтому запуски изолированы и
+воспроизводимы. CI выполняет те же команды (`.github/workflows/ci.yml`).
 
-## Conventions
+## Соглашения
 
-- Go: `gofmt` clean, `go vet` clean, table-driven tests, wrapped errors
-  (`fmt.Errorf("...: %w", err)`), sentinel errors for control flow.
-- TS: `strict` mode, no unused locals/params, path aliases (`@shared`, …).
-- Migrations are append-only and reversible; never edit a shipped one.
-- Secrets only via env/`.env`; never hardcode.
+- Go: чистый `gofmt`, чистый `go vet`, табличные тесты, обёрнутые ошибки
+  (`fmt.Errorf("...: %w", err)`), sentinel-ошибки для управления потоком.
+- TS: режим `strict`, без неиспользуемых локальных/параметров, алиасы путей
+  (`@shared`, …).
+- Миграции только добавляются и обратимы; никогда не редактируйте уже
+  выпущенную.
+- Секреты только через env/`.env`; никогда не хардкодить.

@@ -1,111 +1,116 @@
-# KISY Security Model
+# KISY — Модель безопасности
 
-This document records the threat model (STRIDE) and the controls that
-implement `docs/spec/06-security.md`. It is the reference for the
-security-hardening pass and for future audits.
+Этот документ фиксирует модель угроз (STRIDE) и контроли, реализующие
+`docs/spec/06-security.md`. Это опорный документ для прохода по
+security-hardening и для будущих аудитов.
 
-## Principles
+## Принципы
 
-Defense in depth, least privilege, secure-by-default, zero-trust between
-tiers. Every privileged action is audited; internal errors are never
-surfaced to clients.
+Глубоко эшелонированная защита (defense in depth), наименьшие привилегии,
+безопасное по умолчанию, zero-trust между слоями. Каждое привилегированное
+действие аудируется; внутренние ошибки никогда не показываются клиентам.
 
-## STRIDE threat model
+## Модель угроз STRIDE
 
-### Spoofing (impersonation)
-- **Threats:** credential theft, session hijacking, forged identity.
-- **Mitigations:** Argon2id password hashing (`internal/auth/password`);
-  JWT access tokens signed HS256 with a ≥32-char secret; opaque refresh
-  tokens stored only as SHA-256 digests; HTTPOnly + `SameSite=Strict`
-  cookies; per-request session validation (logout/password-change take
-  effect immediately); account lockout after 5 failures / 15 min; per-IP
-  rate limiting (Redis + Nginx). Timing-equalized login avoids user
-  enumeration.
+### Spoofing (подмена личности)
+- **Угрозы:** кража учётных данных, перехват сессии, поддельная личность.
+- **Меры:** хеширование паролей Argon2id (`internal/auth/password`);
+  access-токены JWT, подписанные HS256 секретом ≥32 символов; opaque
+  refresh-токены, хранящиеся только как SHA-256 дайджесты; HTTPOnly +
+  `SameSite=Strict` cookie; валидация сессии на каждый запрос (logout и
+  смена пароля вступают в силу немедленно); блокировка аккаунта после 5
+  неудач / 15 мин; ограничение частоты по IP (Redis + Nginx). Логин с
+  выровненным временем не позволяет перечислять пользователей.
 
-### Tampering (unauthorized modification)
-- **Threats:** request/response tampering, SQL injection, message forgery.
-- **Mitigations:** parameterized queries everywhere (pgx, no string
-  concatenation); strict JSON decoding with unknown-field rejection and a
-  1 MiB body cap (`pkg/httpjson`); refresh-token rotation with reuse
-  detection (a replayed token revokes the session); TLS 1.3 in transit;
-  append-only `audit_logs` (UPDATE/DELETE blocked by a DB trigger).
+### Tampering (несанкционированное изменение)
+- **Угрозы:** подмена запроса/ответа, SQL-инъекции, подделка сообщений.
+- **Меры:** параметризованные запросы везде (pgx, без конкатенации строк);
+  строгое декодирование JSON с отклонением неизвестных полей и лимитом тела
+  1 МиБ (`pkg/httpjson`); ротация refresh-токенов с детекцией повтора
+  (повторно предъявленный токен отзывает сессию); TLS 1.3 при передаче;
+  append-only `audit_logs` (UPDATE/DELETE заблокированы триггером БД).
 
-### Repudiation (denying an action)
-- **Threats:** a user or admin denies performing an action.
-- **Mitigations:** immutable audit log capturing actor, action, target,
-  hashed IP, session id, request id and timestamp for every privileged
-  operation (login, logout, register, invite create/use, role change,
-  password reset, activate/deactivate, message deletion, group creation,
-  refresh-reuse security events). Readable only by the CEO via `GET
+### Repudiation (отказ от совершённого действия)
+- **Угрозы:** пользователь или админ отрицает совершённое действие.
+- **Меры:** неизменяемый журнал аудита, фиксирующий актора, действие, цель,
+  хешированный IP, идентификатор сессии, идентификатор запроса и метку
+  времени для каждой привилегированной операции (вход, выход, регистрация,
+  создание/использование приглашения, смена роли, сброс пароля,
+  активация/деактивация, удаление сообщения, создание группы, security-
+  события повтора refresh-токена). Читается только CEO через `GET
   /admin/audit`.
 
-### Information Disclosure
-- **Threats:** leaking data or resource existence across clearance levels.
-- **Mitigations:** clearance model (`internal/access`) — groups above a
-  user's clearance are invisible and return **404, not 403**, so their
-  existence cannot be probed; message/chat access failures collapse to
-  not-found; the user directory only returns same-or-lower-clearance
-  accounts; passwords/refresh tokens never leave the backend; IP addresses
-  are stored salted-hashed; internal errors return a generic message with
-  a request id, never a stack trace.
+### Information Disclosure (раскрытие информации)
+- **Угрозы:** утечка данных или факта существования ресурсов между
+  уровнями допуска.
+- **Меры:** модель допуска (`internal/access`) — группы выше допуска
+  пользователя невидимы и возвращают **404, а не 403**, поэтому их
+  существование нельзя проверить; ошибки доступа к сообщениям/чатам
+  сводятся к not-found; директория пользователей возвращает только аккаунты
+  равного или более низкого допуска; пароли/refresh-токены никогда не
+  покидают бэкенд; IP-адреса хранятся в виде посоленного хеша; внутренние
+  ошибки возвращают обобщённое сообщение с идентификатором запроса, никогда
+  не стек-трейс.
 
 ### Denial of Service
-- **Threats:** brute force, request floods, slowloris, oversized payloads.
-- **Mitigations:** Nginx `limit_req` zones (auth 5 r/s, api 30 r/s per IP)
-  plus Redis per-IP limits in the backend; account lockout; request
-  header/body timeouts and `client_max_body_size`; server read-header
-  timeout; WebSocket read limits and slow-consumer frame dropping;
-  graceful shutdown.
+- **Угрозы:** брутфорс, флуд запросами, slowloris, чрезмерные полезные
+  нагрузки.
+- **Меры:** зоны `limit_req` в Nginx (auth 5 r/s, api 30 r/s на IP) плюс
+  per-IP лимиты в бэкенде на Redis; блокировка аккаунта; таймауты
+  заголовков/тела и `client_max_body_size`; таймаут чтения заголовков
+  сервера; лимиты чтения WebSocket и отбрасывание кадров медленным
+  потребителям; корректное завершение (graceful shutdown).
 
-### Elevation of Privilege
-- **Threats:** a lower-clearance user gaining higher access.
-- **Mitigations:** RBAC middleware (`RequireAuth` + `RequireClearance`),
-  1 = CEO; admin surface gated at clearance 1; a CEO cannot demote or
-  deactivate themselves (no self-lockout); the private-chat initiation
-  rule forbids reaching upward; role level is embedded in the validated
-  access token and re-checked against the live session on every request.
+### Elevation of Privilege (повышение привилегий)
+- **Угрозы:** пользователь с низким допуском получает более высокий доступ.
+- **Меры:** RBAC-мидлварь (`RequireAuth` + `RequireClearance`), 1 = CEO;
+  админ-поверхность закрыта на уровне допуска 1; CEO не может понизить или
+  деактивировать сам себя (нет самоблокировки); правило инициации личного
+  чата запрещает обращаться «наверх»; уровень роли встроен в валидируемый
+  access-токен и повторно сверяется с живой сессией на каждый запрос.
 
-## Application-security controls
+## Контроли application-security
 
-| Attack               | Control                                                             |
+| Атака                | Контроль                                                             |
 |----------------------|---------------------------------------------------------------------|
-| XSS                  | Strict CSP (`script-src 'self'`, no inline scripts); React escaping  |
-| CSRF                 | `SameSite=Strict` cookies + Origin/Referer verification middleware  |
+| XSS                  | Строгий CSP (`script-src 'self'`, без inline-скриптов); экранирование React |
+| CSRF                 | Cookie `SameSite=Strict` + мидлварь проверки Origin/Referer         |
 | Clickjacking         | `X-Frame-Options: DENY` + CSP `frame-ancestors 'none'`              |
-| SQL injection        | Parameterized pgx queries only                                      |
-| MIME sniffing        | `X-Content-Type-Options: nosniff`                                    |
-| Open redirect        | No user-controlled redirects; `form-action 'self'`, `base-uri 'self'`|
-| Path traversal / IDOR| UUID keys; per-resource ownership/clearance checks; not-found masking|
-| Info leakage in errors| Generic client errors, structured server-side logs                 |
-| Transport downgrade  | HSTS (2 y, preload) + TLS 1.3-only + HTTP→HTTPS 308 redirect        |
+| SQL-инъекции         | Только параметризованные запросы pgx                                 |
+| MIME-sniffing        | `X-Content-Type-Options: nosniff`                                    |
+| Открытые редиректы   | Нет управляемых пользователем редиректов; `form-action 'self'`, `base-uri 'self'` |
+| Path traversal / IDOR| UUID-ключи; проверки владения/допуска на ресурс; маскировка not-found |
+| Утечка в ошибках     | Обобщённые ошибки клиенту, структурированные логи на сервере        |
+| Понижение транспорта | HSTS (2 года, preload) + только TLS 1.3 + редирект HTTP→HTTPS 308   |
 
-## Transport & headers
+## Транспорт и заголовки
 
-- **TLS:** production terminates TLS 1.3 only at the Nginx edge
-  (`deploy/nginx/nginx.tls.conf`), PFS-inherent cipher suites, HSTS with
-  preload, `http2`. Dev certs via `scripts/gen-dev-certs.sh`; enable with
-  `docker compose -f docker-compose.yml -f docker-compose.prod.yml up`.
-- **Headers:** CSP, `X-Content-Type-Options`, `X-Frame-Options`,
-  `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-*` set by the
-  backend (`internal/platform/security`) on API responses and by Nginx on
-  static responses; `server_tokens off` hides the version.
+- **TLS:** в проде терминация только TLS 1.3 на edge-Nginx
+  (`deploy/nginx/nginx.tls.conf`), cipher-suite с встроенным PFS, HSTS с
+  preload, `http2`. Dev-сертификаты через `scripts/gen-dev-certs.sh`;
+  включается `docker compose -f docker-compose.yml -f docker-compose.prod.yml up`.
+- **Заголовки:** CSP, `X-Content-Type-Options`, `X-Frame-Options`,
+  `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-*` ставятся
+  бэкендом (`internal/platform/security`) на API-ответы и Nginx на
+  статику; `server_tokens off` скрывает версию.
 
-## Secrets
+## Секреты
 
-All secrets (DB/Redis passwords, JWT keys, IP-hash salt, CEO bootstrap
-credentials) come from environment variables / `.env`, never hardcoded.
-`.env` and TLS private keys are git-ignored.
+Все секреты (пароли БД/Redis, JWT-ключи, соль для IP-хеша, bootstrap-креды
+CEO) берутся из переменных окружения / `.env`, никогда не хардкодятся.
+`.env` и приватные TLS-ключи в `.gitignore`.
 
-## Dependency hygiene
+## Гигиена зависимостей
 
-`govulncheck ./...` (Go) and `npm audit` (frontend) run clean (0
-vulnerabilities) as of the stage-6 pass and are wired into CI.
+`govulncheck ./...` (Go) и `npm audit` (frontend, shipped-зависимости)
+проходят чисто (0 уязвимостей) по состоянию на проход stage-6 и включены в
+CI.
 
-## Deferred to later stages
+## Отложено на будущие этапы
 
-- Malware/virus scanning of uploaded files (Files stage; the `attachments`
-  table already gates visibility on `scan_status = clean`).
-- Encryption at rest for selected sensitive columns.
-- CAPTCHA after repeated failures (lockout + rate limiting cover the
-  baseline).
-- Automated backup verification jobs.
+- Сканирование загружаемых файлов на вредонос (этап Files; таблица
+  `attachments` уже гейтит видимость по `scan_status = clean`).
+- Шифрование в покое для отдельных чувствительных колонок.
+- CAPTCHA после многократных неудач (блокировка + rate limiting покрывают
+  базовый уровень).
+- Автоматические задания верификации бэкапов.
