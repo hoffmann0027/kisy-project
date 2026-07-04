@@ -1,5 +1,5 @@
 // Server→client event names and payloads, mirroring backend/internal/ws.
-import type { Message } from "@shared/api/types";
+import type { Message, User } from "@shared/api/types";
 
 export type ServerEvent =
   | { event: "message.created"; data: Message }
@@ -9,10 +9,12 @@ export type ServerEvent =
   | { event: "typing.stopped"; data: TypingData }
   | { event: "user.online"; data: { userId: string } }
   | { event: "user.offline"; data: { userId: string } }
+  | { event: "user.updated"; data: User }
   | { event: "reaction.added"; data: ReactionEvent }
   | { event: "reaction.removed"; data: ReactionEvent }
   | { event: "notification.created"; data: Record<string, unknown> }
   | { event: "board.changed"; data: { groupId: string } }
+  | { event: "group.changed"; data: { groupId: string } }
   | { event: "error"; data: { message: string } };
 
 export interface TypingData {

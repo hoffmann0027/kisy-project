@@ -29,6 +29,9 @@ export const authApi = {
 export const usersApi = {
   me: () => apiClient.get<{ user: User }>("/users/me"),
   updateUsername: (username: string) => apiClient.patch<{ user: User }>("/users/me", { username }),
+  updateProfile: (fields: { displayName?: string; username?: string }) =>
+    apiClient.patch<{ user: User }>("/users/me", fields),
+  uploadAvatar: (blob: Blob) => apiClient.postBlob<{ user: User }>("/users/me/avatar", blob),
   directory: (search = "", limit = 25) => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (search) params.set("search", search);
@@ -55,6 +58,8 @@ export const groupsApi = {
   members: (groupId: string) => apiClient.get<{ members: User[] }>(`/groups/${groupId}/members`),
   addMember: (groupId: string, userId: string) =>
     apiClient.post<{ added: boolean }>(`/groups/${groupId}/members`, { userId }),
+  uploadAvatar: (groupId: string, blob: Blob) =>
+    apiClient.postBlob<{ group: Group }>(`/groups/${groupId}/avatar`, blob),
 };
 
 export const boardsApi = {

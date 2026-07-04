@@ -36,4 +36,8 @@ export const apiClient = {
   put: <T>(path: string, b?: unknown) => request<T>(path, { method: "PUT", body: body(b) }),
   patch: <T>(path: string, b?: unknown) => request<T>(path, { method: "PATCH", body: body(b) }),
   del: <T>(path: string, b?: unknown) => request<T>(path, { method: "DELETE", body: body(b) }),
+  // postBlob uploads raw binary (e.g. an avatar image) with the blob's own
+  // content type instead of JSON.
+  postBlob: <T>(path: string, blob: Blob) =>
+    request<T>(path, { method: "POST", body: blob, headers: { "Content-Type": blob.type } }),
 };

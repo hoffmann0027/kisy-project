@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Avatar, Button, Input, Modal, toast } from "@shared/ui";
+import { Button, Input, Modal, toast } from "@shared/ui";
 import { roleLabel } from "@shared/api/types";
 import { authApi, usersApi } from "@shared/api/endpoints";
 import { useAuthStore } from "@shared/store/auth";
+import { AvatarCropper } from "./AvatarCropper";
 
 interface Props {
   open: boolean;
@@ -14,6 +15,7 @@ export function ProfileModal({ open, onClose }: Props) {
   const setUser = useAuthStore((s) => s.setUser);
   const logout = useAuthStore((s) => s.logout);
 
+  const [displayName, setDisplayName] = useState(user?.displayName ?? "");
   const [username, setUsername] = useState(user?.username ?? "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -21,21 +23,42 @@ export function ProfileModal({ open, onClose }: Props) {
 
   if (!user) return null;
 
-  const saveUsername = async () => {
-    if (!/^[A-Za-z0-9_]{3,32}$/.test(username)) {
-      toast.error("Имя: 3–32 символа, буквы/цифры/подчёркивание");
+  const saveProfile = async () => {
+    const fields: { displayName?: string; username?: string } = {};
+    const trimmedName = displayName.trim();
+    if (trimmedName !== user.displayName) {
+      if (trimmedName.length < 1 || trimmedName.length > 64) {
+        toast.error("Отображаемое имя: 1–64 символа");
+        return;
+      }
+      fields.displayName = trimmedName;
+    }
+    if (username !== user.username) {
+      if (!/^[A-Za-z0-9_]{3,32}$/.test(username)) {
+        toast.error("Логин: 3–32 символа, буквы/цифры/подчёркивание");
+        return;
+      }
+      fields.username = username;
+    }
+    if (!fields.displayName && !fields.username) {
+      toast.error("Нет изменений");
       return;
     }
     setBusy(true);
     try {
-      const { user: updated } = await usersApi.updateUsername(username);
+      const { user: updated } = await usersApi.updateProfile(fields);
       setUser(updated);
-      toast.success("Имя обновлено");
+      toast.success("Профиль обновлён");
     } catch {
-      toast.error("Не удалось обновить имя (возможно, занято)");
+      toast.error("Не удалось обновить профиль (возможно, логин занят)");
     } finally {
       setBusy(false);
     }
+  };
+
+  const uploadAvatar = async (blob: Blob) => {
+    const { user: updated } = await usersApi.uploadAvatar(blob);
+    setUser(updated);
   };
 
   const changePassword = async () => {
@@ -59,19 +82,18 @@ export function ProfileModal({ open, onClose }: Props) {
   return (
     <Modal open={open} title="Профиль" onClose={onClose}>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-        <Avatar name={user.displayName} url={user.avatarUrl} size={56} />
+        <AvatarCropper name={user.displayName} url={user.avatarUrl} size={56} onUpload={uploadAvatar} />
         <div>
           <div style={{ fontWeight: 640, fontSize: 17 }}>{user.displayName}</div>
           <div style={{ color: "var(--color-text-secondary)", fontSize: 14 }}>{roleLabel(user.roleLevel)}</div>
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-        <div style={{ flex: 1 }}>
-          <Input label="Имя пользователя" value={username} onChange={(e) => setUsername(e.target.value)} />
-        </div>
-        <Button variant="secondary" onClick={saveUsername} loading={busy}>
-          Сохранить
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <Input label="Отображаемое имя" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+        <Input label="Логин" value={username} onChange={(e) => setUsername(e.target.value)} />
+        <Button variant="secondary" onClick={saveProfile} loading={busy}>
+          Сохранить профиль
         </Button>
       </div>
 
