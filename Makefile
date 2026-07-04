@@ -34,9 +34,9 @@ backend-lint: ## gofmt + go vet
 backend-test: ## Run Go unit tests (race)
 	cd backend && go test -race ./...
 
-vuln: ## Run govulncheck + npm audit
+vuln: ## Run govulncheck + npm audit (shipped deps)
 	cd backend && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
-	cd frontend && npm audit --audit-level=high
+	cd frontend && npm audit --omit=dev --audit-level=high
 
 frontend-lint: ## TypeScript type-check
 	cd frontend && npm run typecheck

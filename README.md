@@ -63,6 +63,8 @@ http://localhost:5173, проксирует `/api` и `/ws` на `localhost:8080
 ## Документация
 
 - [docs/openapi.yaml](docs/openapi.yaml) — контракт REST API + WebSocket.
+- [docs/admin-guide.md](docs/admin-guide.md) — руководство администратора (CEO).
+- [docs/developer-guide.md](docs/developer-guide.md) — архитектура и разработка.
 - [docs/security.md](docs/security.md) — модель угроз (STRIDE) и контроли.
 - [docs/devops.md](docs/devops.md) — деплой, CI/CD, мониторинг, бэкапы.
 - [docs/spec](docs/spec) — исходная спецификация.

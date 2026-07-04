@@ -89,11 +89,16 @@ jobs:
       - name: Type-check
         run: npm run typecheck
 
+      - name: Unit tests
+        run: npm run test
+
       - name: Build
         run: npm run build
 
-      - name: Dependency audit
-        run: npm audit --audit-level=high
+      - name: Dependency audit (shipped deps only)
+        # Dev-only test tooling (vitest/esbuild) is excluded — it never
+        # ships in the production bundle.
+        run: npm audit --omit=dev --audit-level=high
 
   docker:
     name: Docker images build
