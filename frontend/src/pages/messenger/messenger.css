@@ -20,16 +20,11 @@
   gap: var(--space-3);
 }
 .rail__logo {
-  width: 42px;
-  height: 42px;
-  border-radius: var(--radius-md);
-  background: var(--color-bubble-out);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 800;
-  color: #fff;
   margin-bottom: var(--space-3);
+  line-height: 0;
 }
 .rail__nav {
   display: flex;
