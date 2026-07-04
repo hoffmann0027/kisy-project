@@ -159,8 +159,10 @@ export const ratingApi = {
   assign: (taskId: string) => apiClient.post<{ assigned: boolean }>(`/rating/tasks/${taskId}/assign`),
   setProgress: (taskId: string, progress: number) =>
     apiClient.patch<{ ok: boolean }>(`/rating/tasks/${taskId}/progress`, { progress }),
-  addFinance: (taskId: string, incomeKopecks: number, expenseKopecks: number, note?: string) =>
-    apiClient.post<{ ok: boolean }>(`/rating/tasks/${taskId}/finance`, { incomeKopecks, expenseKopecks, note }),
+  returnTask: (taskId: string) => apiClient.post<{ returned: boolean }>(`/rating/tasks/${taskId}/return`),
+  deleteTask: (taskId: string) => apiClient.del<{ deleted: boolean }>(`/rating/tasks/${taskId}`),
+  addFinance: (projectId: string, incomeKopecks: number, expenseKopecks: number, note?: string) =>
+    apiClient.post<{ ok: boolean }>(`/rating/projects/${projectId}/finance`, { incomeKopecks, expenseKopecks, note }),
 };
 
 export const adminApi = {
