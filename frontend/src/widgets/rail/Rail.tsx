@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { cn } from "@shared/lib/cn";
-import { Avatar, Badge } from "@shared/ui";
+import { Avatar, Badge, Logo } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import { useAuthStore } from "@shared/store/auth";
 import { useNotifications } from "@entities/notification/queries";
@@ -21,7 +21,9 @@ export function Rail({ onProfile, onNotifications }: Props) {
 
   return (
     <nav className="rail">
-      <div className="rail__logo">K</div>
+      <div className="rail__logo">
+        <Logo size={34} />
+      </div>
       <div className="rail__nav">
         <button className={cn("rail__item", "rail__item--active")} title="Чаты" onClick={() => navigate("/")}>
           <Icon.Chat />

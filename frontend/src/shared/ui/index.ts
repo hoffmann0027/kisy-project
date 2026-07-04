@@ -2,6 +2,7 @@ export { Button } from "./Button";
 export { IconButton } from "./IconButton";
 export { Input } from "./Input";
 export { Avatar } from "./Avatar";
+export { Logo } from "./Logo";
 export { Badge } from "./Badge";
 export { Spinner } from "./Spinner";
 export { Modal } from "./Modal";

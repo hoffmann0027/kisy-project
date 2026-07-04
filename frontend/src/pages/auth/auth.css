@@ -22,16 +22,8 @@
 }
 
 .auth-logo {
-  width: 60px;
-  height: 60px;
+  display: block;
   border-radius: var(--radius-lg);
-  background: var(--color-bubble-out);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 30px;
-  font-weight: 800;
-  color: #fff;
   box-shadow: 0 8px 28px rgba(10, 132, 255, 0.4);
   margin-bottom: var(--space-2);
 }
