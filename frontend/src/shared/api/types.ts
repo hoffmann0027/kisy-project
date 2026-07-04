@@ -123,6 +123,47 @@ export interface BoardCard {
   createdAt: string;
 }
 
+export type RatingDifficulty = "easy" | "medium" | "hard";
+export type RatingStatus = "backlog" | "in_progress" | "done";
+
+export interface RatingAssignee {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+export interface RatingTask {
+  id: string;
+  projectId: string;
+  projectTitle: string;
+  title: string;
+  assignee: RatingAssignee | null;
+  progress: number;
+  status: RatingStatus;
+  totalProfitKopecks: number;
+  createdAt: string;
+}
+
+export interface RatingProject {
+  id: string;
+  title: string;
+  description: string | null;
+  difficulty: RatingDifficulty;
+  createdBy: string;
+  totalProfitKopecks: number;
+  tasks: RatingTask[];
+  createdAt: string;
+}
+
+export interface RatingBoard {
+  projects: RatingProject[];
+}
+
+export interface RatingAnalytics {
+  perProject: { projectId: string; title: string; profitKopecks: number }[];
+  monthly: { month: string; profitKopecks: number }[];
+}
+
 export interface BoardColumn {
   id: string;
   title: string;

@@ -26,6 +26,7 @@ import (
 	"kisy-backend/internal/messages"
 	"kisy-backend/internal/notifications"
 	"kisy-backend/internal/platform/ratelimit"
+	"kisy-backend/internal/rating"
 	"kisy-backend/internal/reactions"
 	"kisy-backend/internal/readstate"
 	"kisy-backend/internal/users"
@@ -50,6 +51,7 @@ type modules struct {
 	feedbackHandler      *feedback.Handler
 	notificationsHandler *notifications.Handler
 	boardsHandler        *boards.Handler
+	ratingHandler        *rating.Handler
 	adminHandler         *admin.Handler
 	wsHandler            *ws.Handler
 	hub                  *ws.Hub
@@ -316,6 +318,16 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		return boards.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
 	})
 
+	// --- rating board (projects → in progress → done + profit ledger) ---
+	ratingSvc := rating.NewService(pool, rating.NewPostgresRepository())
+	ratingHandler := rating.NewHandler(ratingSvc, func(r *http.Request) (rating.Actor, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return rating.Actor{}, false
+		}
+		return rating.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
+	})
+
 	// --- admin (CEO) ---
 	adminSvc := admin.NewService(pool, usersRepo, sessionsRepo, auditRec)
 	adminHandler := admin.NewHandler(adminSvc, audit.NewReader(pool), func(r *http.Request) (admin.ActorMeta, bool) {
@@ -350,6 +362,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		feedbackHandler:      feedbackHandler,
 		notificationsHandler: notificationsHandler,
 		boardsHandler:        boardsHandler,
+		ratingHandler:        ratingHandler,
 		adminHandler:         adminHandler,
 		wsHandler:            wsHandler,
 		hub:                  hub,
