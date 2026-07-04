@@ -111,10 +111,11 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 }
 
 type sendRequest struct {
-	ChatType string  `json:"chatType"`
-	ChatID   string  `json:"chatId"`
-	Text     string  `json:"text"`
-	ReplyTo  *string `json:"replyTo"`
+	ChatType      string   `json:"chatType"`
+	ChatID        string   `json:"chatId"`
+	Text          string   `json:"text"`
+	ReplyTo       *string  `json:"replyTo"`
+	AttachmentIDs []string `json:"attachmentIds"`
 }
 
 func (h *Handler) send(w http.ResponseWriter, r *http.Request) {
@@ -147,14 +148,28 @@ func (h *Handler) send(w http.ResponseWriter, r *http.Request) {
 		}
 		replyTo = &id
 	}
+	attachmentIDs := make([]uuid.UUID, 0, len(req.AttachmentIDs))
+	for _, raw := range req.AttachmentIDs {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "attachmentIds must be valid UUIDs")
+			return
+		}
+		attachmentIDs = append(attachmentIDs, id)
+	}
 
-	m, err := h.svc.Send(r.Context(), SendInput{
-		ChatType: req.ChatType,
-		ChatID:   chatID,
-		Text:     req.Text,
-		ReplyTo:  replyTo,
+	dto, err := h.svc.Send(r.Context(), SendInput{
+		ChatType:      req.ChatType,
+		ChatID:        chatID,
+		Text:          req.Text,
+		ReplyTo:       replyTo,
+		AttachmentIDs: attachmentIDs,
 	}, actor)
-	h.writeResult(w, r, m, err, http.StatusCreated)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	httpresponse.OK(w, r, http.StatusCreated, map[string]any{"message": dto})
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {

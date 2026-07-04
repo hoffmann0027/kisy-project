@@ -237,6 +237,7 @@ func newRouter(d routerDeps) http.Handler {
 			// /api/v1 root (POST/GET/DELETE /messages,
 			// POST/DELETE /messages/{id}/reactions, POST /read).
 			m.messagesHandler.Routes(r)
+			m.attachmentsHandler.Routes(r)
 			m.reactionsHandler.Routes(r)
 			m.readstateHandler.Routes(r)
 

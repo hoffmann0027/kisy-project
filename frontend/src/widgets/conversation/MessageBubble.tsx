@@ -119,6 +119,23 @@ export const MessageBubble = memo(function MessageBubble({
 
         {replyPreview && <div className="bubble__reply">{replyPreview}</div>}
 
+        {message.attachments.length > 0 && (
+          <div className="bubble__attachments">
+            {message.attachments.map((a) =>
+              a.isImage ? (
+                <a key={a.id} href={a.url} target="_blank" rel="noreferrer" className="bubble__att-img">
+                  <img src={a.url} alt={a.fileName} loading="lazy" />
+                </a>
+              ) : (
+                <a key={a.id} href={a.url} target="_blank" rel="noreferrer" className="bubble__att-file" download={a.fileName}>
+                  <Icon.Paperclip size={16} />
+                  <span className="bubble__att-name">{a.fileName}</span>
+                </a>
+              ),
+            )}
+          </div>
+        )}
+
         {editing ? (
           <div className="bubble__edit">
             <textarea

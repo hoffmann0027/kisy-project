@@ -1,5 +1,6 @@
 import { apiClient } from "./client";
 import type {
+  Attachment,
   AuditEntry,
   Board,
   CardInput,
@@ -91,8 +92,8 @@ export const messagesApi = {
     if (cursor) params.set("cursor", cursor);
     return apiClient.get<MessagePage>(`/messages?${params.toString()}`);
   },
-  send: (chatType: ChatType, chatId: string, text: string, replyTo?: string) =>
-    apiClient.post<{ message: Message }>("/messages", { chatType, chatId, text, replyTo }),
+  send: (chatType: ChatType, chatId: string, text: string, replyTo?: string, attachmentIds?: string[]) =>
+    apiClient.post<{ message: Message }>("/messages", { chatType, chatId, text, replyTo, attachmentIds }),
   edit: (messageId: string, text: string) =>
     apiClient.patch<{ message: Message }>(`/messages/${messageId}`, { text }),
   remove: (messageId: string) => apiClient.del<{ deleted: boolean }>(`/messages/${messageId}`),
@@ -106,6 +107,10 @@ export const messagesApi = {
     apiClient.del<{ ok: boolean }>(`/messages/${messageId}/reactions`, { emoji }),
   markRead: (chatType: ChatType, chatId: string, messageId: string) =>
     apiClient.post<{ ok: boolean }>("/read", { chatType, chatId, messageId }),
+};
+
+export const attachmentsApi = {
+  upload: (file: File) => apiClient.uploadFile<{ attachment: Attachment }>("/attachments", file),
 };
 
 export const favoritesApi = {

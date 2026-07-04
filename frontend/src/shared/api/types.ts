@@ -43,6 +43,15 @@ export interface ReactionSummary {
 
 export type ChatType = "private" | "group";
 
+export interface Attachment {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  isImage: boolean;
+  url: string;
+}
+
 export interface Message {
   id: string;
   chatId: string;
@@ -50,7 +59,7 @@ export interface Message {
   senderId: string;
   text: string | null;
   replyTo: string | null;
-  attachments: unknown[];
+  attachments: Attachment[];
   reactions: ReactionSummary[];
   mentions: unknown[];
   isDeleted: boolean;

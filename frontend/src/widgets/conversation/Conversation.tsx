@@ -3,7 +3,7 @@ import { cn } from "@shared/lib/cn";
 import { formatDay } from "@shared/lib/format";
 import { Avatar, Button, Spinner, toast } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
-import type { ChatType, Message } from "@shared/api/types";
+import type { Attachment, ChatType, Message } from "@shared/api/types";
 import {
   flattenMessages,
   useDeleteMessage,
@@ -91,7 +91,7 @@ export function Conversation({ target, headerActions }: Props) {
     void messagesApi.markRead(chatType, chatId, newest.id).catch(() => {});
   }, [chatType, chatId, messages.length]);
 
-  const handleSend = (text: string, replyToId?: string) => {
+  const handleSend = (text: string, replyToId?: string, attachments?: Attachment[]) => {
     // Optimistic bubble: show the message instantly, reconcile on server ack.
     const tempId = `temp-${crypto.randomUUID()}`;
     const optimistic: Message = {
@@ -99,9 +99,9 @@ export function Conversation({ target, headerActions }: Props) {
       chatId,
       chatType,
       senderId: me.id,
-      text,
+      text: text || null,
       replyTo: replyToId ?? null,
-      attachments: [],
+      attachments: attachments ?? [],
       reactions: [],
       mentions: [],
       isDeleted: false,
@@ -116,7 +116,7 @@ export function Conversation({ target, headerActions }: Props) {
     cache.insertPending(optimistic);
 
     send.mutate(
-      { text, replyTo: replyToId },
+      { text, replyTo: replyToId, attachmentIds: attachments?.map((a) => a.id) },
       {
         onSuccess: ({ message }) => cache.resolvePending(chatType, chatId, tempId, message),
         onError: () => {

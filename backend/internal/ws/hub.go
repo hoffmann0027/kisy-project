@@ -16,7 +16,7 @@ import (
 // *messages.Service; injected to keep inbound handling in the hub without
 // leaking unexported types to the composition root.
 type Sender interface {
-	Send(ctx context.Context, in messages.SendInput, actor messages.ActorMeta) (*messages.Message, error)
+	Send(ctx context.Context, in messages.SendInput, actor messages.ActorMeta) (messages.DTO, error)
 }
 
 // ChatAuthorizer reports whether an actor may emit real-time events

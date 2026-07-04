@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@shared/ui/icons";
-import { IconButton } from "@shared/ui";
-import type { Message } from "@shared/api/types";
+import { IconButton, Spinner, toast } from "@shared/ui";
+import type { Attachment, Message } from "@shared/api/types";
+import { attachmentsApi } from "@shared/api/endpoints";
 import { wsClient } from "@shared/ws/client";
 import { useDraftStore } from "@shared/store/drafts";
+
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 interface Props {
   chatType: "private" | "group";
@@ -11,11 +14,14 @@ interface Props {
   replyTo: Message | null;
   replyPreview?: string;
   onClearReply: () => void;
-  onSend: (text: string, replyTo?: string) => void;
+  onSend: (text: string, replyTo?: string, attachments?: Attachment[]) => void;
 }
 
 export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply, onSend }: Props) {
   const [text, setText] = useState(() => useDraftStore.getState().drafts[chatId] ?? "");
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [uploading, setUploading] = useState(0);
+  const fileRef = useRef<HTMLInputElement>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const typingSent = useRef(false);
   const typingTimer = useRef<number>();
@@ -26,9 +32,28 @@ export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply
   // text was persisted on every keystroke below, so nothing is lost).
   useEffect(() => {
     setText(useDraftStore.getState().drafts[chatId] ?? "");
+    setAttachments([]);
     onClearReply();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId]);
+
+  const uploadFiles = async (files: FileList | File[]) => {
+    for (const file of Array.from(files)) {
+      if (file.size > MAX_FILE_BYTES) {
+        toast.error(`«${file.name}» больше 10 МБ`);
+        continue;
+      }
+      setUploading((n) => n + 1);
+      try {
+        const { attachment } = await attachmentsApi.upload(file);
+        setAttachments((prev) => [...prev, attachment]);
+      } catch {
+        toast.error(`Не удалось загрузить «${file.name}»`);
+      } finally {
+        setUploading((n) => n - 1);
+      }
+    }
+  };
 
   const updateText = (value: string) => {
     setText(value);
@@ -56,9 +81,10 @@ export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply
 
   const submit = () => {
     const trimmed = text.trim();
-    if (!trimmed) return;
-    onSend(trimmed, replyTo?.id);
+    if (!trimmed && attachments.length === 0) return;
+    onSend(trimmed, replyTo?.id, attachments.length > 0 ? attachments : undefined);
     setText("");
+    setAttachments([]);
     clearDraft(chatId);
     onClearReply();
     typingSent.current = false;
@@ -81,7 +107,45 @@ export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply
           </IconButton>
         </div>
       )}
-      <div className="composer">
+      {(attachments.length > 0 || uploading > 0) && (
+        <div className="composer__attachments">
+          {attachments.map((a) => (
+            <div key={a.id} className="composer__chip">
+              {a.isImage ? <img src={a.url} alt="" className="composer__chip-img" /> : <Icon.Paperclip size={14} />}
+              <span className="composer__chip-name">{a.fileName}</span>
+              <button
+                className="composer__chip-x"
+                onClick={() => setAttachments((prev) => prev.filter((x) => x.id !== a.id))}
+                title="Убрать"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          {uploading > 0 && <Spinner size={16} />}
+        </div>
+      )}
+      <div
+        className="composer"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          if (e.dataTransfer.files.length) void uploadFiles(e.dataTransfer.files);
+        }}
+      >
+        <input
+          ref={fileRef}
+          type="file"
+          multiple
+          style={{ display: "none" }}
+          onChange={(e) => {
+            if (e.target.files?.length) void uploadFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+        <IconButton label="Прикрепить файл" onClick={() => fileRef.current?.click()}>
+          <Icon.Paperclip size={20} />
+        </IconButton>
         <textarea
           ref={areaRef}
           className="composer__input"
@@ -99,7 +163,12 @@ export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply
             }
           }}
         />
-        <button className="composer__send" onClick={submit} disabled={!text.trim()} aria-label="Отправить">
+        <button
+          className="composer__send"
+          onClick={submit}
+          disabled={!text.trim() && attachments.length === 0}
+          aria-label="Отправить"
+        >
           <Icon.Send size={20} />
         </button>
       </div>

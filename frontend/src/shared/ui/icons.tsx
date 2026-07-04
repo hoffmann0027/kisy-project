@@ -34,6 +34,11 @@ export const Icon = {
   Check: ({ size }: IconProps) => svg(<path d="m20 6-11 11-5-5" />, size),
   Edit: ({ size }: IconProps) =>
     svg(<><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></>, size),
+  Paperclip: ({ size }: IconProps) =>
+    svg(
+      <path d="M21.44 11.05 12.25 20.24a5 5 0 0 1-7.07-7.07l9.19-9.19a3 3 0 0 1 4.24 4.24l-9.2 9.19a1 1 0 0 1-1.41-1.41l8.48-8.49" />,
+      size,
+    ),
   Trophy: ({ size }: IconProps) =>
     svg(
       <>

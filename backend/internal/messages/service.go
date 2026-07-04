@@ -64,6 +64,12 @@ type ReactionLoader func(ctx context.Context, messageIDs []uuid.UUID, viewerID u
 // M" counters. Injected to avoid messages→readstate/groups import cycles.
 type GroupReadLoader func(ctx context.Context, chatID uuid.UUID) (reads map[uuid.UUID]time.Time, memberCount int, err error)
 
+// AttachmentLinker binds already-uploaded files to a message; AttachmentLoader
+// returns attachment DTOs (as any) per message id. Both injected to avoid a
+// messages→attachments import cycle; nil disables attachments.
+type AttachmentLinker func(ctx context.Context, ids []uuid.UUID, messageID, uploader uuid.UUID) error
+type AttachmentLoader func(ctx context.Context, messageIDs []uuid.UUID) (map[uuid.UUID][]any, error)
+
 // Indexer keeps the full-text search index in sync with the message
 // lifecycle. Injected to avoid a messages→search import cycle; a nil indexer
 // disables indexing. Implementations must be best-effort (never block sends).
@@ -73,15 +79,17 @@ type Indexer interface {
 }
 
 type Service struct {
-	pool      *pgxpool.Pool
-	repo      Repository
-	audit     audit.Recorder
-	authz     Authorizer
-	pub       Publisher
-	reactions ReactionLoader
-	notifier  Notifier
-	indexer   Indexer
-	groupRead GroupReadLoader
+	pool       *pgxpool.Pool
+	repo       Repository
+	audit      audit.Recorder
+	authz      Authorizer
+	pub        Publisher
+	reactions  ReactionLoader
+	notifier   Notifier
+	indexer    Indexer
+	groupRead  GroupReadLoader
+	attachLink AttachmentLinker
+	attachLoad AttachmentLoader
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository, rec audit.Recorder, authz Authorizer) *Service {
@@ -103,6 +111,12 @@ func (s *Service) SetIndexer(i Indexer) { s.indexer = i }
 
 // SetGroupReadLoader wires per-message group read-count enrichment.
 func (s *Service) SetGroupReadLoader(l GroupReadLoader) { s.groupRead = l }
+
+// SetAttachments wires attachment linking (on send) and enrichment (on list).
+func (s *Service) SetAttachments(link AttachmentLinker, load AttachmentLoader) {
+	s.attachLink = link
+	s.attachLoad = load
+}
 
 // ResolveAccessible returns the chat coordinates of a message if the actor
 // may access its chat, otherwise ErrNotFound. Used by the reactions module
@@ -136,24 +150,27 @@ func (s *Service) authorize(ctx context.Context, chatType string, chatID uuid.UU
 
 // SendInput is validated by the handler.
 type SendInput struct {
-	ChatType string
-	ChatID   uuid.UUID
-	Text     string
-	ReplyTo  *uuid.UUID
+	ChatType      string
+	ChatID        uuid.UUID
+	Text          string
+	ReplyTo       *uuid.UUID
+	AttachmentIDs []uuid.UUID
 }
 
-// Send validates access, persists the message and publishes it.
-func (s *Service) Send(ctx context.Context, in SendInput, actor ActorMeta) (*Message, error) {
+// Send validates access, persists the message and publishes it, returning the
+// enriched DTO (including any attachments).
+func (s *Service) Send(ctx context.Context, in SendInput, actor ActorMeta) (DTO, error) {
 	text := strings.TrimSpace(in.Text)
-	if text == "" {
-		return nil, ErrEmptyContent
+	// A message must carry either text or at least one attachment.
+	if text == "" && len(in.AttachmentIDs) == 0 {
+		return DTO{}, ErrEmptyContent
 	}
 	if len(text) > MaxTextLength {
 		text = text[:MaxTextLength]
 	}
 
 	if err := s.authorize(ctx, in.ChatType, in.ChatID, actor); err != nil {
-		return nil, err
+		return DTO{}, err
 	}
 
 	// A reply target must belong to the same chat, otherwise it could leak
@@ -161,10 +178,10 @@ func (s *Service) Send(ctx context.Context, in SendInput, actor ActorMeta) (*Mes
 	if in.ReplyTo != nil {
 		parent, err := s.repo.GetByID(ctx, s.pool, *in.ReplyTo)
 		if err != nil {
-			return nil, ErrNotFound
+			return DTO{}, ErrNotFound
 		}
 		if parent.ChatType != in.ChatType || parent.ChatID != in.ChatID {
-			return nil, ErrForbidden
+			return DTO{}, ErrForbidden
 		}
 	}
 
@@ -172,24 +189,38 @@ func (s *Service) Send(ctx context.Context, in SendInput, actor ActorMeta) (*Mes
 		ChatType: in.ChatType,
 		ChatID:   in.ChatID,
 		SenderID: actor.UserID,
-		Text:     &text,
 		ReplyTo:  in.ReplyTo,
 	}
+	if text != "" {
+		m.Text = &text
+	}
 	if err := s.repo.Create(ctx, s.pool, m); err != nil {
-		return nil, err
+		return DTO{}, err
+	}
+
+	// Bind any uploaded attachments to this message (ownership-checked).
+	if s.attachLink != nil && len(in.AttachmentIDs) > 0 {
+		if err := s.attachLink(ctx, in.AttachmentIDs, m.ID, actor.UserID); err != nil {
+			return DTO{}, err
+		}
 	}
 
 	dto := m.ToDTO()
+	if s.attachLoad != nil && len(in.AttachmentIDs) > 0 {
+		if byMsg, err := s.attachLoad(ctx, []uuid.UUID{m.ID}); err == nil {
+			dto.Attachments = byMsg[m.ID]
+		}
+	}
 	if s.pub != nil {
 		s.pub.PublishMessageCreated(m.ChatType, m.ChatID, dto)
 	}
 	if s.notifier != nil {
 		s.notifier.OnMessage(ctx, dto)
 	}
-	if s.indexer != nil {
+	if s.indexer != nil && text != "" {
 		s.indexer.IndexMessage(ctx, m.ID, text)
 	}
-	return m, nil
+	return dto, nil
 }
 
 // List returns a page of messages for a chat the actor may access.
@@ -240,6 +271,27 @@ func (s *Service) List(ctx context.Context, chatType string, chatID uuid.UUID, c
 			for i := range page.Items {
 				if r, ok := byMessage[page.Items[i].ID]; ok {
 					page.Items[i].Reactions = r
+				}
+			}
+		}
+	}
+
+	// Attach files: enrich live messages with their attachment DTOs.
+	if s.attachLoad != nil && len(page.Items) > 0 {
+		ids := make([]uuid.UUID, 0, len(page.Items))
+		for i := range page.Items {
+			if !page.Items[i].IsDeleted {
+				ids = append(ids, page.Items[i].ID)
+			}
+		}
+		if len(ids) > 0 {
+			byMsg, err := s.attachLoad(ctx, ids)
+			if err != nil {
+				return nil, err
+			}
+			for i := range page.Items {
+				if a, ok := byMsg[page.Items[i].ID]; ok {
+					page.Items[i].Attachments = a
 				}
 			}
 		}

@@ -40,4 +40,14 @@ export const apiClient = {
   // content type instead of JSON.
   postBlob: <T>(path: string, blob: Blob) =>
     request<T>(path, { method: "POST", body: blob, headers: { "Content-Type": blob.type } }),
+  // uploadFile posts a File as the raw body, carrying its name in a header.
+  uploadFile: <T>(path: string, file: File) =>
+    request<T>(path, {
+      method: "POST",
+      body: file,
+      headers: {
+        "Content-Type": file.type || "application/octet-stream",
+        "X-File-Name": encodeURIComponent(file.name),
+      },
+    }),
 };

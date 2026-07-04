@@ -950,6 +950,52 @@ paths:
                                 createdAt: { type: string, format: date-time }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /attachments:
+    post:
+      tags: [messages]
+      summary: Upload a file attachment (raw body; name in X-File-Name header)
+      description: >
+        Max 10 MiB. Returns metadata; link it to a message by passing its id in
+        the message's attachmentIds. Stored in the database.
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        '201':
+          description: Stored
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          attachment:
+                            type: object
+                            properties:
+                              id: { type: string, format: uuid }
+                              fileName: { type: string }
+                              mimeType: { type: string }
+                              sizeBytes: { type: integer, format: int64 }
+                              isImage: { type: boolean }
+                              url: { type: string }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413': { $ref: '#/components/responses/ValidationError' }
+  /attachments/{id}:
+    get:
+      tags: [messages]
+      summary: Download an attachment (access-checked against its message)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: File bytes, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /ws:
     get:
       tags: [websocket]

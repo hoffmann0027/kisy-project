@@ -45,8 +45,8 @@ export function flattenMessages(pages: MessagePage[] | undefined): Message[] {
 
 export function useSendMessage(chatType: ChatType, chatId: string) {
   return useMutation({
-    mutationFn: (args: { text: string; replyTo?: string }) =>
-      messagesApi.send(chatType, chatId, args.text, args.replyTo),
+    mutationFn: (args: { text: string; replyTo?: string; attachmentIds?: string[] }) =>
+      messagesApi.send(chatType, chatId, args.text, args.replyTo, args.attachmentIds),
     // Optimistic insertion is handled by the caller via the cache writer so
     // the pending bubble can be reconciled with the server ack / WS echo.
   });

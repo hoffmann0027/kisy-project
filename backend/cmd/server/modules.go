@@ -12,6 +12,7 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 
 	"kisy-backend/internal/admin"
+	"kisy-backend/internal/attachments"
 	"kisy-backend/internal/audit"
 	"kisy-backend/internal/auth"
 	"kisy-backend/internal/auth/token"
@@ -47,6 +48,7 @@ type modules struct {
 	groupsHandler        *groups.Handler
 	avatarsHandler       *avatars.Handler
 	messagesHandler      *messages.Handler
+	attachmentsHandler   *attachments.Handler
 	reactionsHandler     *reactions.Handler
 	readstateHandler     *readstate.Handler
 	favoritesHandler     *favorites.Handler
@@ -198,6 +200,40 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		}
 		m := authHandler.ClientMeta(r)
 		return messages.ActorMeta{UserID: claims.UserID, RoleLevel: claims.RoleLevel, SessionID: claims.SessionID, IPHash: m.IPHash, RequestID: m.RequestID}, true
+	})
+
+	// --- attachments (files/images stored in the DB) ---
+	attachmentsSvc := attachments.NewService(pool, attachments.NewPostgresRepository())
+	attachmentsSvc.SetMessageAccess(func(ctx context.Context, messageID, actorID uuid.UUID, actorLevel int) bool {
+		_, _, err := messagesSvc.ResolveAccessible(ctx, messageID, messages.ActorMeta{UserID: actorID, RoleLevel: actorLevel})
+		return err == nil
+	})
+	messagesSvc.SetAttachments(
+		func(ctx context.Context, ids []uuid.UUID, messageID, uploader uuid.UUID) error {
+			return attachmentsSvc.Link(ctx, pool, ids, messageID, uploader)
+		},
+		func(ctx context.Context, messageIDs []uuid.UUID) (map[uuid.UUID][]any, error) {
+			byMsg, err := attachmentsSvc.ForMessages(ctx, messageIDs)
+			if err != nil {
+				return nil, err
+			}
+			out := make(map[uuid.UUID][]any, len(byMsg))
+			for k, v := range byMsg {
+				arr := make([]any, len(v))
+				for i := range v {
+					arr[i] = v[i]
+				}
+				out[k] = arr
+			}
+			return out, nil
+		},
+	)
+	attachmentsHandler := attachments.NewHandler(attachmentsSvc, func(r *http.Request) (attachments.Actor, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return attachments.Actor{}, false
+		}
+		return attachments.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
 	})
 
 	// --- websocket ---
@@ -382,6 +418,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		groupsHandler:        groupsHandler,
 		avatarsHandler:       avatarsHandler,
 		messagesHandler:      messagesHandler,
+		attachmentsHandler:   attachmentsHandler,
 		reactionsHandler:     reactionsHandler,
 		readstateHandler:     readstateHandler,
 		favoritesHandler:     favoritesHandler,
