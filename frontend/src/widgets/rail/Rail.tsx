@@ -8,9 +8,10 @@ import { useNotifications } from "@entities/notification/queries";
 interface Props {
   onProfile: () => void;
   onNotifications: () => void;
+  onFeedback: () => void;
 }
 
-export function Rail({ onProfile, onNotifications }: Props) {
+export function Rail({ onProfile, onNotifications, onFeedback }: Props) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
@@ -42,6 +43,9 @@ export function Rail({ onProfile, onNotifications }: Props) {
           </button>
         )}
       </div>
+      <button className="rail__item" title="Отзывы и предложения" onClick={onFeedback}>
+        <Icon.Feedback />
+      </button>
       <button className="rail__item" title="Профиль" onClick={onProfile}>
         <Avatar name={user.displayName} url={user.avatarUrl} size={38} />
       </button>

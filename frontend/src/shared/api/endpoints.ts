@@ -6,6 +6,8 @@ import type {
   Chat,
   ChatType,
   Favorite,
+  FeedbackItem,
+  FeedbackPage,
   Group,
   Invitation,
   Message,
@@ -108,6 +110,16 @@ export const notificationsApi = {
   list: (limit = 50) =>
     apiClient.get<{ notifications: Notification[]; unreadCount: number }>(`/notifications?limit=${limit}`),
   markRead: (id?: string) => apiClient.post<{ ok: boolean }>("/notifications/read", id ? { id } : {}),
+};
+
+export const feedbackApi = {
+  list: (cursor?: string, limit = 20) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (cursor) params.set("cursor", cursor);
+    return apiClient.get<FeedbackPage>(`/feedback?${params.toString()}`);
+  },
+  create: (body: string) => apiClient.post<{ feedback: FeedbackItem }>("/feedback", { body }),
+  remove: (id: string) => apiClient.del<{ deleted: boolean }>(`/feedback/${id}`),
 };
 
 export const adminApi = {

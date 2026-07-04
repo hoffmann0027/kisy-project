@@ -1024,6 +1024,69 @@ paths:
         '200': { description: Marked read, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /feedback:
+    get:
+      tags: [feedback]
+      summary: List feedback & suggestions (newest first, cursor-paginated)
+      parameters:
+        - { name: cursor, in: query, required: false, schema: { type: string }, description: createdAt of the last seen item (RFC3339). }
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 20, maximum: 50 } }
+      responses:
+        '200':
+          description: A page of feedback
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          items: { type: array, items: { $ref: '#/components/schemas/Feedback' } }
+                          nextCursor: { type: [string, 'null'] }
+                          hasMore: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [feedback]
+      summary: Submit feedback (any authenticated user)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '201':
+          description: Feedback created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          feedback: { $ref: '#/components/schemas/Feedback' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /feedback/{id}:
+    delete:
+      tags: [feedback]
+      summary: Delete feedback (CEO only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /admin/users:
     get:
       tags: [admin]
@@ -1301,6 +1364,20 @@ components:
         payload: { type: object }
         isRead: { type: boolean }
         createdAt: { type: string, format: date-time }
+    Feedback:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        body: { type: string }
+        createdAt: { type: string, format: date-time }
+        author:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            displayName: { type: string }
+            username: { type: string }
+            avatarUrl: { type: [string, 'null'] }
+            roleLevel: { type: integer }
     AuditEntry:
       type: object
       properties:

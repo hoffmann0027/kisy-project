@@ -201,6 +201,10 @@ func newRouter(d routerDeps) http.Handler {
 				m.notificationsHandler.Routes(r)
 			})
 
+			r.Route("/feedback", func(r chi.Router) {
+				m.feedbackHandler.Routes(r)
+			})
+
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(m.authMW.RequireClearance(1)) // CEO only
 				m.adminHandler.Routes(r)
