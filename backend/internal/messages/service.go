@@ -287,6 +287,53 @@ func (s *Service) Edit(ctx context.Context, messageID uuid.UUID, newText string,
 	return &dto, nil
 }
 
+// SetPinned pins or unpins a message. Any participant of the chat may pin, so
+// only chat access is required. The change is republished (message.updated) so
+// every viewer's pinned bar refreshes.
+func (s *Service) SetPinned(ctx context.Context, messageID uuid.UUID, pin bool, actor ActorMeta) (*DTO, error) {
+	m, err := s.repo.GetByID(ctx, s.pool, messageID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authorize(ctx, m.ChatType, m.ChatID, actor); err != nil {
+		return nil, ErrNotFound
+	}
+
+	var at *time.Time
+	var by *uuid.UUID
+	if pin {
+		now := time.Now().UTC()
+		at = &now
+		by = &actor.UserID
+	}
+	updated, err := s.repo.SetPinned(ctx, s.pool, messageID, by, at)
+	if err != nil {
+		return nil, err
+	}
+
+	dto := updated.ToDTO()
+	if s.pub != nil {
+		s.pub.PublishMessageUpdated(updated.ChatType, updated.ChatID, dto)
+	}
+	return &dto, nil
+}
+
+// ListPinned returns the pinned messages of a chat the actor may access.
+func (s *Service) ListPinned(ctx context.Context, chatType string, chatID uuid.UUID, actor ActorMeta) ([]DTO, error) {
+	if err := s.authorize(ctx, chatType, chatID, actor); err != nil {
+		return nil, err
+	}
+	rows, err := s.repo.ListPinned(ctx, s.pool, chatType, chatID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]DTO, 0, len(rows))
+	for i := range rows {
+		out = append(out, rows[i].ToDTO())
+	}
+	return out, nil
+}
+
 // Delete removes a message per policy: the sender may delete their own
 // message, and the CEO may delete any message. The deletion is audited and
 // published.

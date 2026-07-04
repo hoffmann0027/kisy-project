@@ -1,10 +1,28 @@
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { messagesApi } from "@shared/api/endpoints";
 import type { ChatType, Message, MessagePage } from "@shared/api/types";
 
 export const messageKeys = {
   list: (chatType: ChatType, chatId: string) => ["messages", chatType, chatId] as const,
+  pinned: (chatType: ChatType, chatId: string) => ["pinned", chatType, chatId] as const,
 };
+
+export function usePinnedMessages(chatType: ChatType, chatId: string | null) {
+  return useQuery({
+    queryKey: chatId ? messageKeys.pinned(chatType, chatId) : ["pinned", "none"],
+    enabled: !!chatId,
+    queryFn: () => messagesApi.listPinned(chatType, chatId as string).then((r) => r.pinned),
+  });
+}
+
+export function usePinMessage(chatType: ChatType, chatId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { messageId: string; pin: boolean }) =>
+      args.pin ? messagesApi.pin(args.messageId) : messagesApi.unpin(args.messageId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: messageKeys.pinned(chatType, chatId) }),
+  });
+}
 
 // useMessages loads a chat's history newest-first, paging backwards.
 export function useMessages(chatType: ChatType, chatId: string | null) {

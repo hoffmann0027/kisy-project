@@ -26,18 +26,22 @@ type Repository interface {
 	// sender and only while the message is not deleted. Returns ErrNotFound
 	// (or ErrForbidden semantics) as zero rows if the guard fails.
 	Update(ctx context.Context, q db.DBTX, id, senderID uuid.UUID, text string, at time.Time) (*Message, error)
+	// SetPinned pins or unpins a message and returns the fresh row.
+	SetPinned(ctx context.Context, q db.DBTX, id uuid.UUID, by *uuid.UUID, at *time.Time) (*Message, error)
+	// ListPinned returns the chat's pinned messages, most recently pinned first.
+	ListPinned(ctx context.Context, q db.DBTX, chatType string, chatID uuid.UUID) ([]Message, error)
 }
 
 type PostgresRepository struct{}
 
 func NewPostgresRepository() *PostgresRepository { return &PostgresRepository{} }
 
-const messageColumns = `id, chat_type, chat_id, sender_id, text, reply_to, is_deleted, deleted_at, edited_at, created_at`
+const messageColumns = `id, chat_type, chat_id, sender_id, text, reply_to, is_deleted, deleted_at, edited_at, pinned_at, pinned_by, created_at`
 
 func scanMessage(row pgx.Row) (*Message, error) {
 	var m Message
 	err := row.Scan(&m.ID, &m.ChatType, &m.ChatID, &m.SenderID, &m.Text, &m.ReplyTo,
-		&m.IsDeleted, &m.DeletedAt, &m.EditedAt, &m.CreatedAt)
+		&m.IsDeleted, &m.DeletedAt, &m.EditedAt, &m.PinnedAt, &m.PinnedBy, &m.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -92,7 +96,7 @@ func (r *PostgresRepository) ListPage(ctx context.Context, q db.DBTX, chatType s
 	for rows.Next() {
 		var m Message
 		if err := rows.Scan(&m.ID, &m.ChatType, &m.ChatID, &m.SenderID, &m.Text, &m.ReplyTo,
-			&m.IsDeleted, &m.DeletedAt, &m.EditedAt, &m.CreatedAt); err != nil {
+			&m.IsDeleted, &m.DeletedAt, &m.EditedAt, &m.PinnedAt, &m.PinnedBy, &m.CreatedAt); err != nil {
 			return nil, fmt.Errorf("messages: scan row: %w", err)
 		}
 		out = append(out, m)
@@ -112,6 +116,36 @@ func (r *PostgresRepository) Update(ctx context.Context, q db.DBTX, id, senderID
 		return nil, ErrForbidden
 	}
 	return m, err
+}
+
+func (r *PostgresRepository) SetPinned(ctx context.Context, q db.DBTX, id uuid.UUID, by *uuid.UUID, at *time.Time) (*Message, error) {
+	row := q.QueryRow(ctx, `
+		UPDATE messages SET pinned_at = $2, pinned_by = $3
+		WHERE id = $1 AND is_deleted = false
+		RETURNING `+messageColumns, id, at, by)
+	return scanMessage(row)
+}
+
+func (r *PostgresRepository) ListPinned(ctx context.Context, q db.DBTX, chatType string, chatID uuid.UUID) ([]Message, error) {
+	rows, err := q.Query(ctx, `
+		SELECT `+messageColumns+` FROM messages
+		WHERE chat_type = $1 AND chat_id = $2 AND pinned_at IS NOT NULL AND is_deleted = false
+		ORDER BY pinned_at DESC`, chatType, chatID)
+	if err != nil {
+		return nil, fmt.Errorf("messages: list pinned: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Message
+	for rows.Next() {
+		var m Message
+		if err := rows.Scan(&m.ID, &m.ChatType, &m.ChatID, &m.SenderID, &m.Text, &m.ReplyTo,
+			&m.IsDeleted, &m.DeletedAt, &m.EditedAt, &m.PinnedAt, &m.PinnedBy, &m.CreatedAt); err != nil {
+			return nil, fmt.Errorf("messages: scan pinned: %w", err)
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
 }
 
 func (r *PostgresRepository) SoftDelete(ctx context.Context, q db.DBTX, id uuid.UUID, at time.Time) error {

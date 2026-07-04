@@ -58,6 +58,8 @@ export interface Message {
   deletedAt: string | null;
   /** When the message was last edited (null = never). */
   editedAt: string | null;
+  /** When the message was pinned (null = not pinned). */
+  pinnedAt: string | null;
   /** Client-only: true while an optimistically-sent message awaits server ack. */
   pending?: boolean;
   /** Client-only: true if the optimistic send failed. */
