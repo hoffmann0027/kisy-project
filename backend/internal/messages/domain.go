@@ -1,5 +1,5 @@
-// Package messages owns chat messages: creation, paginated retrieval and
-// policy-gated deletion. Editing is disabled by product design.
+// Package messages owns chat messages: creation, paginated retrieval,
+// sender-only editing and policy-gated deletion.
 package messages
 
 import (
@@ -35,6 +35,7 @@ type Message struct {
 	ReplyTo   *uuid.UUID
 	IsDeleted bool
 	DeletedAt *time.Time
+	EditedAt  *time.Time
 	CreatedAt time.Time
 }
 
@@ -63,6 +64,7 @@ type DTO struct {
 	IsDeleted   bool              `json:"isDeleted"`
 	CreatedAt   time.Time         `json:"createdAt"`
 	DeletedAt   *time.Time        `json:"deletedAt"`
+	EditedAt    *time.Time        `json:"editedAt"`
 }
 
 func (m *Message) ToDTO() DTO {
@@ -78,6 +80,7 @@ func (m *Message) ToDTO() DTO {
 		IsDeleted:   m.IsDeleted,
 		CreatedAt:   m.CreatedAt,
 		DeletedAt:   m.DeletedAt,
+		EditedAt:    m.EditedAt,
 	}
 	if !m.IsDeleted {
 		dto.Text = m.Text

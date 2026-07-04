@@ -15,6 +15,7 @@ import type {
   Notification,
   RatingAnalytics,
   RatingBoard,
+  SearchResult,
   User,
 } from "./types";
 
@@ -92,6 +93,8 @@ export const messagesApi = {
   },
   send: (chatType: ChatType, chatId: string, text: string, replyTo?: string) =>
     apiClient.post<{ message: Message }>("/messages", { chatType, chatId, text, replyTo }),
+  edit: (messageId: string, text: string) =>
+    apiClient.patch<{ message: Message }>(`/messages/${messageId}`, { text }),
   remove: (messageId: string) => apiClient.del<{ deleted: boolean }>(`/messages/${messageId}`),
   addReaction: (messageId: string, emoji: string) =>
     apiClient.post<{ ok: boolean }>(`/messages/${messageId}/reactions`, { emoji }),
@@ -122,6 +125,11 @@ export const feedbackApi = {
   },
   create: (body: string) => apiClient.post<{ feedback: FeedbackItem }>("/feedback", { body }),
   remove: (id: string) => apiClient.del<{ deleted: boolean }>(`/feedback/${id}`),
+};
+
+export const searchApi = {
+  messages: (q: string, limit = 25) =>
+    apiClient.get<{ results: SearchResult[] }>(`/search?q=${encodeURIComponent(q)}&limit=${limit}`),
 };
 
 export const ratingApi = {

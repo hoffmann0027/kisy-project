@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { cn } from "@shared/lib/cn";
 import { formatRelative } from "@shared/lib/format";
 import { Avatar, Badge, IconButton, Spinner } from "@shared/ui";
@@ -6,6 +7,7 @@ import { Icon } from "@shared/ui/icons";
 import { roleLabel, type Chat, type Group } from "@shared/api/types";
 import { useChats } from "@entities/chat/queries";
 import { useGroups } from "@entities/group/queries";
+import { useMessageSearch } from "@entities/message/search";
 import { usePresenceStore } from "@shared/store/presence";
 
 interface Props {
@@ -21,6 +23,11 @@ export function ChatList({ activeId, onSelect, onSelectGroup, onNewChat, onNewGr
   const { data: groups } = useGroups();
   const [query, setQuery] = useState("");
   const online = usePresenceStore((s) => s.online);
+  const navigate = useNavigate();
+  const { data: messageHits } = useMessageSearch(query);
+
+  const openHit = (chatType: string, chatId: string) =>
+    navigate(chatType === "group" ? `/group/${chatId}` : `/chat/${chatId}`);
 
   const q = query.trim().toLowerCase();
   const filtered = useMemo(() => {
@@ -117,6 +124,28 @@ export function ChatList({ activeId, onSelect, onSelectGroup, onNewChat, onNewGr
             </button>
           );
         })}
+
+        {q.length >= 2 && messageHits && messageHits.length > 0 && (
+          <>
+            <div className="chatlist__section">Сообщения</div>
+            {messageHits.map((hit) => (
+              <button
+                key={hit.messageId}
+                className="chat-item"
+                onClick={() => openHit(hit.chatType, hit.chatId)}
+              >
+                <Avatar name={hit.senderName} size={44} />
+                <div className="chat-item__body">
+                  <div className="chat-item__row">
+                    <span className="chat-item__name">{hit.senderName}</span>
+                    <span className="chat-item__time">{formatRelative(hit.createdAt)}</span>
+                  </div>
+                  <div className="chat-item__preview">{hit.text}</div>
+                </div>
+              </button>
+            ))}
+          </>
+        )}
       </div>
     </aside>
   );

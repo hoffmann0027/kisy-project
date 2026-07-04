@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import { cn } from "@shared/lib/cn";
 import { formatTime } from "@shared/lib/format";
 import { Icon } from "@shared/ui/icons";
@@ -13,9 +13,11 @@ interface Props {
   message: Message;
   mine: boolean;
   canDelete: boolean;
+  canEdit: boolean;
   status?: DeliveryStatus;
   replyPreview?: string;
   onReply: (m: Message) => void;
+  onEdit: (m: Message, text: string) => void;
   onDelete: (m: Message) => void;
   onReact: (m: Message, emoji: string) => void;
 }
@@ -37,12 +39,27 @@ export const MessageBubble = memo(function MessageBubble({
   message,
   mine,
   canDelete,
+  canEdit,
   status,
   replyPreview,
   onReply,
+  onEdit,
   onDelete,
   onReact,
 }: Props) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(message.text ?? "");
+
+  const startEdit = () => {
+    setDraft(message.text ?? "");
+    setEditing(true);
+  };
+  const saveEdit = () => {
+    const text = draft.trim();
+    if (text && text !== message.text) onEdit(message, text);
+    setEditing(false);
+  };
+
   if (message.isDeleted) {
     return (
       <div className={cn("bubble-row", mine ? "bubble-row--out" : "bubble-row--in")}>
@@ -63,6 +80,11 @@ export const MessageBubble = memo(function MessageBubble({
           <button className="bubble__action" onClick={() => onReply(message)} title="Ответить">
             <Icon.Reply size={15} />
           </button>
+          {canEdit && (
+            <button className="bubble__action" onClick={startEdit} title="Изменить">
+              <Icon.Edit size={15} />
+            </button>
+          )}
           {canDelete && (
             <button className="bubble__action" onClick={() => onDelete(message)} title="Удалить">
               <Icon.Trash size={15} />
@@ -72,8 +94,36 @@ export const MessageBubble = memo(function MessageBubble({
 
         {replyPreview && <div className="bubble__reply">{replyPreview}</div>}
 
-        <span>{message.text}</span>
+        {editing ? (
+          <div className="bubble__edit">
+            <textarea
+              className="ui-input"
+              rows={2}
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  saveEdit();
+                }
+                if (e.key === "Escape") setEditing(false);
+              }}
+            />
+            <div className="bubble__edit-actions">
+              <button className="bubble__edit-btn" onClick={() => setEditing(false)}>
+                Отмена
+              </button>
+              <button className="bubble__edit-btn bubble__edit-btn--save" onClick={saveEdit}>
+                Сохранить
+              </button>
+            </div>
+          </div>
+        ) : (
+          <span>{message.text}</span>
+        )}
         <span className="bubble__meta">
+          {message.editedAt && <span className="bubble__edited">изменено</span>}
           {formatTime(message.createdAt)}
           {mine && status && <StatusTick status={status} />}
         </span>

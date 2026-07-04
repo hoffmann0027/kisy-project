@@ -305,6 +305,39 @@
   color: #ff6b6b;
   font-weight: 700;
 }
+.bubble__edited {
+  font-style: italic;
+  opacity: 0.75;
+  margin-right: 2px;
+}
+.bubble__edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+}
+.bubble__edit textarea {
+  resize: vertical;
+  font: inherit;
+  color: var(--color-text-primary);
+}
+.bubble__edit-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.bubble__edit-btn {
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.bubble__edit-btn--save {
+  background: var(--color-bubble-out);
+}
 
 /* Avatar upload trigger + cropper */
 .avatar-trigger {

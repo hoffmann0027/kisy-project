@@ -26,7 +26,36 @@ func NewHandler(svc *Service, actor func(*http.Request) (ActorMeta, bool)) *Hand
 func (h *Handler) Routes(r chi.Router) {
 	r.Post("/messages", h.send)
 	r.Get("/messages", h.list)
+	r.Patch("/messages/{messageID}", h.edit)
 	r.Delete("/messages/{messageID}", h.delete)
+}
+
+type editRequest struct {
+	Text string `json:"text"`
+}
+
+func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actor(r)
+	if !ok {
+		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "messageID"))
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "message not found")
+		return
+	}
+	var req editRequest
+	if err := httpjson.Decode(w, r, &req); err != nil {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "malformed JSON body")
+		return
+	}
+	dto, err := h.svc.Edit(r.Context(), id, req.Text, actor)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"message": dto})
 }
 
 type sendRequest struct {

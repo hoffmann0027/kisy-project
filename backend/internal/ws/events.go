@@ -13,6 +13,7 @@ import (
 // Server→Client event names.
 const (
 	EventMessageCreated  = "message.created"
+	EventMessageUpdated  = "message.updated"
 	EventMessageDeleted  = "message.deleted"
 	EventMessageRead     = "message.read"
 	EventTypingStarted   = "typing.started"
