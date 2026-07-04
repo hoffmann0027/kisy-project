@@ -19,10 +19,12 @@ const (
 	EventTypingStopped   = "typing.stopped"
 	EventUserOnline      = "user.online"
 	EventUserOffline     = "user.offline"
+	EventUserUpdated     = "user.updated"
 	EventReactionAdded   = "reaction.added"
 	EventReactionRemoved = "reaction.removed"
 	EventNotification    = "notification.created"
 	EventBoardChanged    = "board.changed"
+	EventGroupChanged    = "group.changed"
 	EventError           = "error"
 )
 

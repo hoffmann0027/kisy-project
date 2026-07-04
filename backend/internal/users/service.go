@@ -10,15 +10,43 @@ import (
 	"kisy-backend/internal/audit"
 )
 
+// ProfileBroadcaster pushes a user's updated public profile to an audience of
+// user ids (their chat partners and group co-members) so those clients can
+// refresh cached names/avatars in real time. Injected to avoid a users→ws
+// import cycle; may be nil.
+type ProfileBroadcaster func(ctx context.Context, audience []uuid.UUID, profile DTO)
+
 // Service implements profile use-cases (the current user's own account).
 type Service struct {
-	pool  *pgxpool.Pool
-	repo  Repository
-	audit audit.Recorder
+	pool      *pgxpool.Pool
+	repo      Repository
+	audit     audit.Recorder
+	broadcast ProfileBroadcaster
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository, rec audit.Recorder) *Service {
 	return &Service{pool: pool, repo: repo, audit: rec}
+}
+
+// SetBroadcaster wires real-time profile-update propagation.
+func (s *Service) SetBroadcaster(b ProfileBroadcaster) { s.broadcast = b }
+
+// notifyProfileChanged pushes the user's fresh profile to their audience plus
+// their own other sessions. Best-effort: failures never block the edit.
+func (s *Service) notifyProfileChanged(ctx context.Context, userID uuid.UUID) {
+	if s.broadcast == nil {
+		return
+	}
+	u, err := s.repo.GetByID(ctx, s.pool, userID)
+	if err != nil {
+		return
+	}
+	audience, err := s.repo.AudienceOf(ctx, s.pool, userID)
+	if err != nil {
+		return
+	}
+	audience = append(audience, userID) // update the actor's other sessions too
+	s.broadcast(ctx, audience, u.ToDTO())
 }
 
 func (s *Service) GetByID(ctx context.Context, id uuid.UUID) (*User, error) {
@@ -101,5 +129,36 @@ func (s *Service) ChangeUsername(ctx context.Context, userID uuid.UUID, newUsern
 		return nil, fmt.Errorf("users: commit: %w", err)
 	}
 
+	s.notifyProfileChanged(ctx, userID)
+	return s.repo.GetByID(ctx, s.pool, userID)
+}
+
+// ChangeDisplayName updates the human-facing name shown across the UI and
+// propagates it to the actor's audience so cached names refresh live.
+func (s *Service) ChangeDisplayName(ctx context.Context, userID uuid.UUID, displayName string, meta ActorMeta) (*User, error) {
+	if err := s.repo.UpdateDisplayName(ctx, s.pool, userID, displayName); err != nil {
+		return nil, err
+	}
+	_ = s.audit.Record(ctx, s.pool, audit.Event{
+		ActorID:    &userID,
+		Action:     audit.ActionUserRenamed,
+		TargetType: "user",
+		TargetID:   &userID,
+		IPHash:     meta.IPHash,
+		SessionID:  &meta.SessionID,
+		RequestID:  meta.RequestID,
+		Metadata:   map[string]any{"displayName": displayName},
+	})
+	s.notifyProfileChanged(ctx, userID)
+	return s.repo.GetByID(ctx, s.pool, userID)
+}
+
+// SetAvatarURL points the user's avatar at an already-stored image URL and
+// propagates the change to the actor's audience.
+func (s *Service) SetAvatarURL(ctx context.Context, userID uuid.UUID, url string) (*User, error) {
+	if err := s.repo.SetAvatarURL(ctx, s.pool, userID, url); err != nil {
+		return nil, err
+	}
+	s.notifyProfileChanged(ctx, userID)
 	return s.repo.GetByID(ctx, s.pool, userID)
 }
