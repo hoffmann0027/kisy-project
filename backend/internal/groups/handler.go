@@ -3,6 +3,7 @@ package groups
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -12,20 +13,32 @@ import (
 	"kisy-backend/pkg/httpresponse"
 )
 
+// maxAvatarUpload bounds the group-avatar request body (validation happens in
+// the avatars service; this is a coarse transport guard).
+const maxAvatarUpload = 1 << 20 // 1 MiB
+
 // UserLookup resolves a target user's clearance level, injected by the
 // main router to avoid a groups→users import cycle. It returns false when
 // the user does not exist.
 type UserLookup func(ctx context.Context, id uuid.UUID) (level int, ok bool)
 
-// Handler exposes /groups endpoints. RequireAuth is applied by the router.
-type Handler struct {
-	svc    *Service
-	actor  func(*http.Request) (ActorMeta, bool)
-	lookup UserLookup
+// AvatarStore stores a validated avatar image and returns its versioned URL.
+// Satisfied by *avatars.Service; a local interface avoids a groups→avatars
+// dependency in the domain.
+type AvatarStore interface {
+	Store(ctx context.Context, ownerType string, ownerID uuid.UUID, raw []byte) (string, error)
 }
 
-func NewHandler(svc *Service, actor func(*http.Request) (ActorMeta, bool), lookup UserLookup) *Handler {
-	return &Handler{svc: svc, actor: actor, lookup: lookup}
+// Handler exposes /groups endpoints. RequireAuth is applied by the router.
+type Handler struct {
+	svc     *Service
+	avatars AvatarStore
+	actor   func(*http.Request) (ActorMeta, bool)
+	lookup  UserLookup
+}
+
+func NewHandler(svc *Service, avatars AvatarStore, actor func(*http.Request) (ActorMeta, bool), lookup UserLookup) *Handler {
+	return &Handler{svc: svc, avatars: avatars, actor: actor, lookup: lookup}
 }
 
 func (h *Handler) Routes(r chi.Router) {
@@ -35,6 +48,46 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Delete("/{groupID}", h.delete)
 	r.Get("/{groupID}/members", h.listMembers)
 	r.Post("/{groupID}/members", h.addMember)
+	r.Post("/{groupID}/avatar", h.uploadAvatar)
+}
+
+// uploadAvatar accepts a raw image body and sets the group avatar. Only the
+// founder or the CEO may do this (enforced in the service).
+func (h *Handler) uploadAvatar(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actor(r)
+	if !ok {
+		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
+		return
+	}
+	groupID, err := uuid.Parse(chi.URLParam(r, "groupID"))
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "group not found")
+		return
+	}
+
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxAvatarUpload))
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusRequestEntityTooLarge, httpresponse.ErrValidationFailed, "image too large")
+		return
+	}
+
+	url, err := h.avatars.Store(r.Context(), "group", groupID, raw)
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "invalid image: "+err.Error())
+		return
+	}
+
+	g, err := h.svc.SetAvatar(r.Context(), groupID, url, actor)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "group not found")
+	case errors.Is(err, ErrForbidden):
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "only the CEO or the group founder may change the avatar")
+	case err != nil:
+		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
+	default:
+		httpresponse.OK(w, r, http.StatusOK, map[string]any{"group": g.ToDTO()})
+	}
 }
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {

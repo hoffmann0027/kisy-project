@@ -310,6 +310,65 @@
   color: #ff6b6b;
   font-weight: 700;
 }
+
+/* Avatar upload trigger + cropper */
+.avatar-trigger {
+  position: relative;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: var(--radius-round);
+  line-height: 0;
+}
+.avatar-trigger:disabled {
+  cursor: default;
+}
+.avatar-trigger__hint {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 2px 0;
+  font-size: 10px;
+  text-align: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border-bottom-left-radius: var(--radius-round);
+  border-bottom-right-radius: var(--radius-round);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.avatar-trigger:hover .avatar-trigger__hint {
+  opacity: 1;
+}
+.cropper {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: center;
+}
+.cropper__frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-round);
+  background: #000;
+  touch-action: none;
+  cursor: grab;
+  box-shadow: 0 0 0 2px var(--color-border);
+}
+.cropper__frame:active {
+  cursor: grabbing;
+}
+.cropper__zoom {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+.cropper__zoom input {
+  flex: 1;
+}
 .bubble__actions {
   position: absolute;
   top: -12px;

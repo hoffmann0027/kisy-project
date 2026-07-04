@@ -32,11 +32,24 @@ func (p *Publisher) PublishNotification(userID uuid.UUID, data any) {
 	p.hub.publishToUsers([]uuid.UUID{userID}, encode(EventNotification, data))
 }
 
+// PublishUserUpdated pushes a user's refreshed public profile to an audience
+// (their chat partners and group co-members) so cached names/avatars update
+// live; satisfies the users.ProfileBroadcaster port structurally.
+func (p *Publisher) PublishUserUpdated(audience []uuid.UUID, profile any) {
+	p.hub.publishToUsers(audience, encode(EventUserUpdated, profile))
+}
+
 // PublishBoardChanged tells a group's members their task board changed so
 // they can refetch it; satisfies the boards.Publisher port. The group's
 // members are the recipients (chatType "group" resolves to them).
 func (p *Publisher) PublishBoardChanged(groupID uuid.UUID) {
 	p.hub.publishToChat("group", groupID, encode(EventBoardChanged, map[string]any{"groupId": groupID}))
+}
+
+// PublishGroupChanged tells a group's members the group's metadata (e.g. its
+// avatar) changed so they can refetch it; satisfies groups.ChangePublisher.
+func (p *Publisher) PublishGroupChanged(groupID uuid.UUID) {
+	p.hub.publishToChat("group", groupID, encode(EventGroupChanged, map[string]any{"groupId": groupID}))
 }
 
 // PublishReaction broadcasts a reaction change; satisfies the

@@ -231,7 +231,8 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
     patch:
       tags: [users]
-      summary: Update the current user's username
+      summary: Update the current user's display name and/or username
+      description: At least one of displayName, username must be provided.
       requestBody:
         required: true
         content:
@@ -239,6 +240,10 @@ paths:
             schema:
               type: object
               properties:
+                displayName:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
                 username:
                   type: string
                   pattern: '^[A-Za-z0-9_]{3,32}$'
@@ -258,6 +263,55 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/Conflict' }
+
+  /users/me/avatar:
+    post:
+      tags: [users]
+      summary: Upload the current user's avatar
+      description: >
+        Raw image body (image/jpeg or image/png), square, max 512 KB after the
+        client-side crop. Returns the updated profile and broadcasts a
+        user.updated WebSocket event to the user's audience.
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema: { type: string, format: binary }
+          image/png:
+            schema: { type: string, format: binary }
+      responses:
+        '200':
+          description: Avatar stored
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          user: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413': { $ref: '#/components/responses/ValidationError' }
+
+  /avatars/{ownerType}/{ownerID}:
+    get:
+      tags: [users]
+      summary: Serve a user or group avatar image
+      parameters:
+        - { name: ownerType, in: path, required: true, schema: { type: string, enum: [user, group] } }
+        - { name: ownerID, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: v, in: query, required: false, schema: { type: integer }, description: Cache-busting version. }
+      responses:
+        '200':
+          description: The avatar image
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/png: { schema: { type: string, format: binary } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /invites:
     post:
@@ -443,6 +497,41 @@ paths:
                         properties:
                           members: { type: array, items: { $ref: '#/components/schemas/User' } }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /groups/{groupID}/avatar:
+    post:
+      tags: [groups]
+      summary: Upload a group's avatar (founder or CEO only)
+      description: >
+        Raw image body (image/jpeg or image/png), square, max 512 KB. Only the
+        group's founder or the CEO may change it. Emits a group.changed
+        WebSocket event so members refetch.
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema: { type: string, format: binary }
+          image/png:
+            schema: { type: string, format: binary }
+      responses:
+        '200':
+          description: Group avatar stored
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          group: { $ref: '#/components/schemas/Group' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
   /groups/{groupID}/board:
@@ -770,7 +859,8 @@ paths:
 
         Server→Client `event`: message.created, message.deleted,
         message.read, typing.started, typing.stopped, user.online,
-        user.offline, error.
+        user.offline, user.updated, reaction.added, reaction.removed,
+        notification.created, board.changed, group.changed, error.
       parameters:
         - { name: access_token, in: query, required: false, schema: { type: string } }
       responses:

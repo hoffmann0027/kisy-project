@@ -14,6 +14,7 @@ import (
 	"kisy-backend/internal/audit"
 	"kisy-backend/internal/auth"
 	"kisy-backend/internal/auth/token"
+	"kisy-backend/internal/avatars"
 	"kisy-backend/internal/boards"
 	"kisy-backend/internal/bootstrap"
 	"kisy-backend/internal/chats"
@@ -40,6 +41,7 @@ type modules struct {
 	invitesHandler       *invitations.Handler
 	chatsHandler         *chats.Handler
 	groupsHandler        *groups.Handler
+	avatarsHandler       *avatars.Handler
 	messagesHandler      *messages.Handler
 	reactionsHandler     *reactions.Handler
 	readstateHandler     *readstate.Handler
@@ -66,6 +68,10 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		return nil, err
 	}
 
+	// Avatar storage (used by both the users and groups handlers).
+	avatarsSvc := avatars.NewService(pool, avatars.NewPostgresRepository())
+	avatarsHandler := avatars.NewHandler(avatarsSvc)
+
 	tokens := token.NewManager(cfg.JWTAccessSecret, cfg.JWTAccessTTL)
 
 	authSvc, err := auth.NewService(pool, usersRepo, sessionsRepo, invitesRepo, auditRec, tokens, cfg.JWTRefreshTTL)
@@ -87,7 +93,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 
 	// --- users ---
 	usersSvc := users.NewService(pool, usersRepo, auditRec)
-	usersHandler := users.NewHandler(usersSvc,
+	usersHandler := users.NewHandler(usersSvc, avatarsSvc,
 		func(r *http.Request) (users.Identity, bool) {
 			claims, ok := auth.ClaimsFromContext(r.Context())
 			if !ok {
@@ -141,7 +147,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	// --- groups ---
 	groupsSvc := groups.NewService(pool, groupsRepo, auditRec)
 	groupsSvc.SetProfileLoader(groups.ProfileLoader(usersProfile))
-	groupsHandler := groups.NewHandler(groupsSvc,
+	groupsHandler := groups.NewHandler(groupsSvc, avatarsSvc,
 		func(r *http.Request) (groups.ActorMeta, bool) {
 			claims, ok := auth.ClaimsFromContext(r.Context())
 			if !ok {
@@ -201,6 +207,11 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	hub := ws.NewHub(log, rdb, recipientResolver)
 	wsPublisher := ws.NewPublisher(hub)
 	messagesSvc.SetPublisher(wsPublisher)
+	// Real-time profile/group propagation (Stage B: name/avatar changes).
+	usersSvc.SetBroadcaster(func(_ context.Context, audience []uuid.UUID, profile users.DTO) {
+		wsPublisher.PublishUserUpdated(audience, profile)
+	})
+	groupsSvc.SetChangePublisher(wsPublisher.PublishGroupChanged)
 
 	chatAuthorizer := ws.ChatAuthorizer(func(ctx context.Context, chatType string, chatID, actorID uuid.UUID, actorLevel int) error {
 		switch chatType {
@@ -319,6 +330,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		invitesHandler:       invitesHandler,
 		chatsHandler:         chatsHandler,
 		groupsHandler:        groupsHandler,
+		avatarsHandler:       avatarsHandler,
 		messagesHandler:      messagesHandler,
 		reactionsHandler:     reactionsHandler,
 		readstateHandler:     readstateHandler,

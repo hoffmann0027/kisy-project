@@ -23,6 +23,13 @@ type Repository interface {
 	GetByUsername(ctx context.Context, q db.DBTX, username string) (*User, error)
 	Count(ctx context.Context, q db.DBTX) (int64, error)
 	UpdateUsername(ctx context.Context, q db.DBTX, id uuid.UUID, username string) error
+	// UpdateDisplayName changes the human-facing name shown across the UI.
+	UpdateDisplayName(ctx context.Context, q db.DBTX, id uuid.UUID, displayName string) error
+	// SetAvatarURL points the user's avatar_url at a (versioned) URL.
+	SetAvatarURL(ctx context.Context, q db.DBTX, id uuid.UUID, url string) error
+	// AudienceOf returns the ids of users who share a private chat or a group
+	// with the given user — the set that should learn of their profile edits.
+	AudienceOf(ctx context.Context, q db.DBTX, id uuid.UUID) ([]uuid.UUID, error)
 	// TouchLastSeen records that the user was last active now (called when
 	// their final WebSocket connection closes, to power "last seen" labels).
 	TouchLastSeen(ctx context.Context, q db.DBTX, id uuid.UUID) error
@@ -117,6 +124,53 @@ func (r *PostgresRepository) UpdateUsername(ctx context.Context, q db.DBTX, id u
 		return ErrNotFound
 	}
 	return nil
+}
+
+func (r *PostgresRepository) UpdateDisplayName(ctx context.Context, q db.DBTX, id uuid.UUID, displayName string) error {
+	tag, err := q.Exec(ctx, `UPDATE users SET display_name = $2 WHERE id = $1`, id, displayName)
+	if err != nil {
+		return fmt.Errorf("users: update display name: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *PostgresRepository) SetAvatarURL(ctx context.Context, q db.DBTX, id uuid.UUID, url string) error {
+	tag, err := q.Exec(ctx, `UPDATE users SET avatar_url = $2 WHERE id = $1`, id, url)
+	if err != nil {
+		return fmt.Errorf("users: set avatar url: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *PostgresRepository) AudienceOf(ctx context.Context, q db.DBTX, id uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.Query(ctx, `
+		SELECT CASE WHEN user_a_id = $1 THEN user_b_id ELSE user_a_id END
+		FROM private_chats WHERE user_a_id = $1 OR user_b_id = $1
+		UNION
+		SELECT gm.user_id FROM group_members gm
+		WHERE gm.group_id IN (SELECT group_id FROM group_members WHERE user_id = $1)
+		  AND gm.user_id <> $1`,
+		id)
+	if err != nil {
+		return nil, fmt.Errorf("users: audience: %w", err)
+	}
+	defer rows.Close()
+
+	var out []uuid.UUID
+	for rows.Next() {
+		var uid uuid.UUID
+		if err := rows.Scan(&uid); err != nil {
+			return nil, fmt.Errorf("users: scan audience: %w", err)
+		}
+		out = append(out, uid)
+	}
+	return out, rows.Err()
 }
 
 func (r *PostgresRepository) TouchLastSeen(ctx context.Context, q db.DBTX, id uuid.UUID) error {

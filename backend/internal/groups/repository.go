@@ -28,6 +28,8 @@ type Repository interface {
 	// DeleteGroupMessages removes the group's messages, whose polymorphic
 	// chat_id has no cascading foreign key.
 	DeleteGroupMessages(ctx context.Context, q db.DBTX, groupID uuid.UUID) error
+	// SetAvatarURL points the group's avatar_url at a (versioned) URL.
+	SetAvatarURL(ctx context.Context, q db.DBTX, id uuid.UUID, url string) error
 }
 
 type PostgresRepository struct{}
@@ -131,6 +133,17 @@ func (r *PostgresRepository) Delete(ctx context.Context, q db.DBTX, id uuid.UUID
 func (r *PostgresRepository) DeleteGroupMessages(ctx context.Context, q db.DBTX, groupID uuid.UUID) error {
 	if _, err := q.Exec(ctx, `DELETE FROM messages WHERE chat_type = 'group' AND chat_id = $1`, groupID); err != nil {
 		return fmt.Errorf("groups: delete group messages: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepository) SetAvatarURL(ctx context.Context, q db.DBTX, id uuid.UUID, url string) error {
+	tag, err := q.Exec(ctx, `UPDATE groups SET avatar_url = $2, updated_at = now() WHERE id = $1`, id, url)
+	if err != nil {
+		return fmt.Errorf("groups: set avatar url: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
 	}
 	return nil
 }

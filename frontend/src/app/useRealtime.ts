@@ -2,8 +2,9 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { wsClient } from "@shared/ws/client";
 import type { ServerEvent } from "@shared/ws/events";
-import type { Chat, ChatType, Message } from "@shared/api/types";
+import type { Chat, ChatType, Message, User } from "@shared/api/types";
 import { chatKeys } from "@entities/chat/queries";
+import { groupKeys } from "@entities/group/queries";
 import { notificationKeys } from "@entities/notification/queries";
 import { messageKeys } from "@entities/message/queries";
 import { usePresenceStore } from "@shared/store/presence";
@@ -77,6 +78,12 @@ export function useRealtime() {
         case "user.offline":
           usePresenceStore.getState().setOnline(ev.data.userId, false);
           break;
+        case "user.updated":
+          handleUserUpdated(qc, ev.data, meId);
+          break;
+        case "group.changed":
+          qc.invalidateQueries({ queryKey: groupKeys.list });
+          break;
         case "notification.created":
           qc.invalidateQueries({ queryKey: notificationKeys.list });
           break;
@@ -92,6 +99,19 @@ export function useRealtime() {
       wsClient.disconnect();
     };
   }, [qc, meId]);
+}
+
+// handleUserUpdated refreshes a user's cached name/avatar across the app when
+// they edit their profile: the auth store (if it's us), every private chat
+// where they are the counterpart, and any open group-member lists.
+function handleUserUpdated(qc: ReturnType<typeof useQueryClient>, updated: User, meId: string) {
+  if (updated.id === meId) {
+    useAuthStore.getState().setUser(updated);
+  }
+  qc.setQueryData<Chat[]>(chatKeys.list, (prev) =>
+    prev?.map((c) => (c.otherUserId === updated.id ? { ...c, otherUser: updated } : c)),
+  );
+  qc.invalidateQueries({ queryKey: ["group-members"] });
 }
 
 // handleMessageRead advances the counterpart's read position for a chat. The

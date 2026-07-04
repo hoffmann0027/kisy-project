@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Avatar, Button, Modal, Spinner, toast } from "@shared/ui";
 import { roleLabel, type Group } from "@shared/api/types";
-import { usersApi } from "@shared/api/endpoints";
-import { useAddMember, useDeleteGroup, useGroupMembers } from "@entities/group/queries";
+import { groupsApi, usersApi } from "@shared/api/endpoints";
+import { groupKeys, useAddMember, useDeleteGroup, useGroupMembers } from "@entities/group/queries";
 import { useAuthStore } from "@shared/store/auth";
 import { ApiError } from "@shared/api/envelope";
+import { AvatarCropper } from "./AvatarCropper";
 
 interface Props {
   group: Group;
@@ -20,9 +21,16 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
   const [adding, setAdding] = useState(false);
   const navigate = useNavigate();
   const del = useDeleteGroup();
+  const qc = useQueryClient();
   const me = useAuthStore((s) => s.user!);
-  // The CEO may delete any group; the founder may delete their own.
-  const canDelete = me.roleLevel === 1 || me.id === group.createdBy;
+  // The CEO may delete/manage any group; the founder their own.
+  const canManage = me.roleLevel === 1 || me.id === group.createdBy;
+  const canDelete = canManage;
+
+  const uploadGroupAvatar = async (blob: Blob) => {
+    await groupsApi.uploadAvatar(group.id, blob);
+    qc.invalidateQueries({ queryKey: groupKeys.list });
+  };
 
   const removeGroup = () => {
     if (!window.confirm(`Удалить группу «${group.name}»? Это удалит её чат и доску задач.`)) return;
@@ -38,6 +46,20 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
 
   return (
     <Modal open={open} title={`Участники · ${group.name}`} onClose={onClose}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        {canManage ? (
+          <AvatarCropper name={group.name} url={group.avatarUrl} size={56} onUpload={uploadGroupAvatar} />
+        ) : (
+          <Avatar name={group.name} url={group.avatarUrl} size={56} />
+        )}
+        <div>
+          <div style={{ fontWeight: 640, fontSize: 17 }}>{group.name}</div>
+          <div style={{ color: "var(--color-text-secondary)", fontSize: 14 }}>
+            {canManage ? "Нажмите на аватар, чтобы изменить" : "Группа"}
+          </div>
+        </div>
+      </div>
+
       {canAdd && !adding && (
         <Button variant="secondary" onClick={() => setAdding(true)}>
           Добавить участника

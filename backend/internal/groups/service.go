@@ -31,11 +31,16 @@ const (
 // groups→users import cycle.
 type ProfileLoader func(ctx context.Context, userID uuid.UUID) (any, bool)
 
+// ChangePublisher notifies a group's members that the group changed (e.g. its
+// avatar) so their clients refetch it. Injected to avoid a groups→ws cycle.
+type ChangePublisher func(groupID uuid.UUID)
+
 type Service struct {
 	pool     *pgxpool.Pool
 	repo     Repository
 	audit    audit.Recorder
 	profiles ProfileLoader
+	changed  ChangePublisher
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository, rec audit.Recorder) *Service {
@@ -44,6 +49,29 @@ func NewService(pool *pgxpool.Pool, repo Repository, rec audit.Recorder) *Servic
 
 // SetProfileLoader wires member-profile resolution for ListMembers.
 func (s *Service) SetProfileLoader(l ProfileLoader) { s.profiles = l }
+
+// SetChangePublisher wires real-time "group changed" notifications.
+func (s *Service) SetChangePublisher(p ChangePublisher) { s.changed = p }
+
+// SetAvatar points the group's avatar at an already-stored image URL. Only the
+// founder or the CEO may change it; other members get ErrForbidden. Returns
+// the refreshed group.
+func (s *Service) SetAvatar(ctx context.Context, groupID uuid.UUID, url string, actor ActorMeta) (*Group, error) {
+	g, err := s.Get(ctx, groupID, actor)
+	if err != nil {
+		return nil, err
+	}
+	if g.CreatedBy != actor.UserID && actor.RoleLevel != 1 {
+		return nil, ErrForbidden
+	}
+	if err := s.repo.SetAvatarURL(ctx, s.pool, groupID, url); err != nil {
+		return nil, err
+	}
+	if s.changed != nil {
+		s.changed(groupID)
+	}
+	return s.repo.GetByID(ctx, s.pool, groupID)
+}
 
 // ListMembers returns the public profiles of a group's members, if the
 // actor may see the group.

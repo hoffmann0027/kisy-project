@@ -227,6 +227,10 @@ func newRouter(d routerDeps) http.Handler {
 			m.messagesHandler.Routes(r)
 			m.reactionsHandler.Routes(r)
 			m.readstateHandler.Routes(r)
+
+			// Avatar images (GET /avatars/{type}/{id}); uploads live under
+			// /users/me/avatar and /groups/{id}/avatar.
+			m.avatarsHandler.Routes(r)
 		})
 
 		// WebSocket upgrade authenticates from the access cookie or an
