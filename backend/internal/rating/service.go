@@ -65,6 +65,11 @@ func (s *Service) Analytics(ctx context.Context) (AnalyticsDTO, error) {
 	return a, nil
 }
 
+// ExportFinance returns the full profit ledger for CSV export.
+func (s *Service) ExportFinance(ctx context.Context) ([]FinanceRow, error) {
+	return s.repo.ListFinance(ctx, s.pool)
+}
+
 // CreateProjectInput is validated by the service.
 type CreateProjectInput struct {
 	Title       string

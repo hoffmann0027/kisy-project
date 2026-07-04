@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -40,6 +41,20 @@ type Repository interface {
 	SetProgress(ctx context.Context, q db.DBTX, taskID, userID uuid.UUID, progress int) error
 
 	AddFinance(ctx context.Context, q db.DBTX, projectID uuid.UUID, taskID *uuid.UUID, income, expense int64, note *string, createdBy uuid.UUID) error
+	// ListFinance returns every ledger entry joined to project/task/author for
+	// CSV export, oldest first.
+	ListFinance(ctx context.Context, q db.DBTX) ([]FinanceRow, error)
+}
+
+// FinanceRow is one exported ledger line.
+type FinanceRow struct {
+	ProjectTitle   string
+	TaskTitle      *string
+	IncomeKopecks  int64
+	ExpenseKopecks int64
+	Note           *string
+	AuthorName     string
+	CreatedAt      time.Time
 }
 
 type PostgresRepository struct{}
@@ -244,6 +259,30 @@ func (r *PostgresRepository) SetProgress(ctx context.Context, q db.DBTX, taskID,
 		return ErrForbidden
 	}
 	return nil
+}
+
+func (r *PostgresRepository) ListFinance(ctx context.Context, q db.DBTX) ([]FinanceRow, error) {
+	rows, err := q.Query(ctx, `
+		SELECT p.title, t.title, f.income_kopecks, f.expense_kopecks, f.note, u.display_name, f.created_at
+		FROM rating_finance_entries f
+		JOIN rating_projects p ON p.id = f.project_id
+		LEFT JOIN rating_tasks t ON t.id = f.task_id
+		JOIN users u ON u.id = f.created_by
+		ORDER BY f.created_at`)
+	if err != nil {
+		return nil, fmt.Errorf("rating: list finance: %w", err)
+	}
+	defer rows.Close()
+
+	var out []FinanceRow
+	for rows.Next() {
+		var fr FinanceRow
+		if err := rows.Scan(&fr.ProjectTitle, &fr.TaskTitle, &fr.IncomeKopecks, &fr.ExpenseKopecks, &fr.Note, &fr.AuthorName, &fr.CreatedAt); err != nil {
+			return nil, fmt.Errorf("rating: scan finance: %w", err)
+		}
+		out = append(out, fr)
+	}
+	return out, rows.Err()
 }
 
 func (r *PostgresRepository) AddFinance(ctx context.Context, q db.DBTX, projectID uuid.UUID, taskID *uuid.UUID, income, expense int64, note *string, createdBy uuid.UUID) error {

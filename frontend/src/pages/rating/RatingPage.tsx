@@ -9,6 +9,8 @@ import { NotificationsModal } from "@features/notifications/NotificationsModal";
 import { FeedbackModal } from "@features/feedback/FeedbackModal";
 import { useRatingAnalytics, useRatingBoard, useRatingMutations } from "@entities/rating/queries";
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
+
 export function RatingPage() {
   const { data: board, isPending } = useRatingBoard();
   const { data: analytics } = useRatingAnalytics();
@@ -28,7 +30,12 @@ export function RatingPage() {
 
       <main className="rating">
         <div className="rating__scroll">
-          <h1 className="rating__heading">Рейтинг проектов</h1>
+          <div className="rating__topbar">
+            <h1 className="rating__heading">Рейтинг проектов</h1>
+            <a className="rating-add rating__export" href={`${API_BASE}/rating/export.csv`}>
+              Экспорт CSV
+            </a>
+          </div>
 
           {analytics && <RatingAnalytics data={analytics} />}
 

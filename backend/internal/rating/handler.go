@@ -1,8 +1,11 @@
 package rating
 
 import (
+	"encoding/csv"
 	"errors"
+	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -24,6 +27,7 @@ func NewHandler(svc *Service, actor func(*http.Request) (Actor, bool)) *Handler 
 func (h *Handler) Routes(r chi.Router) {
 	r.Get("/board", h.board)
 	r.Get("/analytics", h.analytics)
+	r.Get("/export.csv", h.exportCSV)
 	r.Post("/projects", h.createProject)
 	r.Delete("/projects/{id}", h.deleteProject)
 	r.Post("/projects/{id}/tasks", h.createTask)
@@ -80,6 +84,54 @@ func (h *Handler) analytics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpresponse.OK(w, r, http.StatusOK, a)
+}
+
+func rubles(kopecks int64) string {
+	return strconv.FormatFloat(float64(kopecks)/100, 'f', 2, 64)
+}
+
+// exportCSV streams the profit ledger as a CSV download.
+func (h *Handler) exportCSV(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.auth(w, r); !ok {
+		return
+	}
+	rows, err := h.svc.ExportFinance(r.Context())
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="kisy-profit.csv"`)
+	// UTF-8 BOM so Excel opens Cyrillic correctly.
+	_, _ = w.Write([]byte{0xEF, 0xBB, 0xBF})
+
+	cw := csv.NewWriter(w)
+	_ = cw.Write([]string{"Дата", "Проект", "Задача", "Доход", "Расход", "Прибыль", "Автор", "Комментарий"})
+	for _, row := range rows {
+		task, note := "", ""
+		if row.TaskTitle != nil {
+			task = *row.TaskTitle
+		}
+		if row.Note != nil {
+			note = *row.Note
+		}
+		_ = cw.Write([]string{
+			row.CreatedAt.Format("2006-01-02 15:04"),
+			row.ProjectTitle,
+			task,
+			rubles(row.IncomeKopecks),
+			rubles(row.ExpenseKopecks),
+			rubles(row.IncomeKopecks - row.ExpenseKopecks),
+			row.AuthorName,
+			note,
+		})
+	}
+	cw.Flush()
+	if err := cw.Error(); err != nil {
+		// Header already written; best we can do is log via a trailer-less error.
+		_, _ = fmt.Fprint(w, "\n# error writing csv")
+	}
 }
 
 type createProjectRequest struct {

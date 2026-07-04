@@ -1225,6 +1225,17 @@ paths:
                   - properties:
                       data: { $ref: '#/components/schemas/RatingAnalytics' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /rating/export.csv:
+    get:
+      tags: [rating]
+      summary: Download the profit ledger as CSV
+      responses:
+        '200':
+          description: CSV file (UTF-8 with BOM)
+          content:
+            text/csv:
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /rating/projects:
     post:
       tags: [rating]
