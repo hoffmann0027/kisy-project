@@ -32,4 +32,13 @@ export const Icon = {
   Board: ({ size }: IconProps) => svg(<><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M9 3v18M15 3v18" /></>, size),
   Calendar: ({ size }: IconProps) => svg(<><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></>, size),
   Check: ({ size }: IconProps) => svg(<path d="m20 6-11 11-5-5" />, size),
+  Feedback: ({ size }: IconProps) =>
+    svg(
+      <>
+        <path d="M9 18h6" />
+        <path d="M10 22h4" />
+        <path d="M15.1 14c.2-1 .6-1.7 1.4-2.5A4.6 4.6 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.8.8 1.2 1.5 1.4 2.5" />
+      </>,
+      size,
+    ),
 };

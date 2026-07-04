@@ -9,6 +9,7 @@ import { NewChatModal } from "@features/new-chat/NewChatModal";
 import { NewGroupModal } from "@features/new-chat/NewGroupModal";
 import { ProfileModal } from "@features/profile/ProfileModal";
 import { NotificationsModal } from "@features/notifications/NotificationsModal";
+import { FeedbackModal } from "@features/feedback/FeedbackModal";
 import { Icon } from "@shared/ui/icons";
 import { formatRelative } from "@shared/lib/format";
 import type { Chat, Group } from "@shared/api/types";
@@ -29,6 +30,7 @@ export function MessengerPage() {
   const [newGroup, setNewGroup] = useState(false);
   const [profile, setProfile] = useState(false);
   const [notifications, setNotifications] = useState(false);
+  const [feedback, setFeedback] = useState(false);
 
   const activeChat: Chat | undefined = chats?.find((c) => c.id === chatId);
   const activeGroup: Group | undefined = groups?.find((g) => g.id === groupId);
@@ -43,7 +45,11 @@ export function MessengerPage() {
 
   return (
     <div className="msgr">
-      <Rail onProfile={() => setProfile(true)} onNotifications={() => setNotifications(true)} />
+      <Rail
+        onProfile={() => setProfile(true)}
+        onNotifications={() => setNotifications(true)}
+        onFeedback={() => setFeedback(true)}
+      />
 
       <ChatList
         activeId={activeId}
@@ -83,6 +89,7 @@ export function MessengerPage() {
       <NewGroupModal open={newGroup} onClose={() => setNewGroup(false)} onCreated={selectGroup} />
       <ProfileModal open={profile} onClose={() => setProfile(false)} />
       <NotificationsModal open={notifications} onClose={() => setNotifications(false)} />
+      <FeedbackModal open={feedback} onClose={() => setFeedback(false)} />
     </div>
   );
 }

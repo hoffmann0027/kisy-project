@@ -89,6 +89,27 @@ export interface Invitation {
   expiresAt: string;
 }
 
+export interface FeedbackAuthor {
+  id: string;
+  displayName: string;
+  username: string;
+  avatarUrl: string | null;
+  roleLevel: number;
+}
+
+export interface FeedbackItem {
+  id: string;
+  body: string;
+  author: FeedbackAuthor;
+  createdAt: string;
+}
+
+export interface FeedbackPage {
+  items: FeedbackItem[];
+  nextCursor?: string | null;
+  hasMore: boolean;
+}
+
 export interface BoardCard {
   id: string;
   columnId: string;

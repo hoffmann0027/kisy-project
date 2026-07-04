@@ -20,6 +20,7 @@ import (
 	"kisy-backend/internal/chats"
 	"kisy-backend/internal/config"
 	"kisy-backend/internal/favorites"
+	"kisy-backend/internal/feedback"
 	"kisy-backend/internal/groups"
 	"kisy-backend/internal/invitations"
 	"kisy-backend/internal/messages"
@@ -46,6 +47,7 @@ type modules struct {
 	reactionsHandler     *reactions.Handler
 	readstateHandler     *readstate.Handler
 	favoritesHandler     *favorites.Handler
+	feedbackHandler      *feedback.Handler
 	notificationsHandler *notifications.Handler
 	boardsHandler        *boards.Handler
 	adminHandler         *admin.Handler
@@ -265,6 +267,16 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		return favorites.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
 	})
 
+	// --- feedback & suggestions ---
+	feedbackSvc := feedback.NewService(pool, feedback.NewPostgresRepository())
+	feedbackHandler := feedback.NewHandler(feedbackSvc, func(r *http.Request) (feedback.Actor, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return feedback.Actor{}, false
+		}
+		return feedback.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
+	})
+
 	// --- notifications (@mentions) ---
 	usernameResolver := func(ctx context.Context, username string) (uuid.UUID, bool) {
 		u, err := usersRepo.GetByUsername(ctx, pool, username)
@@ -335,6 +347,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		reactionsHandler:     reactionsHandler,
 		readstateHandler:     readstateHandler,
 		favoritesHandler:     favoritesHandler,
+		feedbackHandler:      feedbackHandler,
 		notificationsHandler: notificationsHandler,
 		boardsHandler:        boardsHandler,
 		adminHandler:         adminHandler,
