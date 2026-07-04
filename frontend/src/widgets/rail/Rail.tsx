@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@shared/lib/cn";
 import { Avatar, Badge, Logo } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
@@ -15,10 +15,13 @@ export function Rail({ onProfile, onNotifications, onFeedback }: Props) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { data: notif } = useNotifications();
   const unread = notif?.unreadCount ?? 0;
 
   if (!user) return null;
+
+  const onRating = pathname.startsWith("/rating");
 
   return (
     <nav className="rail">
@@ -26,7 +29,10 @@ export function Rail({ onProfile, onNotifications, onFeedback }: Props) {
         <Logo size={34} />
       </div>
       <div className="rail__nav">
-        <button className={cn("rail__item", "rail__item--active")} title="Чаты" onClick={() => navigate("/")}>
+        <button className={cn("rail__item", onRating && "rail__item--active")} title="Рейтинг" onClick={() => navigate("/rating")}>
+          <Icon.Trophy />
+        </button>
+        <button className={cn("rail__item", !onRating && "rail__item--active")} title="Чаты" onClick={() => navigate("/")}>
           <Icon.Chat />
         </button>
         <button className="rail__item" title="Уведомления" onClick={onNotifications}>

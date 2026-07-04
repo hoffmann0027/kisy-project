@@ -13,6 +13,8 @@ import type {
   Message,
   MessagePage,
   Notification,
+  RatingAnalytics,
+  RatingBoard,
   User,
 } from "./types";
 
@@ -120,6 +122,21 @@ export const feedbackApi = {
   },
   create: (body: string) => apiClient.post<{ feedback: FeedbackItem }>("/feedback", { body }),
   remove: (id: string) => apiClient.del<{ deleted: boolean }>(`/feedback/${id}`),
+};
+
+export const ratingApi = {
+  board: () => apiClient.get<RatingBoard>("/rating/board"),
+  analytics: () => apiClient.get<RatingAnalytics>("/rating/analytics"),
+  createProject: (title: string, difficulty: string, description?: string) =>
+    apiClient.post<{ id: string }>("/rating/projects", { title, difficulty, description }),
+  deleteProject: (id: string) => apiClient.del<{ deleted: boolean }>(`/rating/projects/${id}`),
+  createTask: (projectId: string, title: string) =>
+    apiClient.post<{ id: string }>(`/rating/projects/${projectId}/tasks`, { title }),
+  assign: (taskId: string) => apiClient.post<{ assigned: boolean }>(`/rating/tasks/${taskId}/assign`),
+  setProgress: (taskId: string, progress: number) =>
+    apiClient.patch<{ ok: boolean }>(`/rating/tasks/${taskId}/progress`, { progress }),
+  addFinance: (taskId: string, incomeKopecks: number, expenseKopecks: number, note?: string) =>
+    apiClient.post<{ ok: boolean }>(`/rating/tasks/${taskId}/finance`, { incomeKopecks, expenseKopecks, note }),
 };
 
 export const adminApi = {
