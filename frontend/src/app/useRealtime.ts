@@ -47,13 +47,18 @@ export function useRealtime() {
         case "message.created":
           handleMessageCreated(qc, ev.data, meId);
           break;
-        case "message.updated":
-          patchMessage(qc, ev.data.chatType, ev.data.chatId, ev.data.id, (m) => ({
+        case "message.updated": {
+          const upd = ev.data;
+          patchMessage(qc, upd.chatType, upd.chatId, upd.id, (m) => ({
             ...m,
-            text: ev.data.text,
-            editedAt: ev.data.editedAt,
+            text: upd.text,
+            editedAt: upd.editedAt,
+            pinnedAt: upd.pinnedAt,
           }));
+          // Pin/unpin also changes the chat's pinned bar.
+          qc.invalidateQueries({ queryKey: ["pinned", upd.chatType, upd.chatId] });
           break;
+        }
         case "message.deleted":
           patchMessage(qc, ev.data.chatType as ChatType, ev.data.chatId, ev.data.messageId, (m) => ({
             ...m,

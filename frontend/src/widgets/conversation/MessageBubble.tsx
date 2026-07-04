@@ -20,9 +20,26 @@ interface Props {
   onEdit: (m: Message, text: string) => void;
   onDelete: (m: Message) => void;
   onReact: (m: Message, emoji: string) => void;
+  onPin: (m: Message, pin: boolean) => void;
 }
 
 const QUICK_EMOJI = ["👍", "❤️", "😂", "🔥", "👏"];
+
+const MENTION_SPLIT = /(@[A-Za-z0-9_]{3,32})/g;
+const MENTION_ONE = /^@[A-Za-z0-9_]{3,32}$/;
+
+// renderText highlights @mentions inside a message body.
+function renderText(text: string) {
+  return text.split(MENTION_SPLIT).map((part, i) =>
+    MENTION_ONE.test(part) ? (
+      <span key={i} className="mention">
+        {part}
+      </span>
+    ) : (
+      part
+    ),
+  );
+}
 
 function StatusTick({ status }: { status: DeliveryStatus }) {
   if (status === "pending") return <span className="tick tick--pending" title="Отправляется">🕓</span>;
@@ -46,6 +63,7 @@ export const MessageBubble = memo(function MessageBubble({
   onEdit,
   onDelete,
   onReact,
+  onPin,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.text ?? "");
@@ -79,6 +97,13 @@ export const MessageBubble = memo(function MessageBubble({
           ))}
           <button className="bubble__action" onClick={() => onReply(message)} title="Ответить">
             <Icon.Reply size={15} />
+          </button>
+          <button
+            className="bubble__action"
+            onClick={() => onPin(message, !message.pinnedAt)}
+            title={message.pinnedAt ? "Открепить" : "Закрепить"}
+          >
+            <Icon.Pin size={15} />
           </button>
           {canEdit && (
             <button className="bubble__action" onClick={startEdit} title="Изменить">
@@ -120,7 +145,7 @@ export const MessageBubble = memo(function MessageBubble({
             </div>
           </div>
         ) : (
-          <span>{message.text}</span>
+          <span>{message.text ? renderText(message.text) : null}</span>
         )}
         <span className="bubble__meta">
           {message.editedAt && <span className="bubble__edited">изменено</span>}

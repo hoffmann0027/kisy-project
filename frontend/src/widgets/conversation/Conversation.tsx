@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { cn } from "@shared/lib/cn";
 import { formatDay } from "@shared/lib/format";
 import { Avatar, Button, Spinner, toast } from "@shared/ui";
+import { Icon } from "@shared/ui/icons";
 import type { ChatType, Message } from "@shared/api/types";
 import {
   flattenMessages,
@@ -9,6 +10,8 @@ import {
   useEditMessage,
   useMessageCacheWriter,
   useMessages,
+  usePinMessage,
+  usePinnedMessages,
   useReaction,
   useSendMessage,
 } from "@entities/message/queries";
@@ -45,6 +48,8 @@ export function Conversation({ target, headerActions }: Props) {
   const send = useSendMessage(chatType, chatId);
   const del = useDeleteMessage();
   const edit = useEditMessage();
+  const pin = usePinMessage(chatType, chatId);
+  const { data: pinned } = usePinnedMessages(chatType, chatId);
   const react = useReaction();
   const cache = useMessageCacheWriter();
 
@@ -103,6 +108,7 @@ export function Conversation({ target, headerActions }: Props) {
       createdAt: new Date().toISOString(),
       deletedAt: null,
       editedAt: null,
+      pinnedAt: null,
       pending: true,
     };
     cache.insertPending(optimistic);
@@ -124,6 +130,9 @@ export function Conversation({ target, headerActions }: Props) {
 
   const handleEdit = (m: Message, text: string) =>
     edit.mutate({ messageId: m.id, text }, { onError: () => toast.error("Не удалось изменить сообщение") });
+
+  const handlePin = (m: Message, doPin: boolean) =>
+    pin.mutate({ messageId: m.id, pin: doPin }, { onError: () => toast.error("Не удалось закрепить сообщение") });
 
   const handleReact = (m: Message, emoji: string) => {
     const existing = m.reactions.find((r) => r.emoji === emoji);
@@ -156,6 +165,26 @@ export function Conversation({ target, headerActions }: Props) {
         {headerActions}
       </header>
 
+      {pinned && pinned.length > 0 && (
+        <div className="conv__pinned">
+          <Icon.Pin size={15} />
+          <div className="conv__pinned-list">
+            {pinned.map((m) => (
+              <div key={m.id} className="conv__pinned-item">
+                <span className="conv__pinned-text">{m.text}</span>
+                <button
+                  className="conv__pinned-unpin"
+                  title="Открепить"
+                  onClick={() => handlePin(m, false)}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="conv__scroll">
         {isPending && (
           <div style={{ margin: "auto" }}>
@@ -187,6 +216,7 @@ export function Conversation({ target, headerActions }: Props) {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onReact={handleReact}
+                onPin={handlePin}
               />
             </div>
           );

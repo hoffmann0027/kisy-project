@@ -36,6 +36,8 @@ type Message struct {
 	IsDeleted bool
 	DeletedAt *time.Time
 	EditedAt  *time.Time
+	PinnedAt  *time.Time
+	PinnedBy  *uuid.UUID
 	CreatedAt time.Time
 }
 
@@ -65,6 +67,7 @@ type DTO struct {
 	CreatedAt   time.Time         `json:"createdAt"`
 	DeletedAt   *time.Time        `json:"deletedAt"`
 	EditedAt    *time.Time        `json:"editedAt"`
+	PinnedAt    *time.Time        `json:"pinnedAt"`
 }
 
 func (m *Message) ToDTO() DTO {
@@ -81,6 +84,7 @@ func (m *Message) ToDTO() DTO {
 		CreatedAt:   m.CreatedAt,
 		DeletedAt:   m.DeletedAt,
 		EditedAt:    m.EditedAt,
+		PinnedAt:    m.PinnedAt,
 	}
 	if !m.IsDeleted {
 		dto.Text = m.Text

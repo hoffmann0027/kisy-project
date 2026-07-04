@@ -96,6 +96,10 @@ export const messagesApi = {
   edit: (messageId: string, text: string) =>
     apiClient.patch<{ message: Message }>(`/messages/${messageId}`, { text }),
   remove: (messageId: string) => apiClient.del<{ deleted: boolean }>(`/messages/${messageId}`),
+  pin: (messageId: string) => apiClient.post<{ message: Message }>(`/messages/${messageId}/pin`),
+  unpin: (messageId: string) => apiClient.post<{ message: Message }>(`/messages/${messageId}/unpin`),
+  listPinned: (chatType: ChatType, chatId: string) =>
+    apiClient.get<{ pinned: Message[] }>(`/messages/pinned?chatType=${chatType}&chatId=${chatId}`),
   addReaction: (messageId: string, emoji: string) =>
     apiClient.post<{ ok: boolean }>(`/messages/${messageId}/reactions`, { emoji }),
   removeReaction: (messageId: string, emoji: string) =>

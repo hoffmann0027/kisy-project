@@ -26,8 +26,60 @@ func NewHandler(svc *Service, actor func(*http.Request) (ActorMeta, bool)) *Hand
 func (h *Handler) Routes(r chi.Router) {
 	r.Post("/messages", h.send)
 	r.Get("/messages", h.list)
+	r.Get("/messages/pinned", h.listPinned)
 	r.Patch("/messages/{messageID}", h.edit)
 	r.Delete("/messages/{messageID}", h.delete)
+	r.Post("/messages/{messageID}/pin", h.pin(true))
+	r.Post("/messages/{messageID}/unpin", h.pin(false))
+}
+
+func (h *Handler) listPinned(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actor(r)
+	if !ok {
+		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
+		return
+	}
+	q := r.URL.Query()
+	chatType := q.Get("chatType")
+	if chatType != ChatPrivate && chatType != ChatGroup {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "chatType must be 'private' or 'group'")
+		return
+	}
+	chatID, err := uuid.Parse(q.Get("chatId"))
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "chatId must be a valid UUID")
+		return
+	}
+	list, err := h.svc.ListPinned(r.Context(), chatType, chatID, actor)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	if list == nil {
+		list = []DTO{}
+	}
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"pinned": list})
+}
+
+func (h *Handler) pin(pin bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		actor, ok := h.actor(r)
+		if !ok {
+			httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
+			return
+		}
+		id, err := uuid.Parse(chi.URLParam(r, "messageID"))
+		if err != nil {
+			httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "message not found")
+			return
+		}
+		dto, err := h.svc.SetPinned(r.Context(), id, pin, actor)
+		if err != nil {
+			h.writeError(w, r, err)
+			return
+		}
+		httpresponse.OK(w, r, http.StatusOK, map[string]any{"message": dto})
+	}
 }
 
 type editRequest struct {

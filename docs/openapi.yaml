@@ -825,6 +825,45 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /messages/pinned:
+    get:
+      tags: [messages]
+      summary: List a chat's pinned messages
+      parameters:
+        - { name: chatType, in: query, required: true, schema: { type: string, enum: [private, group] } }
+        - { name: chatId, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Pinned messages, most recently pinned first
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          pinned: { type: array, items: { $ref: '#/components/schemas/Message' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /messages/{messageID}/pin:
+    post:
+      tags: [messages]
+      summary: Pin a message (any chat participant)
+      parameters: [{ name: messageID, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Pinned, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /messages/{messageID}/unpin:
+    post:
+      tags: [messages]
+      summary: Unpin a message (any chat participant)
+      parameters: [{ name: messageID, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Unpinned, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /messages/{messageID}:
     patch:
       tags: [messages]
@@ -1524,6 +1563,7 @@ components:
         createdAt: { type: string, format: date-time }
         deletedAt: { type: [string, 'null'], format: date-time }
         editedAt: { type: [string, 'null'], format: date-time }
+        pinnedAt: { type: [string, 'null'], format: date-time }
     MessagePage:
       type: object
       properties:

@@ -3,6 +3,7 @@ import { Icon } from "@shared/ui/icons";
 import { IconButton } from "@shared/ui";
 import type { Message } from "@shared/api/types";
 import { wsClient } from "@shared/ws/client";
+import { useDraftStore } from "@shared/store/drafts";
 
 interface Props {
   chatType: "private" | "group";
@@ -14,17 +15,25 @@ interface Props {
 }
 
 export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply, onSend }: Props) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => useDraftStore.getState().drafts[chatId] ?? "");
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const typingSent = useRef(false);
   const typingTimer = useRef<number>();
+  const setDraft = useDraftStore((s) => s.setDraft);
+  const clearDraft = useDraftStore((s) => s.clearDraft);
 
-  // Reset draft when switching chats.
+  // On switching chats, restore that chat's saved draft (the previous chat's
+  // text was persisted on every keystroke below, so nothing is lost).
   useEffect(() => {
-    setText("");
+    setText(useDraftStore.getState().drafts[chatId] ?? "");
     onClearReply();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId]);
+
+  const updateText = (value: string) => {
+    setText(value);
+    setDraft(chatId, value);
+  };
 
   useEffect(() => {
     const el = areaRef.current;
@@ -50,6 +59,7 @@ export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply
     if (!trimmed) return;
     onSend(trimmed, replyTo?.id);
     setText("");
+    clearDraft(chatId);
     onClearReply();
     typingSent.current = false;
     wsClient.send({ type: "typing.stop", data: { chatType, chatId } });
@@ -79,7 +89,7 @@ export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply
           rows={1}
           value={text}
           onChange={(e) => {
-            setText(e.target.value);
+            updateText(e.target.value);
             signalTyping();
           }}
           onKeyDown={(e) => {
