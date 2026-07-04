@@ -28,6 +28,7 @@ import (
 	"kisy-backend/internal/messages"
 	"kisy-backend/internal/notifications"
 	"kisy-backend/internal/platform/ratelimit"
+	"kisy-backend/internal/push"
 	"kisy-backend/internal/rating"
 	"kisy-backend/internal/reactions"
 	"kisy-backend/internal/readstate"
@@ -54,6 +55,7 @@ type modules struct {
 	favoritesHandler     *favorites.Handler
 	feedbackHandler      *feedback.Handler
 	searchHandler        *search.Handler
+	pushHandler          *push.Handler
 	notificationsHandler *notifications.Handler
 	boardsHandler        *boards.Handler
 	ratingHandler        *rating.Handler
@@ -352,6 +354,17 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	notificationsRepo := notifications.NewPostgresRepository()
 	notificationsSvc := notifications.NewService(pool, notificationsRepo, recipientResolver, usernameResolver, notificationsRepo, wsPublisher)
 	messagesSvc.SetNotifier(notificationsSvc)
+
+	// --- web push ---
+	pushSvc := push.NewService(pool, push.NewPostgresRepository(), log, cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, cfg.VAPIDSubject)
+	notificationsSvc.SetPusher(pushSvc)
+	pushHandler := push.NewHandler(pushSvc, func(r *http.Request) (uuid.UUID, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return uuid.Nil, false
+		}
+		return claims.UserID, true
+	})
 	notificationsHandler := notifications.NewHandler(notificationsSvc, func(r *http.Request) (uuid.UUID, bool) {
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {
@@ -424,6 +437,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		favoritesHandler:     favoritesHandler,
 		feedbackHandler:      feedbackHandler,
 		searchHandler:        searchHandler,
+		pushHandler:          pushHandler,
 		notificationsHandler: notificationsHandler,
 		boardsHandler:        boardsHandler,
 		ratingHandler:        ratingHandler,

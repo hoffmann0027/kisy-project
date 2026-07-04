@@ -113,6 +113,13 @@ export const attachmentsApi = {
   upload: (file: File) => apiClient.uploadFile<{ attachment: Attachment }>("/attachments", file),
 };
 
+export const pushApi = {
+  vapidKey: () => apiClient.get<{ publicKey: string; enabled: boolean }>("/push/vapid-public-key"),
+  subscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
+    apiClient.post<{ subscribed: boolean }>("/push/subscribe", sub),
+  unsubscribe: (endpoint: string) => apiClient.post<{ unsubscribed: boolean }>("/push/unsubscribe", { endpoint }),
+};
+
 export const favoritesApi = {
   list: () => apiClient.get<{ favorites: Favorite[] }>("/favorites"),
   set: (fav: Favorite) => apiClient.put<{ ok: boolean }>("/favorites", fav),

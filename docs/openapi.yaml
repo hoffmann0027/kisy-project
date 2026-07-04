@@ -996,6 +996,60 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /push/vapid-public-key:
+    get:
+      tags: [notifications]
+      summary: Get the VAPID public key (for Web Push subscription)
+      responses:
+        '200':
+          description: Key and whether push is enabled server-side
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          publicKey: { type: string }
+                          enabled: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /push/subscribe:
+    post:
+      tags: [notifications]
+      summary: Register this browser's Web Push subscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint, keys]
+              properties:
+                endpoint: { type: string }
+                keys:
+                  type: object
+                  properties:
+                    p256dh: { type: string }
+                    auth: { type: string }
+      responses:
+        '200': { description: Subscribed, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /push/unsubscribe:
+    post:
+      tags: [notifications]
+      summary: Remove a Web Push subscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [endpoint], properties: { endpoint: { type: string } } }
+      responses:
+        '200': { description: Unsubscribed, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /ws:
     get:
       tags: [websocket]

@@ -33,6 +33,12 @@ type Config struct {
 	// Empty (development) allows any origin.
 	WSAllowedOrigin string
 
+	// VAPID keys enable Web Push. When the public/private pair is empty, push
+	// is disabled. Subject is a mailto: or https: contact URL.
+	VAPIDPublicKey  string
+	VAPIDPrivateKey string
+	VAPIDSubject    string
+
 	// BootstrapCEOUsername/Password create the very first Level-1 account
 	// when the users table is empty. Optional after first launch.
 	BootstrapCEOUsername string
@@ -168,6 +174,9 @@ func Load() (*Config, error) {
 	cfg.BootstrapCEOPassword = os.Getenv("BOOTSTRAP_CEO_PASSWORD")
 
 	cfg.WSAllowedOrigin = os.Getenv("WS_ALLOWED_ORIGIN")
+	cfg.VAPIDPublicKey = os.Getenv("VAPID_PUBLIC_KEY")
+	cfg.VAPIDPrivateKey = os.Getenv("VAPID_PRIVATE_KEY")
+	cfg.VAPIDSubject = getEnv("VAPID_SUBJECT", "mailto:admin@kisy.local")
 	cfg.WebDir = os.Getenv("WEB_DIR")
 
 	// Migrations run automatically outside production; RUN_MIGRATIONS

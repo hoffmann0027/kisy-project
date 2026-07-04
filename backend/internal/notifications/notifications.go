@@ -129,6 +129,12 @@ type MentionSink interface {
 	AddMention(ctx context.Context, q db.DBTX, messageID, userID uuid.UUID) error
 }
 
+// Pusher sends a Web Push notification to a user's browsers. Injected to avoid
+// a notifications→push import cycle; nil disables push.
+type Pusher interface {
+	Notify(ctx context.Context, userID uuid.UUID, title, body, url string)
+}
+
 type Service struct {
 	pool       *pgxpool.Pool
 	repo       Repository
@@ -136,7 +142,11 @@ type Service struct {
 	usernames  UsernameResolver
 	mentions   MentionSink
 	ws         WSPublisher
+	pusher     Pusher
 }
+
+// SetPusher wires Web Push delivery for new notifications.
+func (s *Service) SetPusher(p Pusher) { s.pusher = p }
 
 func NewService(pool *pgxpool.Pool, repo Repository, recipients RecipientResolver, usernames UsernameResolver, mentions MentionSink, wsPub WSPublisher) *Service {
 	return &Service{pool: pool, repo: repo, recipients: recipients, usernames: usernames, mentions: mentions, ws: wsPub}

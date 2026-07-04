@@ -84,4 +84,11 @@ func (s *Service) raiseMention(ctx context.Context, target uuid.UUID, m messages
 			"senderId":  m.SenderID,
 		})
 	}
+	if s.pusher != nil {
+		url := "/chat/" + m.ChatID.String()
+		if m.ChatType == messages.ChatGroup {
+			url = "/group/" + m.ChatID.String()
+		}
+		go s.pusher.Notify(context.Background(), target, "KISY", "Вас упомянули в сообщении", url)
+	}
 }

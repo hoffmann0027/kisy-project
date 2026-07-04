@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Input, Modal, toast } from "@shared/ui";
 import { roleLabel } from "@shared/api/types";
 import { authApi, usersApi } from "@shared/api/endpoints";
 import { useAuthStore } from "@shared/store/auth";
+import { disablePush, enablePush, pushEnabled, pushSupported } from "@shared/lib/push";
 import { AvatarCropper } from "./AvatarCropper";
 
 interface Props {
@@ -20,6 +21,31 @@ export function ProfileModal({ open, onClose }: Props) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+
+  useEffect(() => {
+    if (open && pushSupported()) void pushEnabled().then(setPushOn);
+  }, [open]);
+
+  const togglePush = async () => {
+    setPushBusy(true);
+    try {
+      if (pushOn) {
+        await disablePush();
+        setPushOn(false);
+        toast.success("Push-уведомления отключены");
+      } else {
+        const ok = await enablePush();
+        setPushOn(ok);
+        toast[ok ? "success" : "error"](ok ? "Push-уведомления включены" : "Не удалось включить push");
+      }
+    } catch {
+      toast.error("Не удалось изменить push-уведомления");
+    } finally {
+      setPushBusy(false);
+    }
+  };
 
   if (!user) return null;
 
@@ -110,6 +136,20 @@ export function ProfileModal({ open, onClose }: Props) {
           Изменить пароль
         </Button>
       </div>
+
+      {pushSupported() && (
+        <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 15 }}>Push-уведомления</div>
+            <div style={{ color: "var(--color-text-secondary)", fontSize: 13 }}>
+              О новых упоминаниях, когда вкладка закрыта
+            </div>
+          </div>
+          <Button variant="secondary" onClick={() => void togglePush()} loading={pushBusy}>
+            {pushOn ? "Отключить" : "Включить"}
+          </Button>
+        </div>
+      )}
 
       <Button variant="danger" block onClick={() => void logout()}>
         Выйти из аккаунта
