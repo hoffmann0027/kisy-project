@@ -14,7 +14,8 @@ import {
 import { messagesApi } from "@shared/api/endpoints";
 import { useAuthStore } from "@shared/store/auth";
 import { useTypingStore } from "@shared/store/typing";
-import { MessageBubble } from "./MessageBubble";
+import { useReadReceiptStore } from "@shared/store/readReceipts";
+import { MessageBubble, type DeliveryStatus } from "./MessageBubble";
 import { Composer } from "./Composer";
 
 export interface ConversationTarget {
@@ -25,6 +26,8 @@ export interface ConversationTarget {
   avatarUrl?: string | null;
   online?: boolean;
   offlineLabel?: string;
+  /** Counterpart's last-read position, seeds read receipts for private chats. */
+  otherLastReadAt?: string | null;
 }
 
 interface Props {
@@ -49,6 +52,22 @@ export function Conversation({ target, headerActions }: Props) {
   const messages = useMemo(() => flattenMessages(data?.pages), [data]);
   const typers = Array.from(typingByChat[chatId] ?? []).filter((id) => id !== me.id);
 
+  // Read receipts: seed the counterpart's read position from the chat DTO,
+  // then read the (possibly fresher) live value the WebSocket layer maintains.
+  const seedRead = useReadReceiptStore((s) => s.seed);
+  const otherReadAt = useReadReceiptStore((s) => s.otherReadAt[chatId]);
+  useEffect(() => {
+    seedRead(chatId, target.otherLastReadAt ?? null);
+  }, [chatId, target.otherLastReadAt, seedRead]);
+
+  const statusFor = (m: Message): DeliveryStatus | undefined => {
+    if (m.senderId !== me.id) return undefined;
+    if (m.pending) return "pending";
+    if (m.failed) return "failed";
+    if (chatType !== "private") return undefined; // group ticks are out of scope
+    return otherReadAt && m.createdAt <= otherReadAt ? "read" : "sent";
+  };
+
   const lastCount = useRef(0);
   useEffect(() => {
     if (messages.length > lastCount.current) {
@@ -58,17 +77,41 @@ export function Conversation({ target, headerActions }: Props) {
   }, [messages.length]);
 
   useEffect(() => {
-    if (messages.length === 0) return;
-    const newest = messages[messages.length - 1];
+    // Mark the newest server-acked message as read (skip optimistic bubbles,
+    // whose temp ids are not valid on the server).
+    const newest = [...messages].reverse().find((m) => !m.pending);
+    if (!newest) return;
     void messagesApi.markRead(chatType, chatId, newest.id).catch(() => {});
   }, [chatType, chatId, messages.length]);
 
   const handleSend = (text: string, replyToId?: string) => {
+    // Optimistic bubble: show the message instantly, reconcile on server ack.
+    const tempId = `temp-${crypto.randomUUID()}`;
+    const optimistic: Message = {
+      id: tempId,
+      chatId,
+      chatType,
+      senderId: me.id,
+      text,
+      replyTo: replyToId ?? null,
+      attachments: [],
+      reactions: [],
+      mentions: [],
+      isDeleted: false,
+      createdAt: new Date().toISOString(),
+      deletedAt: null,
+      pending: true,
+    };
+    cache.insertPending(optimistic);
+
     send.mutate(
       { text, replyTo: replyToId },
       {
-        onSuccess: ({ message }) => cache.insert(message),
-        onError: () => toast.error("Не удалось отправить сообщение"),
+        onSuccess: ({ message }) => cache.resolvePending(chatType, chatId, tempId, message),
+        onError: () => {
+          cache.patch(chatType, chatId, tempId, (m) => ({ ...m, pending: false, failed: true }));
+          toast.error("Не удалось отправить сообщение");
+        },
       },
     );
   };
@@ -131,6 +174,7 @@ export function Conversation({ target, headerActions }: Props) {
                 message={m}
                 mine={m.senderId === me.id}
                 canDelete={m.senderId === me.id || me.roleLevel === 1}
+                status={statusFor(m)}
                 replyPreview={previewFor(m.replyTo)}
                 onReply={setReplyTo}
                 onDelete={handleDelete}

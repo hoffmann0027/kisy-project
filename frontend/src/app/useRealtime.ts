@@ -8,6 +8,7 @@ import { notificationKeys } from "@entities/notification/queries";
 import { messageKeys } from "@entities/message/queries";
 import { usePresenceStore } from "@shared/store/presence";
 import { useTypingStore } from "@shared/store/typing";
+import { useReadReceiptStore } from "@shared/store/readReceipts";
 import { useAuthStore } from "@shared/store/auth";
 
 // useRealtime connects the WebSocket for the session and routes server
@@ -22,12 +23,23 @@ export function useRealtime() {
 
     wsClient.connect();
 
-    // Subscribe to presence of every known chat partner.
-    const chats = qc.getQueryData<Chat[]>(chatKeys.list) ?? [];
-    const partnerIds = chats.map((c) => c.otherUserId);
-    if (partnerIds.length > 0) {
-      wsClient.send({ type: "presence.subscribe", data: { userIds: partnerIds } });
-    }
+    // Subscribe to presence of every known chat partner. Runs on every
+    // (re)connect so subscriptions survive socket drops, and refetches chats
+    // + open conversations to backfill anything missed while disconnected.
+    const resubscribe = () => {
+      const chats = qc.getQueryData<Chat[]>(chatKeys.list) ?? [];
+      const partnerIds = chats.map((c) => c.otherUserId);
+      if (partnerIds.length > 0) {
+        wsClient.send({ type: "presence.subscribe", data: { userIds: partnerIds } });
+      }
+    };
+    const unsubOpen = wsClient.onOpen(() => {
+      resubscribe();
+      // Backfill: pull fresh history for open conversations and the chat list.
+      void qc.invalidateQueries({ queryKey: ["messages"] });
+      void qc.invalidateQueries({ queryKey: chatKeys.list });
+    });
+    resubscribe();
 
     const unsub = wsClient.subscribe((ev: ServerEvent) => {
       switch (ev.event) {
@@ -40,6 +52,13 @@ export function useRealtime() {
             isDeleted: true,
             text: null,
           }));
+          break;
+        case "message.read":
+          // The counterpart advanced their read position; record it so our
+          // own messages up to that point render as read.
+          if (ev.data.userId !== meId) {
+            handleMessageRead(qc, ev.data.chatType as ChatType, ev.data.chatId, ev.data.messageId);
+          }
           break;
         case "reaction.added":
         case "reaction.removed":
@@ -69,9 +88,27 @@ export function useRealtime() {
 
     return () => {
       unsub();
+      unsubOpen();
       wsClient.disconnect();
     };
   }, [qc, meId]);
+}
+
+// handleMessageRead advances the counterpart's read position for a chat. The
+// read event carries a message id; we resolve its timestamp from the message
+// cache so read receipts compare like-for-like, falling back to "now" if the
+// message is not loaded locally.
+function handleMessageRead(
+  qc: ReturnType<typeof useQueryClient>,
+  chatType: ChatType,
+  chatId: string,
+  messageId: string,
+) {
+  const cached = qc.getQueryData<{ pages: { items: Message[] }[] }>(messageKeys.list(chatType, chatId));
+  let iso = new Date().toISOString();
+  const found = cached?.pages.flatMap((p) => p.items).find((m) => m.id === messageId);
+  if (found) iso = found.createdAt;
+  useReadReceiptStore.getState().advance(chatId, iso);
 }
 
 function handleMessageCreated(qc: ReturnType<typeof useQueryClient>, msg: Message, meId: string) {

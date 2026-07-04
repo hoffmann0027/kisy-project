@@ -1161,6 +1161,9 @@ components:
         otherUserId: { type: string, format: uuid }
         otherUser: { oneOf: [{ $ref: '#/components/schemas/User' }, { type: 'null' }] }
         unreadCount: { type: integer }
+        otherLastReadAt:
+          description: When the counterpart last read this chat (drives read receipts); null if never.
+          oneOf: [{ type: string, format: date-time }, { type: 'null' }]
         createdAt: { type: string, format: date-time }
     Message:
       type: object

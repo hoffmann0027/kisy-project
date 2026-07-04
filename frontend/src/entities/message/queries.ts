@@ -29,8 +29,8 @@ export function useSendMessage(chatType: ChatType, chatId: string) {
   return useMutation({
     mutationFn: (args: { text: string; replyTo?: string }) =>
       messagesApi.send(chatType, chatId, args.text, args.replyTo),
-    // The created message arrives via WebSocket and is inserted there, so
-    // we do not optimistically duplicate it here.
+    // Optimistic insertion is handled by the caller via the cache writer so
+    // the pending bubble can be reconciled with the server ack / WS echo.
   });
 }
 
@@ -68,6 +68,49 @@ export function useMessageCacheWriter() {
         const pages = (old.pages as MessagePage[]).map((p) => ({
           ...p,
           items: p.items.map((m) => (m.id === messageId ? fn(m) : m)),
+        }));
+        return { ...old, pages };
+      });
+    },
+    // insertPending shows an optimistic bubble immediately; unlike insert it
+    // does not bail when the cache is empty, so the first message in a fresh
+    // conversation still appears at once.
+    insertPending(msg: Message) {
+      qc.setQueryData(messageKeys.list(msg.chatType, msg.chatId), (old: any) => {
+        if (!old) {
+          return { pageParams: [undefined], pages: [{ items: [msg], hasMore: false }] };
+        }
+        const pages = old.pages as MessagePage[];
+        const first = { ...pages[0], items: [msg, ...pages[0].items] };
+        return { ...old, pages: [first, ...pages.slice(1)] };
+      });
+    },
+    // resolvePending swaps the optimistic bubble for the server's message,
+    // deduping against a WebSocket echo that may already have inserted it.
+    resolvePending(chatType: ChatType, chatId: string, tempId: string, real: Message) {
+      qc.setQueryData(messageKeys.list(chatType, chatId), (old: any) => {
+        if (!old) return old;
+        let seenReal = false;
+        const pages = (old.pages as MessagePage[]).map((p) => ({
+          ...p,
+          items: p.items
+            .map((m) => (m.id === tempId ? real : m))
+            .filter((m) => {
+              if (m.id !== real.id) return true;
+              if (seenReal) return false; // drop duplicate echo
+              seenReal = true;
+              return true;
+            }),
+        }));
+        return { ...old, pages };
+      });
+    },
+    remove(chatType: ChatType, chatId: string, messageId: string) {
+      qc.setQueryData(messageKeys.list(chatType, chatId), (old: any) => {
+        if (!old) return old;
+        const pages = (old.pages as MessagePage[]).map((p) => ({
+          ...p,
+          items: p.items.filter((m) => m.id !== messageId),
         }));
         return { ...old, pages };
       });

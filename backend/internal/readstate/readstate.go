@@ -6,6 +6,7 @@ package readstate
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -24,6 +25,11 @@ type Repository interface {
 	// Unread = messages from other users, not deleted, created after the
 	// user's last-read timestamp (or all such messages if never read).
 	UnreadForChats(ctx context.Context, q db.DBTX, userID uuid.UUID, chatType string, chatIDs []uuid.UUID) (map[uuid.UUID]int, error)
+	// OthersLastRead returns, per private chat, the last-read timestamp of
+	// the *other* participant. Because a private chat has exactly two users,
+	// "user_id <> self" uniquely identifies the counterpart, so no explicit
+	// participant list is needed. Chats the other user never read are absent.
+	OthersLastRead(ctx context.Context, q db.DBTX, self uuid.UUID, chatIDs []uuid.UUID) (map[uuid.UUID]time.Time, error)
 }
 
 type PostgresRepository struct{}
@@ -76,6 +82,34 @@ func (r *PostgresRepository) UnreadForChats(ctx context.Context, q db.DBTX, user
 	return out, rows.Err()
 }
 
+func (r *PostgresRepository) OthersLastRead(ctx context.Context, q db.DBTX, self uuid.UUID, chatIDs []uuid.UUID) (map[uuid.UUID]time.Time, error) {
+	out := make(map[uuid.UUID]time.Time, len(chatIDs))
+	if len(chatIDs) == 0 {
+		return out, nil
+	}
+	rows, err := q.Query(ctx, `
+		SELECT chat_id, last_read_at
+		FROM chat_read_state
+		WHERE chat_type = 'private'
+		  AND chat_id = ANY($1)
+		  AND user_id <> $2`,
+		chatIDs, self)
+	if err != nil {
+		return nil, fmt.Errorf("readstate: others last read: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id uuid.UUID
+		var at time.Time
+		if err := rows.Scan(&id, &at); err != nil {
+			return nil, fmt.Errorf("readstate: scan: %w", err)
+		}
+		out[id] = at
+	}
+	return out, rows.Err()
+}
+
 // Actor identifies the acting user.
 type Actor struct {
 	UserID    uuid.UUID
@@ -103,6 +137,12 @@ func (s *Service) MarkRead(ctx context.Context, chatType string, chatID, message
 // UnreadForPrivateChats returns unread counts keyed by chat id.
 func (s *Service) UnreadForPrivateChats(ctx context.Context, userID uuid.UUID, chatIDs []uuid.UUID) (map[uuid.UUID]int, error) {
 	return s.repo.UnreadForChats(ctx, s.pool, userID, "private", chatIDs)
+}
+
+// OthersLastReadPrivate returns, per private chat, when the counterpart last
+// read it — used to render read receipts (ticks) on the actor's own messages.
+func (s *Service) OthersLastReadPrivate(ctx context.Context, userID uuid.UUID, chatIDs []uuid.UUID) (map[uuid.UUID]time.Time, error) {
+	return s.repo.OthersLastRead(ctx, s.pool, userID, chatIDs)
 }
 
 // PersistRead is a fire-and-forget hook for the WebSocket read receipt; it

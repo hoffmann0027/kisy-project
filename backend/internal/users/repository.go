@@ -23,6 +23,9 @@ type Repository interface {
 	GetByUsername(ctx context.Context, q db.DBTX, username string) (*User, error)
 	Count(ctx context.Context, q db.DBTX) (int64, error)
 	UpdateUsername(ctx context.Context, q db.DBTX, id uuid.UUID, username string) error
+	// TouchLastSeen records that the user was last active now (called when
+	// their final WebSocket connection closes, to power "last seen" labels).
+	TouchLastSeen(ctx context.Context, q db.DBTX, id uuid.UUID) error
 	UpdatePasswordHash(ctx context.Context, q db.DBTX, id uuid.UUID, hash string) error
 	// AdminResetPasswordHash sets a new hash and forces a change on next
 	// login (used when the CEO resets someone's credentials).
@@ -112,6 +115,13 @@ func (r *PostgresRepository) UpdateUsername(ctx context.Context, q db.DBTX, id u
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *PostgresRepository) TouchLastSeen(ctx context.Context, q db.DBTX, id uuid.UUID) error {
+	if _, err := q.Exec(ctx, `UPDATE users SET last_seen_at = now() WHERE id = $1`, id); err != nil {
+		return fmt.Errorf("users: touch last seen: %w", err)
 	}
 	return nil
 }
