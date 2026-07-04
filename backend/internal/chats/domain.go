@@ -47,7 +47,10 @@ type DTO struct {
 	OtherUserID uuid.UUID `json:"otherUserId"`
 	OtherUser   any       `json:"otherUser"`
 	UnreadCount int       `json:"unreadCount"`
-	CreatedAt   time.Time `json:"createdAt"`
+	// OtherLastReadAt is when the counterpart last read this chat, powering
+	// read receipts on the actor's own messages. Nil if they never read it.
+	OtherLastReadAt *time.Time `json:"otherLastReadAt"`
+	CreatedAt       time.Time  `json:"createdAt"`
 }
 
 func (c *PrivateChat) ToDTO(self uuid.UUID) DTO {

@@ -53,6 +53,12 @@ func (s *Service) PublicProfile(ctx context.Context, id uuid.UUID) (DTO, bool) {
 	return u.ToDTO(), true
 }
 
+// TouchLastSeen records the user's last-active time. It is best-effort
+// (called from the WebSocket disconnect path) so errors are swallowed.
+func (s *Service) TouchLastSeen(ctx context.Context, userID uuid.UUID) {
+	_ = s.repo.TouchLastSeen(ctx, s.pool, userID)
+}
+
 // ActorMeta carries audit attributes of the acting user.
 type ActorMeta struct {
 	SessionID uuid.UUID

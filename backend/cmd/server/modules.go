@@ -235,6 +235,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	// --- read state / unread counters ---
 	readstateSvc := readstate.NewService(pool, readstate.NewPostgresRepository(), readstate.ChatAuthorizer(chatAuthorizer))
 	chatsSvc.SetUnreadLoader(readstateSvc.UnreadForPrivateChats)
+	chatsSvc.SetOtherReadLoader(readstateSvc.OthersLastReadPrivate)
 	readstateHandler := readstate.NewHandler(readstateSvc, func(r *http.Request) (readstate.Actor, bool) {
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {
@@ -273,6 +274,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	})
 
 	hub.SetHandlers(messagesSvc, chatAuthorizer, readstateSvc.PersistRead)
+	hub.SetPresenceSink(usersSvc.TouchLastSeen)
 
 	// --- task boards (per group) ---
 	boardsSvc := boards.NewService(pool, boards.NewPostgresRepository(), boards.Access{

@@ -3,6 +3,7 @@ package chats
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -28,16 +29,21 @@ type TargetLookup func(ctx context.Context, id uuid.UUID) (level int, ok bool)
 // chats→readstate import cycle.
 type UnreadLoader func(ctx context.Context, userID uuid.UUID, chatIDs []uuid.UUID) (map[uuid.UUID]int, error)
 
+// OtherReadLoader returns, per chat id, when the counterpart last read it.
+// Injected to avoid a chats→readstate import cycle.
+type OtherReadLoader func(ctx context.Context, userID uuid.UUID, chatIDs []uuid.UUID) (map[uuid.UUID]time.Time, error)
+
 // ProfileLoader returns a user's public profile for chat enrichment,
 // injected to avoid a chats→users import cycle.
 type ProfileLoader func(ctx context.Context, userID uuid.UUID) (any, bool)
 
 type Service struct {
-	pool     *pgxpool.Pool
-	repo     Repository
-	lookup   TargetLookup
-	unread   UnreadLoader
-	profiles ProfileLoader
+	pool      *pgxpool.Pool
+	repo      Repository
+	lookup    TargetLookup
+	unread    UnreadLoader
+	otherRead OtherReadLoader
+	profiles  ProfileLoader
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository, lookup TargetLookup) *Service {
@@ -46,6 +52,9 @@ func NewService(pool *pgxpool.Pool, repo Repository, lookup TargetLookup) *Servi
 
 // SetUnreadLoader wires unread-counter enrichment for chat listings.
 func (s *Service) SetUnreadLoader(l UnreadLoader) { s.unread = l }
+
+// SetOtherReadLoader wires read-receipt enrichment for chat listings.
+func (s *Service) SetOtherReadLoader(l OtherReadLoader) { s.otherRead = l }
 
 // SetProfileLoader wires other-participant enrichment.
 func (s *Service) SetProfileLoader(l ProfileLoader) { s.profiles = l }
@@ -83,6 +92,19 @@ func (s *Service) ListDTOsForUser(ctx context.Context, actor ActorMeta) ([]DTO, 
 		}
 		for i := range dtos {
 			dtos[i].UnreadCount = counts[dtos[i].ID]
+		}
+	}
+
+	if s.otherRead != nil && len(ids) > 0 {
+		reads, err := s.otherRead(ctx, actor.UserID, ids)
+		if err != nil {
+			return nil, err
+		}
+		for i := range dtos {
+			if at, ok := reads[dtos[i].ID]; ok {
+				at := at
+				dtos[i].OtherLastReadAt = &at
+			}
 		}
 	}
 	return dtos, nil

@@ -11,6 +11,7 @@ type Handler = (e: ServerEvent) => void;
 class WsClient {
   private socket: WebSocket | null = null;
   private handlers = new Set<Handler>();
+  private openHandlers = new Set<() => void>();
   private reconnectDelay = 1000;
   private shouldRun = false;
   private queue: string[] = [];
@@ -31,6 +32,9 @@ class WsClient {
       this.reconnectDelay = 1000;
       for (const frame of this.queue) socket.send(frame);
       this.queue = [];
+      // Notify subscribers on every (re)connect so they can re-establish
+      // server-side subscriptions (presence) and backfill missed messages.
+      for (const h of this.openHandlers) h();
     };
 
     socket.onmessage = (ev) => {
@@ -72,6 +76,12 @@ class WsClient {
   subscribe(handler: Handler): () => void {
     this.handlers.add(handler);
     return () => this.handlers.delete(handler);
+  }
+
+  // onOpen registers a callback fired on every successful (re)connect.
+  onOpen(handler: () => void): () => void {
+    this.openHandlers.add(handler);
+    return () => this.openHandlers.delete(handler);
   }
 
   disconnect() {

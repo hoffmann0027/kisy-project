@@ -10,6 +10,7 @@ import { NewGroupModal } from "@features/new-chat/NewGroupModal";
 import { ProfileModal } from "@features/profile/ProfileModal";
 import { NotificationsModal } from "@features/notifications/NotificationsModal";
 import { Icon } from "@shared/ui/icons";
+import { formatRelative } from "@shared/lib/format";
 import type { Chat, Group } from "@shared/api/types";
 import { useChats } from "@entities/chat/queries";
 import { useGroups } from "@entities/group/queries";
@@ -38,6 +39,7 @@ export function MessengerPage() {
 
   const other = activeChat?.otherUser;
   const chatOnline = other ? online.has(other.id) || other.status === "online" : false;
+  const offlineLabel = other?.lastSeen ? `был(а) в сети ${formatRelative(other.lastSeen)}` : "не в сети";
 
   return (
     <div className="msgr">
@@ -63,6 +65,8 @@ export function MessengerPage() {
             avatarName: other.displayName,
             avatarUrl: other.avatarUrl,
             online: chatOnline,
+            offlineLabel,
+            otherLastReadAt: activeChat.otherLastReadAt,
           }}
         />
       ) : (

@@ -53,6 +53,9 @@ type Hub struct {
 	sender        Sender
 	authorizeChat ChatAuthorizer
 	onRead        func(ctx context.Context, userID uuid.UUID, chatType string, chatID, messageID uuid.UUID)
+	// onOffline records a user's last-seen time when their final connection
+	// closes (best-effort; may be nil).
+	onOffline func(ctx context.Context, userID uuid.UUID)
 }
 
 type fanoutEnvelope struct {
@@ -81,6 +84,12 @@ func (h *Hub) SetHandlers(sender Sender, authorizeChat ChatAuthorizer, onRead fu
 	h.sender = sender
 	h.authorizeChat = authorizeChat
 	h.onRead = onRead
+}
+
+// SetPresenceSink wires a callback invoked when a user's last connection
+// closes, so their last-seen time can be persisted. May be nil.
+func (h *Hub) SetPresenceSink(onOffline func(ctx context.Context, userID uuid.UUID)) {
+	h.onOffline = onOffline
 }
 
 // Run subscribes to the Redis channels and delivers received events to
@@ -193,6 +202,9 @@ func (h *Hub) markPresence(userID uuid.UUID, online bool) {
 	}
 	if n <= 0 {
 		h.rdb.Del(ctx, key)
+		if h.onOffline != nil {
+			h.onOffline(ctx, userID)
+		}
 		h.publishPresence(userID, false)
 	}
 }

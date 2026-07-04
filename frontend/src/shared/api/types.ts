@@ -20,6 +20,8 @@ export interface Chat {
   otherUserId: string;
   otherUser: User | null;
   unreadCount: number;
+  /** When the counterpart last read this chat (for read receipts); null if never. */
+  otherLastReadAt: string | null;
   createdAt: string;
 }
 
@@ -54,6 +56,10 @@ export interface Message {
   isDeleted: boolean;
   createdAt: string;
   deletedAt: string | null;
+  /** Client-only: true while an optimistically-sent message awaits server ack. */
+  pending?: boolean;
+  /** Client-only: true if the optimistic send failed. */
+  failed?: boolean;
 }
 
 export interface MessagePage {
