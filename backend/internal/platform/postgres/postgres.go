@@ -11,15 +11,13 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"kisy-backend/internal/config"
 )
 
-// NewPool creates a connection pool and verifies connectivity with a ping,
-// so startup fails fast if the database is unreachable rather than
-// surfacing the error on the first request.
-func NewPool(ctx context.Context, cfg config.PostgresConfig) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, cfg.DSN())
+// NewPool creates a connection pool from a DSN and verifies connectivity
+// with a ping, so startup fails fast if the database is unreachable rather
+// than surfacing the error on the first request.
+func NewPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
+	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: create pool: %w", err)
 	}
@@ -32,11 +30,14 @@ func NewPool(ctx context.Context, cfg config.PostgresConfig) (*pgxpool.Pool, err
 	return pool, nil
 }
 
-// Migrate applies all pending migrations found in migrationsPath. dsn must
-// use the postgres:// scheme; it is translated to the pgx5 driver scheme
-// that golang-migrate's pgx v5 database driver expects.
+// Migrate applies all pending migrations found in migrationsPath. The dsn
+// may use the postgres:// or postgresql:// scheme (managed providers use
+// either); it is translated to the pgx5 driver scheme that golang-migrate's
+// pgx v5 database driver expects.
 func Migrate(dsn, migrationsPath string) error {
-	migrateDSN := "pgx5://" + strings.TrimPrefix(dsn, "postgres://")
+	trimmed := strings.TrimPrefix(dsn, "postgresql://")
+	trimmed = strings.TrimPrefix(trimmed, "postgres://")
+	migrateDSN := "pgx5://" + trimmed
 
 	m, err := migrate.New("file://"+migrationsPath, migrateDSN)
 	if err != nil {

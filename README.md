@@ -47,6 +47,13 @@ backend.
 локальные Postgres/Redis) и `cd frontend && npm run dev` (Vite на
 http://localhost:5173, проксирует `/api` и `/ws` на `localhost:8080`).
 
+## Бесплатный хостинг (Render)
+
+Всё приложение разворачивается на бесплатном тарифе Render одним blueprint'ом
+(`render.yaml`): бэкенд сам отдаёт собранный фронтенд, БД и Redis — managed
+add-on'ы. Пошаговая инструкция: [docs/deploy-render.md](docs/deploy-render.md).
+Тот же all-in-one образ (`Dockerfile` в корне) можно запустить локально.
+
 ## Операции и наблюдаемость
 
 - `make help` — список задач (up/down/logs/test/lint/vuln/certs/backup…).

@@ -25,6 +25,7 @@ import (
 	"kisy-backend/internal/platform/ratelimit"
 	kisyredis "kisy-backend/internal/platform/redis"
 	"kisy-backend/internal/platform/security"
+	"kisy-backend/internal/platform/spa"
 	"kisy-backend/pkg/httpresponse"
 )
 
@@ -47,21 +48,21 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if cfg.Env != "production" {
-		if err := postgres.Migrate(cfg.Postgres.DSN(), "migrations"); err != nil {
+	if cfg.RunMigrations {
+		if err := postgres.Migrate(cfg.PostgresDSN(), "migrations"); err != nil {
 			return err
 		}
 		log.Info("migrations applied")
 	}
 
-	pgPool, err := postgres.NewPool(ctx, cfg.Postgres)
+	pgPool, err := postgres.NewPool(ctx, cfg.PostgresDSN())
 	if err != nil {
 		return err
 	}
 	defer pgPool.Close()
 	log.Info("connected to postgres")
 
-	redisClient, err := kisyredis.NewClient(ctx, cfg.Redis)
+	redisClient, err := kisyredis.NewClient(ctx, cfg.Redis, cfg.RedisURL)
 	if err != nil {
 		return err
 	}
@@ -82,6 +83,7 @@ func run() error {
 		rdb:           redisClient,
 		mods:          mods,
 		allowedOrigin: cfg.WSAllowedOrigin,
+		webDir:        cfg.WebDir,
 	})
 
 	srv := &http.Server{
@@ -121,6 +123,7 @@ type routerDeps struct {
 	rdb           *goredis.Client
 	mods          *modules
 	allowedOrigin string
+	webDir        string
 }
 
 func newRouter(d routerDeps) http.Handler {
@@ -230,6 +233,14 @@ func newRouter(d routerDeps) http.Handler {
 		// access_token query parameter, so it sits outside RequireAuth.
 		r.Handle("/ws", m.wsHandler)
 	})
+
+	// Serve the built SPA on all remaining paths when a web directory is
+	// configured (single-service, same-origin deploy). API, /ws, /health,
+	// /ready and /metrics are matched first by chi, so this only catches
+	// frontend routes and static assets.
+	if d.webDir != "" {
+		r.Handle("/*", spa.Handler(d.webDir))
+	}
 
 	return r
 }

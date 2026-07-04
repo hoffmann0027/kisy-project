@@ -1,0 +1,17 @@
+# Keep the build context small and secret-free for the all-in-one image.
+.git
+.github
+**/node_modules
+frontend/dist
+frontend/.vite
+frontend/*.tsbuildinfo
+backend/bin
+backend/tmp
+backups
+deploy/nginx/certs
+**/.env
+**/.env.*
+!**/.env.example
+*.log
+docs
+tests

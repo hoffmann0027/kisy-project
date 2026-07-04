@@ -37,6 +37,28 @@ type Config struct {
 	// when the users table is empty. Optional after first launch.
 	BootstrapCEOUsername string
 	BootstrapCEOPassword string
+
+	// DatabaseURL / RedisURL, when set, override the individual connection
+	// fields — used by managed-platform providers (Render, Neon, Upstash)
+	// that inject a single connection string.
+	DatabaseURL string
+	RedisURL    string
+
+	// WebDir, when set, makes the backend also serve the built SPA from
+	// that directory (single-service same-origin deployment).
+	WebDir string
+
+	// RunMigrations forces schema migrations to run on boot. Defaults to
+	// true outside production; a managed single-service deploy sets it true.
+	RunMigrations bool
+}
+
+// PostgresDSN returns the effective database connection string.
+func (c *Config) PostgresDSN() string {
+	if c.DatabaseURL != "" {
+		return c.DatabaseURL
+	}
+	return c.Postgres.DSN()
 }
 
 type PostgresConfig struct {
@@ -77,9 +99,18 @@ func Load() (*Config, error) {
 
 	var err error
 
-	if cfg.HTTPPort, err = getEnvInt("BACKEND_HTTP_PORT", 8080); err != nil {
+	// Managed platforms (Render, etc.) inject the listen port as PORT.
+	if cfg.HTTPPort, err = getEnvInt("PORT", 0); err != nil {
 		return nil, err
 	}
+	if cfg.HTTPPort == 0 {
+		if cfg.HTTPPort, err = getEnvInt("BACKEND_HTTP_PORT", 8080); err != nil {
+			return nil, err
+		}
+	}
+
+	cfg.DatabaseURL = os.Getenv("DATABASE_URL")
+	cfg.RedisURL = os.Getenv("REDIS_URL")
 
 	pgPort, err := getEnvInt("POSTGRES_PORT", 5432)
 	if err != nil {
@@ -90,10 +121,12 @@ func Load() (*Config, error) {
 		Port:     pgPort,
 		Database: getEnv("POSTGRES_DB", "kisy"),
 		User:     getEnv("POSTGRES_USER", "kisy"),
+		Password: os.Getenv("POSTGRES_PASSWORD"),
 		SSLMode:  getEnv("POSTGRES_SSLMODE", "disable"),
 	}
-	if cfg.Postgres.Password, err = requireEnv("POSTGRES_PASSWORD"); err != nil {
-		return nil, err
+	// A discrete password is only required when no full DATABASE_URL is set.
+	if cfg.DatabaseURL == "" && cfg.Postgres.Password == "" {
+		return nil, fmt.Errorf("config: set DATABASE_URL or POSTGRES_PASSWORD")
 	}
 
 	redisPort, err := getEnvInt("REDIS_PORT", 6379)
@@ -135,6 +168,14 @@ func Load() (*Config, error) {
 	cfg.BootstrapCEOPassword = os.Getenv("BOOTSTRAP_CEO_PASSWORD")
 
 	cfg.WSAllowedOrigin = os.Getenv("WS_ALLOWED_ORIGIN")
+	cfg.WebDir = os.Getenv("WEB_DIR")
+
+	// Migrations run automatically outside production; RUN_MIGRATIONS
+	// overrides (managed single-service deploys set it true).
+	cfg.RunMigrations = cfg.Env != "production"
+	if v := os.Getenv("RUN_MIGRATIONS"); v != "" {
+		cfg.RunMigrations = v == "true" || v == "1"
+	}
 
 	return cfg, nil
 }
