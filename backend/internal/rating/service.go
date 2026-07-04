@@ -129,28 +129,45 @@ func (s *Service) AssignSelf(ctx context.Context, taskID uuid.UUID, actor Actor)
 	return s.repo.Assign(ctx, s.pool, taskID, actor.UserID)
 }
 
-// SetProgress updates a task's progress (0–100). Only the assignee may do so;
-// reaching 100 moves the task to "done".
+// SetProgress updates a task's progress (0–100). Only the assignee may do so.
+// Reaching 100 marks the task done; if that was the project's last task, the
+// project is completed (its tasks removed, card moved to the done column) in
+// the same transaction.
 func (s *Service) SetProgress(ctx context.Context, taskID uuid.UUID, progress int, actor Actor) error {
 	if progress < 0 || progress > 100 {
 		return ErrValidation
 	}
-	return s.repo.SetProgress(ctx, s.pool, taskID, actor.UserID, progress)
-}
-
-// FinanceInput carries a new ledger entry (money in integer kopecks).
-type FinanceInput struct {
-	IncomeKopecks  int64
-	ExpenseKopecks int64
-	Note           *string
-}
-
-// AddFinance records income/expense against a completed task. Only the task's
-// assignee or the CEO may record finances, and only once the task is done.
-func (s *Service) AddFinance(ctx context.Context, taskID uuid.UUID, in FinanceInput, actor Actor) error {
-	if in.IncomeKopecks < 0 || in.ExpenseKopecks < 0 || (in.IncomeKopecks == 0 && in.ExpenseKopecks == 0) {
-		return ErrValidation
+	task, err := s.repo.GetTask(ctx, s.pool, taskID)
+	if err != nil {
+		return err
 	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if err := s.repo.SetProgress(ctx, tx, taskID, actor.UserID, progress); err != nil {
+		return err // ErrForbidden if not the assignee
+	}
+	if progress >= 100 {
+		allDone, total, err := s.repo.ProjectTasksAllDone(ctx, tx, task.ProjectID)
+		if err != nil {
+			return err
+		}
+		if allDone && total > 0 {
+			if err := s.repo.CompleteProject(ctx, tx, task.ProjectID); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// ReturnTask sends an in-progress task back to the backlog. The current
+// assignee or the CEO may do this.
+func (s *Service) ReturnTask(ctx context.Context, taskID uuid.UUID, actor Actor) error {
 	task, err := s.repo.GetTask(ctx, s.pool, taskID)
 	if err != nil {
 		return err
@@ -159,8 +176,41 @@ func (s *Service) AddFinance(ctx context.Context, taskID uuid.UUID, in FinanceIn
 	if !isAssignee && !actor.isCEO() {
 		return ErrForbidden
 	}
-	if task.Status != StatusDone {
+	return s.repo.ReturnTask(ctx, s.pool, taskID)
+}
+
+// DeleteTask removes a task at any stage. CEO only.
+func (s *Service) DeleteTask(ctx context.Context, taskID uuid.UUID, actor Actor) error {
+	if !actor.isCEO() {
+		return ErrForbidden
+	}
+	return s.repo.DeleteTask(ctx, s.pool, taskID)
+}
+
+// FinanceInput carries a new ledger entry (money in integer minor units — euro
+// cents).
+type FinanceInput struct {
+	IncomeKopecks  int64
+	ExpenseKopecks int64
+	Note           *string
+}
+
+// AddFinance records income/expense against a project's profit ledger. Only the
+// CEO may record finances (projects are CEO-owned; a completed project's task
+// assignees are no longer tracked).
+func (s *Service) AddFinance(ctx context.Context, projectID uuid.UUID, in FinanceInput, actor Actor) error {
+	if !actor.isCEO() {
+		return ErrForbidden
+	}
+	if in.IncomeKopecks < 0 || in.ExpenseKopecks < 0 || (in.IncomeKopecks == 0 && in.ExpenseKopecks == 0) {
 		return ErrValidation
 	}
-	return s.repo.AddFinance(ctx, s.pool, task.ProjectID, &taskID, in.IncomeKopecks, in.ExpenseKopecks, in.Note, actor.UserID)
+	exists, err := s.repo.ProjectExists(ctx, s.pool, projectID)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return ErrNotFound
+	}
+	return s.repo.AddFinance(ctx, s.pool, projectID, nil, in.IncomeKopecks, in.ExpenseKopecks, in.Note, actor.UserID)
 }

@@ -26,6 +26,13 @@ const (
 	StatusDone       = "done"
 )
 
+// Project lifecycle. A project is "active" until all its tasks complete, then
+// "done" (its tasks are removed and the card moves to the done column).
+const (
+	ProjectActive = "active"
+	ProjectDone   = "done"
+)
+
 var validDifficulty = map[string]bool{"easy": true, "medium": true, "hard": true}
 
 // Actor identifies the acting user for authorization.
@@ -63,6 +70,7 @@ type ProjectDTO struct {
 	Title              string    `json:"title"`
 	Description        *string   `json:"description"`
 	Difficulty         string    `json:"difficulty"`
+	Status             string    `json:"status"`
 	CreatedBy          uuid.UUID `json:"createdBy"`
 	TotalProfitKopecks int64     `json:"totalProfitKopecks"`
 	Tasks              []TaskDTO `json:"tasks"`

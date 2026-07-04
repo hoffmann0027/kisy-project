@@ -249,11 +249,12 @@ func newRouter(d routerDeps) http.Handler {
 			// /users/me/avatar and /groups/{id}/avatar.
 			m.avatarsHandler.Routes(r)
 		})
-
-		// WebSocket upgrade authenticates from the access cookie or an
-		// access_token query parameter, so it sits outside RequireAuth.
-		r.Handle("/ws", m.wsHandler)
 	})
+
+	// WebSocket upgrade lives at the top-level /ws (the path the frontend and
+	// the edge proxy use). It authenticates from the access cookie or an
+	// access_token query parameter, so it sits outside RequireAuth and CSRF.
+	r.Handle("/ws", m.wsHandler)
 
 	// Serve the built SPA on all remaining paths when a web directory is
 	// configured (single-service, same-origin deploy). API, /ws, /health,

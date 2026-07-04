@@ -31,9 +31,45 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Post("/projects", h.createProject)
 	r.Delete("/projects/{id}", h.deleteProject)
 	r.Post("/projects/{id}/tasks", h.createTask)
+	r.Post("/projects/{id}/finance", h.addFinance)
 	r.Post("/tasks/{id}/assign", h.assign)
 	r.Patch("/tasks/{id}/progress", h.setProgress)
-	r.Post("/tasks/{id}/finance", h.addFinance)
+	r.Post("/tasks/{id}/return", h.returnTask)
+	r.Delete("/tasks/{id}", h.deleteTask)
+}
+
+func (h *Handler) returnTask(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.auth(w, r)
+	if !ok {
+		return
+	}
+	id, err := taskID(r)
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "task not found")
+		return
+	}
+	if err := h.svc.ReturnTask(r.Context(), id, actor); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"returned": true})
+}
+
+func (h *Handler) deleteTask(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.auth(w, r)
+	if !ok {
+		return
+	}
+	id, err := taskID(r)
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "task not found")
+		return
+	}
+	if err := h.svc.DeleteTask(r.Context(), id, actor); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"deleted": true})
 }
 
 // fail maps domain errors to HTTP responses.
@@ -256,9 +292,9 @@ func (h *Handler) addFinance(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	id, err := taskID(r)
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "task not found")
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "project not found")
 		return
 	}
 	var req financeRequest

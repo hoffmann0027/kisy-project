@@ -14,44 +14,46 @@ interface Props {
   m: Mutations;
 }
 
-// RatingKanban renders the three columns. The left column shows projects with
-// their backlog tasks; the middle and right columns are flattened task cards
-// (in-progress and done). The "done" column is sorted by total profit.
+// RatingKanban renders three columns:
+//  · «Проекты»    — active projects with their backlog tasks;
+//  · «В работе»   — assigned tasks of active projects (in progress / done);
+//  · «Завершено»  — projects whose tasks are all done, sorted by profit.
+// When the last task of a project is completed, the backend deletes the tasks
+// and moves the project card here.
 export function RatingKanban({ board, m }: Props) {
   const me = useAuthStore((s) => s.user!);
   const isCEO = me.roleLevel === 1;
 
-  const { inProgress, done } = useMemo(() => {
-    const all = board.projects.flatMap((p) => p.tasks);
-    return {
-      inProgress: all.filter((t) => t.status === "in_progress"),
-      done: all
-        .filter((t) => t.status === "done")
-        .sort((a, b) => b.totalProfitKopecks - a.totalProfitKopecks),
-    };
+  const { active, inProgress, done } = useMemo(() => {
+    const active = board.projects.filter((p) => p.status === "active");
+    const doneProjects = board.projects
+      .filter((p) => p.status === "done")
+      .sort((a, b) => b.totalProfitKopecks - a.totalProfitKopecks);
+    const inProgress = active.flatMap((p) => p.tasks.filter((t) => t.status !== "backlog"));
+    return { active, inProgress, done: doneProjects };
   }, [board]);
 
   return (
     <div className="rating-board">
-      <Column title="Проекты" count={board.projects.length}>
+      <Column title="Проекты" count={active.length}>
         {isCEO && <CreateProjectForm m={m} />}
-        {board.projects.length === 0 && <Empty text="Пока нет проектов" />}
-        {board.projects.map((p) => (
-          <ProjectCard key={p.id} project={p} m={m} isCEO={isCEO} meId={me.id} />
+        {active.length === 0 && <Empty text="Пока нет проектов" />}
+        {active.map((p) => (
+          <ProjectCard key={p.id} project={p} m={m} isCEO={isCEO} />
         ))}
       </Column>
 
       <Column title="В работе" count={inProgress.length}>
         {inProgress.length === 0 && <Empty text="Нет задач в работе" />}
         {inProgress.map((t) => (
-          <InProgressCard key={t.id} task={t} m={m} mine={t.assignee?.id === me.id} />
+          <InProgressCard key={t.id} task={t} m={m} mine={t.assignee?.id === me.id} isCEO={isCEO} />
         ))}
       </Column>
 
       <Column title="Завершено" count={done.length}>
-        {done.length === 0 && <Empty text="Нет завершённых задач" />}
-        {done.map((t) => (
-          <DoneCard key={t.id} task={t} m={m} canRecord={isCEO || t.assignee?.id === me.id} />
+        {done.length === 0 && <Empty text="Нет завершённых проектов" />}
+        {done.map((p) => (
+          <DoneProjectCard key={p.id} project={p} m={m} isCEO={isCEO} />
         ))}
       </Column>
     </div>
@@ -78,17 +80,7 @@ function DifficultyBadge({ difficulty }: { difficulty: string }) {
   return <span className={`rating-diff rating-diff--${difficulty}`}>{DIFFICULTY_LABEL[difficulty] ?? difficulty}</span>;
 }
 
-function ProjectCard({
-  project,
-  m,
-  isCEO,
-  meId,
-}: {
-  project: RatingProject;
-  m: Mutations;
-  isCEO: boolean;
-  meId: string;
-}) {
+function ProjectCard({ project, m, isCEO }: { project: RatingProject; m: Mutations; isCEO: boolean }) {
   const [taskTitle, setTaskTitle] = useState("");
   const [addingTask, setAddingTask] = useState(false);
   const backlog = project.tasks.filter((t) => t.status === "backlog");
@@ -128,9 +120,16 @@ function ProjectCard({
         {backlog.map((t) => (
           <div key={t.id} className="rating-task">
             <span className="rating-task__title">{t.title}</span>
-            <Button variant="secondary" onClick={() => take(t.id)} loading={m.assign.isPending}>
-              Взять
-            </Button>
+            <div className="rating-inline">
+              <Button variant="secondary" onClick={() => take(t.id)} loading={m.assign.isPending}>
+                Взять
+              </Button>
+              {isCEO && (
+                <button className="rating-x" title="Удалить задачу" onClick={() => m.deleteTask.mutate(t.id)}>
+                  ✕
+                </button>
+              )}
+            </div>
           </div>
         ))}
         {backlog.length === 0 && <div className="rating-tasks__none">Все задачи разобраны</div>}
@@ -157,18 +156,26 @@ function ProjectCard({
               + Задача
             </button>
           )}
-          {project.createdBy === meId || isCEO ? (
-            <button className="rating-link rating-link--danger" onClick={remove}>
-              Удалить
-            </button>
-          ) : null}
+          <button className="rating-link rating-link--danger" onClick={remove}>
+            Удалить проект
+          </button>
         </div>
       )}
     </div>
   );
 }
 
-function InProgressCard({ task, m, mine }: { task: RatingTask; m: Mutations; mine: boolean }) {
+function InProgressCard({
+  task,
+  m,
+  mine,
+  isCEO,
+}: {
+  task: RatingTask;
+  m: Mutations;
+  mine: boolean;
+  isCEO: boolean;
+}) {
   const step = (delta: number) => {
     const next = Math.max(0, Math.min(100, task.progress + delta));
     if (next === task.progress) return;
@@ -194,21 +201,33 @@ function InProgressCard({ task, m, mine }: { task: RatingTask; m: Mutations; min
         </div>
         <span className="rating-progress__pct">{task.progress}%</span>
       </div>
-      {mine && (
-        <div className="rating-progress__ctl">
-          <Button variant="ghost" onClick={() => step(-10)} disabled={task.progress === 0 || m.setProgress.isPending}>
-            −10%
-          </Button>
-          <Button variant="secondary" onClick={() => step(10)} loading={m.setProgress.isPending}>
-            +10%
-          </Button>
-        </div>
-      )}
+      <div className="rating-progress__ctl">
+        {mine && (
+          <>
+            <Button variant="ghost" onClick={() => step(-10)} disabled={task.progress === 0 || m.setProgress.isPending}>
+              −10%
+            </Button>
+            <Button variant="secondary" onClick={() => step(10)} loading={m.setProgress.isPending}>
+              +10%
+            </Button>
+          </>
+        )}
+        {(mine || isCEO) && (
+          <button className="rating-link" onClick={() => m.returnTask.mutate(task.id)}>
+            Вернуть
+          </button>
+        )}
+        {isCEO && (
+          <button className="rating-link rating-link--danger" onClick={() => m.deleteTask.mutate(task.id)}>
+            Удалить
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
-function DoneCard({ task, m, canRecord }: { task: RatingTask; m: Mutations; canRecord: boolean }) {
+function DoneProjectCard({ project, m, isCEO }: { project: RatingProject; m: Mutations; isCEO: boolean }) {
   const [open, setOpen] = useState(false);
   const [income, setIncome] = useState("");
   const [expense, setExpense] = useState("");
@@ -226,7 +245,7 @@ function DoneCard({ task, m, canRecord }: { task: RatingTask; m: Mutations; canR
       return;
     }
     m.addFinance.mutate(
-      { taskId: task.id, incomeKopecks: inc, expenseKopecks: exp, note: note.trim() || undefined },
+      { projectId: project.id, incomeKopecks: inc, expenseKopecks: exp, note: note.trim() || undefined },
       {
         onSuccess: () => {
           setIncome("");
@@ -239,27 +258,28 @@ function DoneCard({ task, m, canRecord }: { task: RatingTask; m: Mutations; canR
     );
   };
 
+  const remove = () => {
+    if (!window.confirm(`Удалить завершённый проект «${project.title}» и его финансы?`)) return;
+    m.deleteProject.mutate(project.id, { onError: () => toast.error("Не удалось удалить проект") });
+  };
+
   return (
     <div className="rating-card">
-      <div className="rating-card__project">{task.projectTitle}</div>
-      <div className="rating-card__title">{task.title}</div>
-      {task.assignee && (
-        <div className="rating-assignee">
-          <Avatar name={task.assignee.displayName} url={task.assignee.avatarUrl} size={24} />
-          <span>{task.assignee.displayName}</span>
-        </div>
-      )}
+      <div className="rating-card__top">
+        <div className="rating-card__title">{project.title}</div>
+        <DifficultyBadge difficulty={project.difficulty} />
+      </div>
       <div className="rating-profit">
         <span>Прибыль за всё время</span>
-        <strong className={task.totalProfitKopecks < 0 ? "rating-profit--neg" : "rating-profit--pos"}>
-          {formatKopecks(task.totalProfitKopecks)}
+        <strong className={project.totalProfitKopecks < 0 ? "rating-profit--neg" : "rating-profit--pos"}>
+          {formatKopecks(project.totalProfitKopecks)}
         </strong>
       </div>
-      {canRecord &&
+      {isCEO &&
         (open ? (
           <div className="rating-finance">
-            <input className="ui-input" placeholder="Доход, ₽" inputMode="decimal" value={income} onChange={(e) => setIncome(e.target.value)} />
-            <input className="ui-input" placeholder="Расход, ₽" inputMode="decimal" value={expense} onChange={(e) => setExpense(e.target.value)} />
+            <input className="ui-input" placeholder="Доход, €" inputMode="decimal" value={income} onChange={(e) => setIncome(e.target.value)} />
+            <input className="ui-input" placeholder="Расход, €" inputMode="decimal" value={expense} onChange={(e) => setExpense(e.target.value)} />
             <input className="ui-input" placeholder="Комментарий (необязательно)" value={note} onChange={(e) => setNote(e.target.value)} />
             <div className="rating-inline">
               <Button variant="ghost" onClick={() => setOpen(false)}>
@@ -271,9 +291,14 @@ function DoneCard({ task, m, canRecord }: { task: RatingTask; m: Mutations; canR
             </div>
           </div>
         ) : (
-          <button className="rating-link" onClick={() => setOpen(true)}>
-            + Внести доход/расход
-          </button>
+          <div className="rating-card__actions">
+            <button className="rating-link" onClick={() => setOpen(true)}>
+              + Внести доход/расход
+            </button>
+            <button className="rating-link rating-link--danger" onClick={remove}>
+              Удалить
+            </button>
+          </div>
         ))}
     </div>
   );

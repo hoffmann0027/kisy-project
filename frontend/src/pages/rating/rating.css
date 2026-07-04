@@ -253,6 +253,17 @@
 .rating-link--danger {
   color: #f6829b;
 }
+.rating-x {
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 13px;
+}
+.rating-x:hover {
+  color: #f6829b;
+}
 
 .rating-assignee {
   display: flex;

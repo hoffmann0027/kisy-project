@@ -33,6 +33,15 @@ type Repository interface {
 	CreateTask(ctx context.Context, q db.DBTX, projectID uuid.UUID, title string) (uuid.UUID, error)
 
 	GetTask(ctx context.Context, q db.DBTX, id uuid.UUID) (TaskRow, error)
+	// ProjectTasksAllDone reports whether a project has at least one task and
+	// every task is done — the trigger to complete the project.
+	ProjectTasksAllDone(ctx context.Context, q db.DBTX, projectID uuid.UUID) (allDone bool, total int, err error)
+	// CompleteProject marks the project done and removes its tasks.
+	CompleteProject(ctx context.Context, q db.DBTX, projectID uuid.UUID) error
+	// ReturnTask sends a task back to the backlog (unassigned, progress 0).
+	ReturnTask(ctx context.Context, q db.DBTX, taskID uuid.UUID) error
+	// DeleteTask removes a task outright (CEO override).
+	DeleteTask(ctx context.Context, q db.DBTX, taskID uuid.UUID) error
 	// Assign claims a backlog task for the user (self-assignment). Returns
 	// ErrAlreadyClaimed if the task is not an unassigned backlog task.
 	Assign(ctx context.Context, q db.DBTX, taskID, userID uuid.UUID) error
@@ -63,7 +72,7 @@ func NewPostgresRepository() *PostgresRepository { return &PostgresRepository{} 
 
 func (r *PostgresRepository) ListProjects(ctx context.Context, q db.DBTX) ([]ProjectDTO, error) {
 	rows, err := q.Query(ctx, `
-		SELECT p.id, p.title, p.description, p.difficulty, p.created_by, p.created_at,
+		SELECT p.id, p.title, p.description, p.difficulty, p.status, p.created_by, p.created_at,
 		       COALESCE(fp.profit, 0)
 		FROM rating_projects p
 		LEFT JOIN (
@@ -79,7 +88,7 @@ func (r *PostgresRepository) ListProjects(ctx context.Context, q db.DBTX) ([]Pro
 	var out []ProjectDTO
 	for rows.Next() {
 		var p ProjectDTO
-		if err := rows.Scan(&p.ID, &p.Title, &p.Description, &p.Difficulty, &p.CreatedBy, &p.CreatedAt, &p.TotalProfitKopecks); err != nil {
+		if err := rows.Scan(&p.ID, &p.Title, &p.Description, &p.Difficulty, &p.Status, &p.CreatedBy, &p.CreatedAt, &p.TotalProfitKopecks); err != nil {
 			return nil, fmt.Errorf("rating: scan project: %w", err)
 		}
 		p.Tasks = []TaskDTO{}
@@ -240,6 +249,48 @@ func (r *PostgresRepository) Assign(ctx context.Context, q db.DBTX, taskID, user
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrAlreadyClaimed
+	}
+	return nil
+}
+
+func (r *PostgresRepository) ProjectTasksAllDone(ctx context.Context, q db.DBTX, projectID uuid.UUID) (bool, int, error) {
+	var total, done int
+	err := q.QueryRow(ctx, `
+		SELECT count(*), count(*) FILTER (WHERE status = 'done')
+		FROM rating_tasks WHERE project_id = $1`, projectID).Scan(&total, &done)
+	if err != nil {
+		return false, 0, fmt.Errorf("rating: count tasks: %w", err)
+	}
+	return total > 0 && total == done, total, nil
+}
+
+func (r *PostgresRepository) CompleteProject(ctx context.Context, q db.DBTX, projectID uuid.UUID) error {
+	if _, err := q.Exec(ctx, `DELETE FROM rating_tasks WHERE project_id = $1`, projectID); err != nil {
+		return fmt.Errorf("rating: delete tasks: %w", err)
+	}
+	if _, err := q.Exec(ctx, `UPDATE rating_projects SET status = 'done', completed_at = now() WHERE id = $1`, projectID); err != nil {
+		return fmt.Errorf("rating: complete project: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepository) ReturnTask(ctx context.Context, q db.DBTX, taskID uuid.UUID) error {
+	_, err := q.Exec(ctx, `
+		UPDATE rating_tasks SET assignee_id = NULL, progress = 0, status = 'backlog', updated_at = now()
+		WHERE id = $1`, taskID)
+	if err != nil {
+		return fmt.Errorf("rating: return task: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepository) DeleteTask(ctx context.Context, q db.DBTX, taskID uuid.UUID) error {
+	tag, err := q.Exec(ctx, `DELETE FROM rating_tasks WHERE id = $1`, taskID)
+	if err != nil {
+		return fmt.Errorf("rating: delete task: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
 	}
 	return nil
 }

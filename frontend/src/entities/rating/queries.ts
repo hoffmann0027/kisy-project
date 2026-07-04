@@ -40,9 +40,11 @@ export function useRatingMutations() {
       mutationFn: (a: { taskId: string; progress: number }) => ratingApi.setProgress(a.taskId, a.progress),
       onSuccess: refresh,
     }),
+    returnTask: useMutation({ mutationFn: (taskId: string) => ratingApi.returnTask(taskId), onSuccess: refresh }),
+    deleteTask: useMutation({ mutationFn: (taskId: string) => ratingApi.deleteTask(taskId), onSuccess: refresh }),
     addFinance: useMutation({
-      mutationFn: (a: { taskId: string; incomeKopecks: number; expenseKopecks: number; note?: string }) =>
-        ratingApi.addFinance(a.taskId, a.incomeKopecks, a.expenseKopecks, a.note),
+      mutationFn: (a: { projectId: string; incomeKopecks: number; expenseKopecks: number; note?: string }) =>
+        ratingApi.addFinance(a.projectId, a.incomeKopecks, a.expenseKopecks, a.note),
       onSuccess: refresh,
     }),
   };
