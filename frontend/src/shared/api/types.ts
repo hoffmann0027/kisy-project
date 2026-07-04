@@ -56,6 +56,8 @@ export interface Message {
   isDeleted: boolean;
   createdAt: string;
   deletedAt: string | null;
+  /** When the message was last edited (null = never). */
+  editedAt: string | null;
   /** Client-only: true while an optimistically-sent message awaits server ack. */
   pending?: boolean;
   /** Client-only: true if the optimistic send failed. */
@@ -120,6 +122,16 @@ export interface BoardCard {
   label: string | null;
   dueDate: string | null;
   createdBy: string;
+  createdAt: string;
+}
+
+export interface SearchResult {
+  messageId: string;
+  chatType: ChatType;
+  chatId: string;
+  senderId: string;
+  senderName: string;
+  text: string;
   createdAt: string;
 }
 

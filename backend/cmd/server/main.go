@@ -209,6 +209,10 @@ func newRouter(d routerDeps) http.Handler {
 				m.ratingHandler.Routes(r)
 			})
 
+			r.Route("/search", func(r chi.Router) {
+				m.searchHandler.Routes(r)
+			})
+
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(m.authMW.RequireClearance(1)) // CEO only
 				m.adminHandler.Routes(r)

@@ -4,6 +4,7 @@ import { Avatar, Badge, Logo } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import { useAuthStore } from "@shared/store/auth";
 import { useNotifications } from "@entities/notification/queries";
+import { useChats } from "@entities/chat/queries";
 
 interface Props {
   onProfile: () => void;
@@ -17,7 +18,9 @@ export function Rail({ onProfile, onNotifications, onFeedback }: Props) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { data: notif } = useNotifications();
+  const { data: chats } = useChats();
   const unread = notif?.unreadCount ?? 0;
+  const chatUnread = chats?.reduce((sum, c) => sum + c.unreadCount, 0) ?? 0;
 
   if (!user) return null;
 
@@ -34,6 +37,11 @@ export function Rail({ onProfile, onNotifications, onFeedback }: Props) {
         </button>
         <button className={cn("rail__item", !onRating && "rail__item--active")} title="Чаты" onClick={() => navigate("/")}>
           <Icon.Chat />
+          {chatUnread > 0 && (
+            <span className="rail__item-badge">
+              <Badge>{chatUnread > 9 ? "9+" : chatUnread}</Badge>
+            </span>
+          )}
         </button>
         <button className="rail__item" title="Уведомления" onClick={onNotifications}>
           <Icon.Bell />

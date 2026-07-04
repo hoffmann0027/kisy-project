@@ -22,18 +22,22 @@ type Repository interface {
 	// detect whether more pages exist.
 	ListPage(ctx context.Context, q db.DBTX, chatType string, chatID uuid.UUID, cur *pagination.Cursor, limit int) ([]Message, error)
 	SoftDelete(ctx context.Context, q db.DBTX, id uuid.UUID, at time.Time) error
+	// Update replaces a message's text and stamps edited_at, but only for the
+	// sender and only while the message is not deleted. Returns ErrNotFound
+	// (or ErrForbidden semantics) as zero rows if the guard fails.
+	Update(ctx context.Context, q db.DBTX, id, senderID uuid.UUID, text string, at time.Time) (*Message, error)
 }
 
 type PostgresRepository struct{}
 
 func NewPostgresRepository() *PostgresRepository { return &PostgresRepository{} }
 
-const messageColumns = `id, chat_type, chat_id, sender_id, text, reply_to, is_deleted, deleted_at, created_at`
+const messageColumns = `id, chat_type, chat_id, sender_id, text, reply_to, is_deleted, deleted_at, edited_at, created_at`
 
 func scanMessage(row pgx.Row) (*Message, error) {
 	var m Message
 	err := row.Scan(&m.ID, &m.ChatType, &m.ChatID, &m.SenderID, &m.Text, &m.ReplyTo,
-		&m.IsDeleted, &m.DeletedAt, &m.CreatedAt)
+		&m.IsDeleted, &m.DeletedAt, &m.EditedAt, &m.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -88,12 +92,26 @@ func (r *PostgresRepository) ListPage(ctx context.Context, q db.DBTX, chatType s
 	for rows.Next() {
 		var m Message
 		if err := rows.Scan(&m.ID, &m.ChatType, &m.ChatID, &m.SenderID, &m.Text, &m.ReplyTo,
-			&m.IsDeleted, &m.DeletedAt, &m.CreatedAt); err != nil {
+			&m.IsDeleted, &m.DeletedAt, &m.EditedAt, &m.CreatedAt); err != nil {
 			return nil, fmt.Errorf("messages: scan row: %w", err)
 		}
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+func (r *PostgresRepository) Update(ctx context.Context, q db.DBTX, id, senderID uuid.UUID, text string, at time.Time) (*Message, error) {
+	row := q.QueryRow(ctx, `
+		UPDATE messages SET text = $3, edited_at = $4
+		WHERE id = $1 AND sender_id = $2 AND is_deleted = false
+		RETURNING `+messageColumns,
+		id, senderID, text, at)
+	m, err := scanMessage(row)
+	if errors.Is(err, ErrNotFound) {
+		// No row matched the id+sender+not-deleted guard.
+		return nil, ErrForbidden
+	}
+	return m, err
 }
 
 func (r *PostgresRepository) SoftDelete(ctx context.Context, q db.DBTX, id uuid.UUID, at time.Time) error {

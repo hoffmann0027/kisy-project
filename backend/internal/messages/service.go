@@ -14,7 +14,10 @@ import (
 	"kisy-backend/pkg/pagination"
 )
 
-const actionMessageDeleted = "message.deleted"
+const (
+	actionMessageDeleted = "message.deleted"
+	actionMessageEdited  = "message.edited"
+)
 
 // ActorMeta identifies the acting user.
 type ActorMeta struct {
@@ -40,6 +43,7 @@ type Authorizer struct {
 // import cycle; a nil Publisher disables real-time delivery.
 type Publisher interface {
 	PublishMessageCreated(chatType string, chatID uuid.UUID, dto DTO)
+	PublishMessageUpdated(chatType string, chatID uuid.UUID, dto DTO)
 	PublishMessageDeleted(chatType string, chatID, messageID uuid.UUID)
 }
 
@@ -55,6 +59,14 @@ type Notifier interface {
 // cycle; a nil loader yields empty reaction lists.
 type ReactionLoader func(ctx context.Context, messageIDs []uuid.UUID, viewerID uuid.UUID) (map[uuid.UUID][]ReactionSummary, error)
 
+// Indexer keeps the full-text search index in sync with the message
+// lifecycle. Injected to avoid a messages→search import cycle; a nil indexer
+// disables indexing. Implementations must be best-effort (never block sends).
+type Indexer interface {
+	IndexMessage(ctx context.Context, messageID uuid.UUID, content string)
+	RemoveMessage(ctx context.Context, messageID uuid.UUID)
+}
+
 type Service struct {
 	pool      *pgxpool.Pool
 	repo      Repository
@@ -63,6 +75,7 @@ type Service struct {
 	pub       Publisher
 	reactions ReactionLoader
 	notifier  Notifier
+	indexer   Indexer
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository, rec audit.Recorder, authz Authorizer) *Service {
@@ -78,6 +91,9 @@ func (s *Service) SetReactionLoader(l ReactionLoader) { s.reactions = l }
 
 // SetNotifier wires the @mention/notification hook.
 func (s *Service) SetNotifier(n Notifier) { s.notifier = n }
+
+// SetIndexer wires the full-text search indexer.
+func (s *Service) SetIndexer(i Indexer) { s.indexer = i }
 
 // ResolveAccessible returns the chat coordinates of a message if the actor
 // may access its chat, otherwise ErrNotFound. Used by the reactions module
@@ -161,6 +177,9 @@ func (s *Service) Send(ctx context.Context, in SendInput, actor ActorMeta) (*Mes
 	if s.notifier != nil {
 		s.notifier.OnMessage(ctx, dto)
 	}
+	if s.indexer != nil {
+		s.indexer.IndexMessage(ctx, m.ID, text)
+	}
 	return m, nil
 }
 
@@ -219,6 +238,55 @@ func (s *Service) List(ctx context.Context, chatType string, chatID uuid.UUID, c
 	return page, nil
 }
 
+// Edit replaces the text of the actor's own message. Only the sender may edit
+// (enforced by the repository guard), and only a non-deleted message. The
+// updated message is audited and republished so every viewer refreshes.
+func (s *Service) Edit(ctx context.Context, messageID uuid.UUID, newText string, actor ActorMeta) (*DTO, error) {
+	text := strings.TrimSpace(newText)
+	if text == "" {
+		return nil, ErrEmptyContent
+	}
+	if len(text) > MaxTextLength {
+		text = text[:MaxTextLength]
+	}
+
+	m, err := s.repo.GetByID(ctx, s.pool, messageID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authorize(ctx, m.ChatType, m.ChatID, actor); err != nil {
+		return nil, ErrNotFound
+	}
+	if m.SenderID != actor.UserID {
+		return nil, ErrForbidden
+	}
+
+	updated, err := s.repo.Update(ctx, s.pool, messageID, actor.UserID, text, time.Now().UTC())
+	if err != nil {
+		return nil, err
+	}
+
+	_ = s.audit.Record(ctx, s.pool, audit.Event{
+		ActorID:    &actor.UserID,
+		Action:     actionMessageEdited,
+		TargetType: "message",
+		TargetID:   &messageID,
+		IPHash:     actor.IPHash,
+		SessionID:  &actor.SessionID,
+		RequestID:  actor.RequestID,
+		Metadata:   map[string]any{"chatType": m.ChatType, "chatId": m.ChatID.String()},
+	})
+
+	dto := updated.ToDTO()
+	if s.pub != nil {
+		s.pub.PublishMessageUpdated(updated.ChatType, updated.ChatID, dto)
+	}
+	if s.indexer != nil {
+		s.indexer.IndexMessage(ctx, updated.ID, text)
+	}
+	return &dto, nil
+}
+
 // Delete removes a message per policy: the sender may delete their own
 // message, and the CEO may delete any message. The deletion is audited and
 // published.
@@ -266,6 +334,9 @@ func (s *Service) Delete(ctx context.Context, messageID uuid.UUID, actor ActorMe
 
 	if s.pub != nil {
 		s.pub.PublishMessageDeleted(m.ChatType, m.ChatID, messageID)
+	}
+	if s.indexer != nil {
+		s.indexer.RemoveMessage(ctx, messageID)
 	}
 	return nil
 }

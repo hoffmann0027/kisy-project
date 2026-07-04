@@ -29,6 +29,7 @@ import (
 	"kisy-backend/internal/rating"
 	"kisy-backend/internal/reactions"
 	"kisy-backend/internal/readstate"
+	"kisy-backend/internal/search"
 	"kisy-backend/internal/users"
 	"kisy-backend/internal/ws"
 )
@@ -49,6 +50,7 @@ type modules struct {
 	readstateHandler     *readstate.Handler
 	favoritesHandler     *favorites.Handler
 	feedbackHandler      *feedback.Handler
+	searchHandler        *search.Handler
 	notificationsHandler *notifications.Handler
 	boardsHandler        *boards.Handler
 	ratingHandler        *rating.Handler
@@ -269,6 +271,17 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		return favorites.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
 	})
 
+	// --- full-text message search ---
+	searchSvc := search.NewService(pool, log)
+	messagesSvc.SetIndexer(searchSvc)
+	searchHandler := search.NewHandler(searchSvc, func(r *http.Request) (uuid.UUID, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return uuid.Nil, false
+		}
+		return claims.UserID, true
+	})
+
 	// --- feedback & suggestions ---
 	feedbackSvc := feedback.NewService(pool, feedback.NewPostgresRepository())
 	feedbackHandler := feedback.NewHandler(feedbackSvc, func(r *http.Request) (feedback.Actor, bool) {
@@ -360,6 +373,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		readstateHandler:     readstateHandler,
 		favoritesHandler:     favoritesHandler,
 		feedbackHandler:      feedbackHandler,
+		searchHandler:        searchHandler,
 		notificationsHandler: notificationsHandler,
 		boardsHandler:        boardsHandler,
 		ratingHandler:        ratingHandler,

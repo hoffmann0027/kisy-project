@@ -18,6 +18,10 @@ func (p *Publisher) PublishMessageCreated(chatType string, chatID uuid.UUID, dto
 	p.hub.publishToChat(chatType, chatID, encode(EventMessageCreated, dto))
 }
 
+func (p *Publisher) PublishMessageUpdated(chatType string, chatID uuid.UUID, dto messages.DTO) {
+	p.hub.publishToChat(chatType, chatID, encode(EventMessageUpdated, dto))
+}
+
 func (p *Publisher) PublishMessageDeleted(chatType string, chatID, messageID uuid.UUID) {
 	p.hub.publishToChat(chatType, chatID, encode(EventMessageDeleted, map[string]any{
 		"chatType":  chatType,

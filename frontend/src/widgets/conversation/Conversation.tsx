@@ -6,6 +6,7 @@ import type { ChatType, Message } from "@shared/api/types";
 import {
   flattenMessages,
   useDeleteMessage,
+  useEditMessage,
   useMessageCacheWriter,
   useMessages,
   useReaction,
@@ -43,6 +44,7 @@ export function Conversation({ target, headerActions }: Props) {
   const { data, isPending, fetchNextPage, hasNextPage, isFetchingNextPage } = useMessages(chatType, chatId);
   const send = useSendMessage(chatType, chatId);
   const del = useDeleteMessage();
+  const edit = useEditMessage();
   const react = useReaction();
   const cache = useMessageCacheWriter();
 
@@ -100,6 +102,7 @@ export function Conversation({ target, headerActions }: Props) {
       isDeleted: false,
       createdAt: new Date().toISOString(),
       deletedAt: null,
+      editedAt: null,
       pending: true,
     };
     cache.insertPending(optimistic);
@@ -118,6 +121,9 @@ export function Conversation({ target, headerActions }: Props) {
 
   const handleDelete = (m: Message) =>
     del.mutate(m.id, { onError: () => toast.error("Не удалось удалить сообщение") });
+
+  const handleEdit = (m: Message, text: string) =>
+    edit.mutate({ messageId: m.id, text }, { onError: () => toast.error("Не удалось изменить сообщение") });
 
   const handleReact = (m: Message, emoji: string) => {
     const existing = m.reactions.find((r) => r.emoji === emoji);
@@ -174,9 +180,11 @@ export function Conversation({ target, headerActions }: Props) {
                 message={m}
                 mine={m.senderId === me.id}
                 canDelete={m.senderId === me.id || me.roleLevel === 1}
+                canEdit={m.senderId === me.id && !m.pending && !m.failed}
                 status={statusFor(m)}
                 replyPreview={previewFor(m.replyTo)}
                 onReply={setReplyTo}
+                onEdit={handleEdit}
                 onDelete={handleDelete}
                 onReact={handleReact}
               />

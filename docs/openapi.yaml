@@ -826,6 +826,36 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
 
   /messages/{messageID}:
+    patch:
+      tags: [messages]
+      summary: Edit a message (sender only)
+      description: >
+        Only the sender may edit, and only a non-deleted message. Sets
+        editedAt and republishes the message over WebSocket (message.updated).
+      parameters:
+        - { name: messageID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [text], properties: { text: { type: string, minLength: 1, maxLength: 8000 } } }
+      responses:
+        '200':
+          description: Edited
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          message: { $ref: '#/components/schemas/Message' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
     delete:
       tags: [messages]
       summary: Delete a message
@@ -845,6 +875,42 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /search:
+    get:
+      tags: [messages]
+      summary: Full-text search of messages you can see
+      description: >
+        Searches messages (Russian full-text) scoped to the caller's private
+        chats and group memberships. Requires q of at least a couple of chars.
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 25, maximum: 50 } }
+      responses:
+        '200':
+          description: Matching messages, most relevant first
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          results:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                messageId: { type: string, format: uuid }
+                                chatType: { type: string, enum: [private, group] }
+                                chatId: { type: string, format: uuid }
+                                senderId: { type: string, format: uuid }
+                                senderName: { type: string }
+                                text: { type: string }
+                                createdAt: { type: string, format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /ws:
     get:
       tags: [websocket]
@@ -857,8 +923,8 @@ paths:
         Client→Server `type`: message.send, typing.start, typing.stop,
         presence.subscribe, read.confirmation.
 
-        Server→Client `event`: message.created, message.deleted,
-        message.read, typing.started, typing.stopped, user.online,
+        Server→Client `event`: message.created, message.updated,
+        message.deleted, message.read, typing.started, typing.stopped, user.online,
         user.offline, user.updated, reaction.added, reaction.removed,
         notification.created, board.changed, group.changed, error.
       parameters:
@@ -1457,6 +1523,7 @@ components:
         isDeleted: { type: boolean }
         createdAt: { type: string, format: date-time }
         deletedAt: { type: [string, 'null'], format: date-time }
+        editedAt: { type: [string, 'null'], format: date-time }
     MessagePage:
       type: object
       properties:

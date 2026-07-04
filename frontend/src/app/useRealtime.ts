@@ -47,6 +47,13 @@ export function useRealtime() {
         case "message.created":
           handleMessageCreated(qc, ev.data, meId);
           break;
+        case "message.updated":
+          patchMessage(qc, ev.data.chatType, ev.data.chatId, ev.data.id, (m) => ({
+            ...m,
+            text: ev.data.text,
+            editedAt: ev.data.editedAt,
+          }));
+          break;
         case "message.deleted":
           patchMessage(qc, ev.data.chatType as ChatType, ev.data.chatId, ev.data.messageId, (m) => ({
             ...m,

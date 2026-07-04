@@ -38,6 +38,14 @@ export function useDeleteMessage() {
   return useMutation({ mutationFn: (messageId: string) => messagesApi.remove(messageId) });
 }
 
+export function useEditMessage() {
+  return useMutation({
+    mutationFn: (args: { messageId: string; text: string }) => messagesApi.edit(args.messageId, args.text),
+    // The updated message arrives via WebSocket (message.updated) and is
+    // patched into the cache there, so we do not double-write here.
+  });
+}
+
 export function useReaction() {
   return useMutation({
     mutationFn: (args: { messageId: string; emoji: string; remove: boolean }) =>
