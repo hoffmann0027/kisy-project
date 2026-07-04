@@ -151,6 +151,12 @@ export const MessageBubble = memo(function MessageBubble({
           {message.editedAt && <span className="bubble__edited">изменено</span>}
           {formatTime(message.createdAt)}
           {mine && status && <StatusTick status={status} />}
+          {mine && message.readTotal != null && (
+            <span className="bubble__reads" title={`Прочитали ${message.readCount} из ${message.readTotal}`}>
+              <Icon.Check size={13} />
+              {message.readCount}/{message.readTotal}
+            </span>
+          )}
         </span>
 
         {message.reactions.length > 0 && (

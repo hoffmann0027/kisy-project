@@ -314,6 +314,11 @@
   color: #7aa5f7;
   font-weight: 600;
 }
+.bubble__reads {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
 .bubble--out .mention {
   color: #cfe0ff;
 }

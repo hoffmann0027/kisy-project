@@ -30,6 +30,9 @@ type Repository interface {
 	// "user_id <> self" uniquely identifies the counterpart, so no explicit
 	// participant list is needed. Chats the other user never read are absent.
 	OthersLastRead(ctx context.Context, q db.DBTX, self uuid.UUID, chatIDs []uuid.UUID) (map[uuid.UUID]time.Time, error)
+	// GroupReads returns every member's last-read timestamp for a group chat,
+	// keyed by user id. Members who never opened the chat are absent.
+	GroupReads(ctx context.Context, q db.DBTX, chatID uuid.UUID) (map[uuid.UUID]time.Time, error)
 }
 
 type PostgresRepository struct{}
@@ -110,6 +113,27 @@ func (r *PostgresRepository) OthersLastRead(ctx context.Context, q db.DBTX, self
 	return out, rows.Err()
 }
 
+func (r *PostgresRepository) GroupReads(ctx context.Context, q db.DBTX, chatID uuid.UUID) (map[uuid.UUID]time.Time, error) {
+	rows, err := q.Query(ctx, `
+		SELECT user_id, last_read_at FROM chat_read_state
+		WHERE chat_type = 'group' AND chat_id = $1`, chatID)
+	if err != nil {
+		return nil, fmt.Errorf("readstate: group reads: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[uuid.UUID]time.Time)
+	for rows.Next() {
+		var uid uuid.UUID
+		var at time.Time
+		if err := rows.Scan(&uid, &at); err != nil {
+			return nil, fmt.Errorf("readstate: scan group read: %w", err)
+		}
+		out[uid] = at
+	}
+	return out, rows.Err()
+}
+
 // Actor identifies the acting user.
 type Actor struct {
 	UserID    uuid.UUID
@@ -143,6 +167,12 @@ func (s *Service) UnreadForPrivateChats(ctx context.Context, userID uuid.UUID, c
 // read it — used to render read receipts (ticks) on the actor's own messages.
 func (s *Service) OthersLastReadPrivate(ctx context.Context, userID uuid.UUID, chatIDs []uuid.UUID) (map[uuid.UUID]time.Time, error) {
 	return s.repo.OthersLastRead(ctx, s.pool, userID, chatIDs)
+}
+
+// GroupReads returns each member's last-read time for a group chat, used to
+// compute the per-message "read by N of M" counter.
+func (s *Service) GroupReads(ctx context.Context, chatID uuid.UUID) (map[uuid.UUID]time.Time, error) {
+	return s.repo.GroupReads(ctx, s.pool, chatID)
 }
 
 // PersistRead is a fire-and-forget hook for the WebSocket read receipt; it

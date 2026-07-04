@@ -68,6 +68,10 @@ type DTO struct {
 	DeletedAt   *time.Time        `json:"deletedAt"`
 	EditedAt    *time.Time        `json:"editedAt"`
 	PinnedAt    *time.Time        `json:"pinnedAt"`
+	// ReadCount/ReadTotal are set only for the actor's own group messages:
+	// how many recipients have read it out of the total. Nil otherwise.
+	ReadCount *int `json:"readCount"`
+	ReadTotal *int `json:"readTotal"`
 }
 
 func (m *Message) ToDTO() DTO {

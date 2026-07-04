@@ -109,6 +109,8 @@ export function Conversation({ target, headerActions }: Props) {
       deletedAt: null,
       editedAt: null,
       pinnedAt: null,
+      readCount: null,
+      readTotal: null,
       pending: true,
     };
     cache.insertPending(optimistic);

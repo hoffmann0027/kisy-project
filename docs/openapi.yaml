@@ -1564,6 +1564,8 @@ components:
         deletedAt: { type: [string, 'null'], format: date-time }
         editedAt: { type: [string, 'null'], format: date-time }
         pinnedAt: { type: [string, 'null'], format: date-time }
+        readCount: { type: [integer, 'null'], description: For own group messages, recipients who have read it. }
+        readTotal: { type: [integer, 'null'], description: For own group messages, total recipients. }
     MessagePage:
       type: object
       properties:

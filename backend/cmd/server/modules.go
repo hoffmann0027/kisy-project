@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -253,6 +254,18 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	readstateSvc := readstate.NewService(pool, readstate.NewPostgresRepository(), readstate.ChatAuthorizer(chatAuthorizer))
 	chatsSvc.SetUnreadLoader(readstateSvc.UnreadForPrivateChats)
 	chatsSvc.SetOtherReadLoader(readstateSvc.OthersLastReadPrivate)
+	// Per-message "read by N of M" for group chats.
+	messagesSvc.SetGroupReadLoader(func(ctx context.Context, chatID uuid.UUID) (map[uuid.UUID]time.Time, int, error) {
+		reads, err := readstateSvc.GroupReads(ctx, chatID)
+		if err != nil {
+			return nil, 0, err
+		}
+		members, err := groupsSvc.MemberIDs(ctx, chatID)
+		if err != nil {
+			return nil, 0, err
+		}
+		return reads, len(members), nil
+	})
 	readstateHandler := readstate.NewHandler(readstateSvc, func(r *http.Request) (readstate.Actor, bool) {
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {

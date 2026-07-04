@@ -60,6 +60,9 @@ export interface Message {
   editedAt: string | null;
   /** When the message was pinned (null = not pinned). */
   pinnedAt: string | null;
+  /** For own group messages: how many recipients read it, of how many. */
+  readCount: number | null;
+  readTotal: number | null;
   /** Client-only: true while an optimistically-sent message awaits server ack. */
   pending?: boolean;
   /** Client-only: true if the optimistic send failed. */

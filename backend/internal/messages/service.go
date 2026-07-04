@@ -59,6 +59,11 @@ type Notifier interface {
 // cycle; a nil loader yields empty reaction lists.
 type ReactionLoader func(ctx context.Context, messageIDs []uuid.UUID, viewerID uuid.UUID) (map[uuid.UUID][]ReactionSummary, error)
 
+// GroupReadLoader returns each member's last-read time for a group chat plus
+// the total member count, so the service can compute per-message "read by N of
+// M" counters. Injected to avoid messages→readstate/groups import cycles.
+type GroupReadLoader func(ctx context.Context, chatID uuid.UUID) (reads map[uuid.UUID]time.Time, memberCount int, err error)
+
 // Indexer keeps the full-text search index in sync with the message
 // lifecycle. Injected to avoid a messages→search import cycle; a nil indexer
 // disables indexing. Implementations must be best-effort (never block sends).
@@ -76,6 +81,7 @@ type Service struct {
 	reactions ReactionLoader
 	notifier  Notifier
 	indexer   Indexer
+	groupRead GroupReadLoader
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository, rec audit.Recorder, authz Authorizer) *Service {
@@ -94,6 +100,9 @@ func (s *Service) SetNotifier(n Notifier) { s.notifier = n }
 
 // SetIndexer wires the full-text search indexer.
 func (s *Service) SetIndexer(i Indexer) { s.indexer = i }
+
+// SetGroupReadLoader wires per-message group read-count enrichment.
+func (s *Service) SetGroupReadLoader(l GroupReadLoader) { s.groupRead = l }
 
 // ResolveAccessible returns the chat coordinates of a message if the actor
 // may access its chat, otherwise ErrNotFound. Used by the reactions module
@@ -233,6 +242,33 @@ func (s *Service) List(ctx context.Context, chatType string, chatID uuid.UUID, c
 					page.Items[i].Reactions = r
 				}
 			}
+		}
+	}
+
+	// Group "read by N of M": for the actor's own group messages, count how
+	// many other members have read past each message.
+	if chatType == ChatGroup && s.groupRead != nil && len(page.Items) > 0 {
+		reads, total, err := s.groupRead(ctx, chatID)
+		if err != nil {
+			return nil, err
+		}
+		recipients := total - 1 // exclude the sender
+		if recipients < 0 {
+			recipients = 0
+		}
+		for i := range page.Items {
+			if page.Items[i].SenderID != actor.UserID || page.Items[i].IsDeleted {
+				continue
+			}
+			read := 0
+			for uid, ts := range reads {
+				if uid != page.Items[i].SenderID && !ts.Before(page.Items[i].CreatedAt) {
+					read++
+				}
+			}
+			r, t := read, recipients
+			page.Items[i].ReadCount = &r
+			page.Items[i].ReadTotal = &t
 		}
 	}
 	return page, nil
