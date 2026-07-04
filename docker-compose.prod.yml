@@ -7,9 +7,16 @@
 # Requires certificates in deploy/nginx/certs/{fullchain.pem,privkey.pem}.
 services:
   backend:
+    # Pull the published image instead of building. KISY_IMAGE_PREFIX and
+    # KISY_VERSION are set by the deploy pipeline; they default to a local
+    # build tag so `docker compose build` still works ad hoc.
+    image: ${KISY_IMAGE_PREFIX:-kisy}/backend:${KISY_VERSION:-latest}
     environment:
       APP_ENV: production
       # In production, migrations are applied out-of-band, not on boot.
+
+  frontend:
+    image: ${KISY_IMAGE_PREFIX:-kisy}/frontend:${KISY_VERSION:-latest}
 
   nginx:
     ports:

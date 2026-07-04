@@ -47,7 +47,29 @@ backend.
 локальные Postgres/Redis) и `cd frontend && npm run dev` (Vite на
 http://localhost:5173, проксирует `/api` и `/ws` на `localhost:8080`).
 
+## Операции и наблюдаемость
+
+- `make help` — список задач (up/down/logs/test/lint/vuln/certs/backup…).
+- CI: [.github/workflows/ci.yml](.github/workflows/ci.yml) — lint, тесты
+  (+integration), govulncheck, npm audit, сборка образов. CD:
+  [release.yml](.github/workflows/release.yml) — публикация в GHCR по тегу,
+  деплой в staging и prod с ручным аппрувом. Полный гайд: [docs/devops.md](docs/devops.md).
+- TLS 1.3 в проде: `make certs && make prod` (см. devops-гайд).
+- Метрики Prometheus + Grafana: `make monitoring`
+  (Prometheus :9090, Grafana :3000). Backend отдаёт метрики на `/metrics`
+  (внутренний эндпоинт, не проксируется наружу).
+- Бэкапы БД: `make backup` / `make restore`.
+
+## Документация
+
+- [docs/openapi.yaml](docs/openapi.yaml) — контракт REST API + WebSocket.
+- [docs/security.md](docs/security.md) — модель угроз (STRIDE) и контроли.
+- [docs/devops.md](docs/devops.md) — деплой, CI/CD, мониторинг, бэкапы.
+- [docs/spec](docs/spec) — исходная спецификация.
+
 ## Статус
 
-Этап 1 (Фундамент) — структура репозитория, миграции БД, docker-compose skeleton.
-См. `CLAUDE.md` для порядка последующих этапов.
+Реализованы этапы 1–7: фундамент, авторизация и доступ, backend core
+(REST + WebSocket), бизнес-логика, фронтенд, security-hardening, DevOps/CI-CD.
+Дополнительно: группы с ролевым доступом и Kanban-доски задач. См.
+`CLAUDE.md` для порядка этапов; следующий — этап 8 (тесты и документация).

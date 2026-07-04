@@ -20,6 +20,7 @@ import (
 
 	"kisy-backend/internal/config"
 	"kisy-backend/internal/platform/logger"
+	"kisy-backend/internal/platform/metrics"
 	"kisy-backend/internal/platform/postgres"
 	"kisy-backend/internal/platform/ratelimit"
 	kisyredis "kisy-backend/internal/platform/redis"
@@ -129,8 +130,13 @@ func newRouter(d routerDeps) http.Handler {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 	r.Use(security.Headers)
+	r.Use(metrics.Middleware)
 	r.Use(requestLogger(d.log))
 	r.Use(middleware.Timeout(30 * time.Second))
+
+	// Prometheus scrape endpoint. Internal only — the edge proxy does not
+	// forward /metrics, so it is unreachable from the public internet.
+	r.Handle("/metrics", metrics.Handler())
 
 	// Liveness: process is up, no dependency checks.
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
