@@ -26,6 +26,7 @@ const (
 	EventNotification    = "notification.created"
 	EventBoardChanged    = "board.changed"
 	EventGroupChanged    = "group.changed"
+	EventRatingChanged   = "rating.changed"
 	EventError           = "error"
 )
 

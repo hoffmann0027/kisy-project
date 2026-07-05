@@ -175,6 +175,7 @@ export interface RatingProject {
   title: string;
   description: string | null;
   difficulty: RatingDifficulty;
+  minLevel: number;
   status: "active" | "done";
   createdBy: string;
   totalProfitKopecks: number;

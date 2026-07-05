@@ -70,6 +70,7 @@ type ProjectDTO struct {
 	Title              string    `json:"title"`
 	Description        *string   `json:"description"`
 	Difficulty         string    `json:"difficulty"`
+	MinLevel           int       `json:"minLevel"`
 	Status             string    `json:"status"`
 	CreatedBy          uuid.UUID `json:"createdBy"`
 	TotalProfitKopecks int64     `json:"totalProfitKopecks"`

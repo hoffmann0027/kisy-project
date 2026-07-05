@@ -7,7 +7,13 @@ import { useRatingMutations } from "@entities/rating/queries";
 
 type Mutations = ReturnType<typeof useRatingMutations>;
 
-const DIFFICULTY_LABEL: Record<string, string> = { easy: "Лёгкий", medium: "Средний", hard: "Сложный" };
+function LevelBadge({ level }: { level: number }) {
+  return (
+    <span className="rating-diff rating-diff--level" title={`Доступ: уровень ${level} и выше`}>
+      Ур. {level}
+    </span>
+  );
+}
 
 interface Props {
   board: RatingBoard;
@@ -76,14 +82,12 @@ function Empty({ text }: { text: string }) {
   return <div className="rating-empty">{text}</div>;
 }
 
-function DifficultyBadge({ difficulty }: { difficulty: string }) {
-  return <span className={`rating-diff rating-diff--${difficulty}`}>{DIFFICULTY_LABEL[difficulty] ?? difficulty}</span>;
-}
-
 function ProjectCard({ project, m, isCEO }: { project: RatingProject; m: Mutations; isCEO: boolean }) {
+  const [expanded, setExpanded] = useState(false);
   const [taskTitle, setTaskTitle] = useState("");
   const [addingTask, setAddingTask] = useState(false);
   const backlog = project.tasks.filter((t) => t.status === "backlog");
+  const activeTasks = project.tasks.length;
 
   const addTask = () => {
     const title = taskTitle.trim();
@@ -110,55 +114,64 @@ function ProjectCard({ project, m, isCEO }: { project: RatingProject; m: Mutatio
 
   return (
     <div className="rating-card">
-      <div className="rating-card__top">
-        <div className="rating-card__title">{project.title}</div>
-        <DifficultyBadge difficulty={project.difficulty} />
-      </div>
-      {project.description && <div className="rating-card__desc">{project.description}</div>}
+      <button className="rating-card__header" onClick={() => setExpanded((v) => !v)}>
+        <span className={"rating-chevron" + (expanded ? " rating-chevron--open" : "")}>▸</span>
+        <span className="rating-card__title">{project.title}</span>
+        <LevelBadge level={project.minLevel} />
+        <span className="rating-card__count-chip" title="Задач">
+          {activeTasks}
+        </span>
+      </button>
 
-      <div className="rating-tasks">
-        {backlog.map((t) => (
-          <div key={t.id} className="rating-task">
-            <span className="rating-task__title">{t.title}</span>
-            <div className="rating-inline">
-              <Button variant="secondary" onClick={() => take(t.id)} loading={m.assign.isPending}>
-                Взять
-              </Button>
-              {isCEO && (
-                <button className="rating-x" title="Удалить задачу" onClick={() => m.deleteTask.mutate(t.id)}>
-                  ✕
+      {expanded && (
+        <div className="rating-card__expand">
+          {project.description && <div className="rating-card__desc">{project.description}</div>}
+
+          <div className="rating-tasks">
+            {backlog.map((t) => (
+              <div key={t.id} className="rating-task">
+                <span className="rating-task__title">{t.title}</span>
+                <div className="rating-inline">
+                  <Button variant="secondary" onClick={() => take(t.id)} loading={m.assign.isPending}>
+                    Взять
+                  </Button>
+                  {isCEO && (
+                    <button className="rating-x" title="Удалить задачу" onClick={() => m.deleteTask.mutate(t.id)}>
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+            {backlog.length === 0 && <div className="rating-tasks__none">Все задачи разобраны</div>}
+          </div>
+
+          {isCEO && (
+            <div className="rating-card__actions">
+              {addingTask ? (
+                <div className="rating-inline">
+                  <input
+                    className="ui-input"
+                    placeholder="Название задачи"
+                    autoFocus
+                    value={taskTitle}
+                    onChange={(e) => setTaskTitle(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && addTask()}
+                  />
+                  <Button variant="primary" onClick={addTask} loading={m.createTask.isPending}>
+                    +
+                  </Button>
+                </div>
+              ) : (
+                <button className="rating-link" onClick={() => setAddingTask(true)}>
+                  + Задача
                 </button>
               )}
+              <button className="rating-link rating-link--danger" onClick={remove}>
+                Удалить проект
+              </button>
             </div>
-          </div>
-        ))}
-        {backlog.length === 0 && <div className="rating-tasks__none">Все задачи разобраны</div>}
-      </div>
-
-      {isCEO && (
-        <div className="rating-card__actions">
-          {addingTask ? (
-            <div className="rating-inline">
-              <input
-                className="ui-input"
-                placeholder="Название задачи"
-                autoFocus
-                value={taskTitle}
-                onChange={(e) => setTaskTitle(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addTask()}
-              />
-              <Button variant="primary" onClick={addTask} loading={m.createTask.isPending}>
-                +
-              </Button>
-            </div>
-          ) : (
-            <button className="rating-link" onClick={() => setAddingTask(true)}>
-              + Задача
-            </button>
           )}
-          <button className="rating-link rating-link--danger" onClick={remove}>
-            Удалить проект
-          </button>
         </div>
       )}
     </div>
@@ -267,7 +280,7 @@ function DoneProjectCard({ project, m, isCEO }: { project: RatingProject; m: Mut
     <div className="rating-card">
       <div className="rating-card__top">
         <div className="rating-card__title">{project.title}</div>
-        <DifficultyBadge difficulty={project.difficulty} />
+        <LevelBadge level={project.minLevel} />
       </div>
       <div className="rating-profit">
         <span>Прибыль за всё время</span>
@@ -307,19 +320,19 @@ function DoneProjectCard({ project, m, isCEO }: { project: RatingProject; m: Mut
 function CreateProjectForm({ m }: { m: Mutations }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
-  const [difficulty, setDifficulty] = useState("medium");
+  const [minLevel, setMinLevel] = useState(10);
   const [description, setDescription] = useState("");
 
   const submit = () => {
     const t = title.trim();
     if (!t) return;
     m.createProject.mutate(
-      { title: t, difficulty, description: description.trim() || undefined },
+      { title: t, minLevel, description: description.trim() || undefined },
       {
         onSuccess: () => {
           setTitle("");
           setDescription("");
-          setDifficulty("medium");
+          setMinLevel(10);
           setOpen(false);
         },
         onError: () => toast.error("Не удалось создать проект"),
@@ -339,11 +352,16 @@ function CreateProjectForm({ m }: { m: Mutations }) {
     <div className="rating-card rating-create">
       <input className="ui-input" placeholder="Название проекта" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} />
       <textarea className="ui-input" placeholder="Описание (необязательно)" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
-      <select className="ui-input" value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
-        <option value="easy">Лёгкий</option>
-        <option value="medium">Средний</option>
-        <option value="hard">Сложный</option>
-      </select>
+      <label className="rating-level-label">
+        Уровень доступа (виден с этого уровня и выше)
+        <select className="ui-input" value={minLevel} onChange={(e) => setMinLevel(Number(e.target.value))}>
+          {Array.from({ length: 10 }, (_, i) => i + 1).map((lvl) => (
+            <option key={lvl} value={lvl}>
+              Уровень {lvl}
+            </option>
+          ))}
+        </select>
+      </label>
       <div className="rating-inline">
         <Button variant="ghost" onClick={() => setOpen(false)}>
           Отмена

@@ -23,11 +23,13 @@ type TaskRow struct {
 
 // Repository is the persistence port for the rating board.
 type Repository interface {
-	ListProjects(ctx context.Context, q db.DBTX) ([]ProjectDTO, error)
-	ListTasks(ctx context.Context, q db.DBTX) ([]TaskDTO, error)
-	Analytics(ctx context.Context, q db.DBTX) (AnalyticsDTO, error)
+	// The *actorLevel* args scope results to projects the actor may see
+	// (their clearance L can see a project when L <= min_level).
+	ListProjects(ctx context.Context, q db.DBTX, actorLevel int) ([]ProjectDTO, error)
+	ListTasks(ctx context.Context, q db.DBTX, actorLevel int) ([]TaskDTO, error)
+	Analytics(ctx context.Context, q db.DBTX, actorLevel int) (AnalyticsDTO, error)
 
-	CreateProject(ctx context.Context, q db.DBTX, title string, description *string, difficulty string, createdBy uuid.UUID) (uuid.UUID, error)
+	CreateProject(ctx context.Context, q db.DBTX, title string, description *string, difficulty string, minLevel int, createdBy uuid.UUID) (uuid.UUID, error)
 	DeleteProject(ctx context.Context, q db.DBTX, id uuid.UUID) error
 	ProjectExists(ctx context.Context, q db.DBTX, id uuid.UUID) (bool, error)
 	CreateTask(ctx context.Context, q db.DBTX, projectID uuid.UUID, title string) (uuid.UUID, error)
@@ -50,9 +52,9 @@ type Repository interface {
 	SetProgress(ctx context.Context, q db.DBTX, taskID, userID uuid.UUID, progress int) error
 
 	AddFinance(ctx context.Context, q db.DBTX, projectID uuid.UUID, taskID *uuid.UUID, income, expense int64, note *string, createdBy uuid.UUID) error
-	// ListFinance returns every ledger entry joined to project/task/author for
-	// CSV export, oldest first.
-	ListFinance(ctx context.Context, q db.DBTX) ([]FinanceRow, error)
+	// ListFinance returns ledger entries (scoped to accessible projects) joined
+	// to project/task/author for CSV export, oldest first.
+	ListFinance(ctx context.Context, q db.DBTX, actorLevel int) ([]FinanceRow, error)
 }
 
 // FinanceRow is one exported ledger line.
@@ -70,16 +72,17 @@ type PostgresRepository struct{}
 
 func NewPostgresRepository() *PostgresRepository { return &PostgresRepository{} }
 
-func (r *PostgresRepository) ListProjects(ctx context.Context, q db.DBTX) ([]ProjectDTO, error) {
+func (r *PostgresRepository) ListProjects(ctx context.Context, q db.DBTX, actorLevel int) ([]ProjectDTO, error) {
 	rows, err := q.Query(ctx, `
-		SELECT p.id, p.title, p.description, p.difficulty, p.status, p.created_by, p.created_at,
+		SELECT p.id, p.title, p.description, p.difficulty, p.min_level, p.status, p.created_by, p.created_at,
 		       COALESCE(fp.profit, 0)
 		FROM rating_projects p
 		LEFT JOIN (
 			SELECT project_id, SUM(income_kopecks - expense_kopecks) AS profit
 			FROM rating_finance_entries GROUP BY project_id
 		) fp ON fp.project_id = p.id
-		ORDER BY p.created_at`)
+		WHERE p.min_level >= $1
+		ORDER BY p.created_at`, actorLevel)
 	if err != nil {
 		return nil, fmt.Errorf("rating: list projects: %w", err)
 	}
@@ -88,7 +91,7 @@ func (r *PostgresRepository) ListProjects(ctx context.Context, q db.DBTX) ([]Pro
 	var out []ProjectDTO
 	for rows.Next() {
 		var p ProjectDTO
-		if err := rows.Scan(&p.ID, &p.Title, &p.Description, &p.Difficulty, &p.Status, &p.CreatedBy, &p.CreatedAt, &p.TotalProfitKopecks); err != nil {
+		if err := rows.Scan(&p.ID, &p.Title, &p.Description, &p.Difficulty, &p.MinLevel, &p.Status, &p.CreatedBy, &p.CreatedAt, &p.TotalProfitKopecks); err != nil {
 			return nil, fmt.Errorf("rating: scan project: %w", err)
 		}
 		p.Tasks = []TaskDTO{}
@@ -97,7 +100,7 @@ func (r *PostgresRepository) ListProjects(ctx context.Context, q db.DBTX) ([]Pro
 	return out, rows.Err()
 }
 
-func (r *PostgresRepository) ListTasks(ctx context.Context, q db.DBTX) ([]TaskDTO, error) {
+func (r *PostgresRepository) ListTasks(ctx context.Context, q db.DBTX, actorLevel int) ([]TaskDTO, error) {
 	rows, err := q.Query(ctx, `
 		SELECT t.id, t.project_id, p.title, t.title, t.assignee_id, u.display_name, u.avatar_url,
 		       t.progress, t.status, t.created_at, COALESCE(ft.profit, 0)
@@ -108,7 +111,8 @@ func (r *PostgresRepository) ListTasks(ctx context.Context, q db.DBTX) ([]TaskDT
 			SELECT task_id, SUM(income_kopecks - expense_kopecks) AS profit
 			FROM rating_finance_entries WHERE task_id IS NOT NULL GROUP BY task_id
 		) ft ON ft.task_id = t.id
-		ORDER BY t.created_at`)
+		WHERE p.min_level >= $1
+		ORDER BY t.created_at`, actorLevel)
 	if err != nil {
 		return nil, fmt.Errorf("rating: list tasks: %w", err)
 	}
@@ -136,15 +140,16 @@ func (r *PostgresRepository) ListTasks(ctx context.Context, q db.DBTX) ([]TaskDT
 	return out, rows.Err()
 }
 
-func (r *PostgresRepository) Analytics(ctx context.Context, q db.DBTX) (AnalyticsDTO, error) {
+func (r *PostgresRepository) Analytics(ctx context.Context, q db.DBTX, actorLevel int) (AnalyticsDTO, error) {
 	var a AnalyticsDTO
 
 	perRows, err := q.Query(ctx, `
 		SELECT p.id, p.title, COALESCE(SUM(f.income_kopecks - f.expense_kopecks), 0)
 		FROM rating_projects p
 		LEFT JOIN rating_finance_entries f ON f.project_id = p.id
+		WHERE p.min_level >= $1
 		GROUP BY p.id, p.title
-		ORDER BY 3 DESC`)
+		ORDER BY 3 DESC`, actorLevel)
 	if err != nil {
 		return a, fmt.Errorf("rating: analytics per-project: %w", err)
 	}
@@ -161,10 +166,12 @@ func (r *PostgresRepository) Analytics(ctx context.Context, q db.DBTX) (Analytic
 	}
 
 	monRows, err := q.Query(ctx, `
-		SELECT to_char(date_trunc('month', created_at), 'YYYY-MM'),
-		       SUM(income_kopecks - expense_kopecks)
-		FROM rating_finance_entries
-		GROUP BY 1 ORDER BY 1`)
+		SELECT to_char(date_trunc('month', f.created_at), 'YYYY-MM'),
+		       SUM(f.income_kopecks - f.expense_kopecks)
+		FROM rating_finance_entries f
+		JOIN rating_projects p ON p.id = f.project_id
+		WHERE p.min_level >= $1
+		GROUP BY 1 ORDER BY 1`, actorLevel)
 	if err != nil {
 		return a, fmt.Errorf("rating: analytics monthly: %w", err)
 	}
@@ -179,12 +186,12 @@ func (r *PostgresRepository) Analytics(ctx context.Context, q db.DBTX) (Analytic
 	return a, monRows.Err()
 }
 
-func (r *PostgresRepository) CreateProject(ctx context.Context, q db.DBTX, title string, description *string, difficulty string, createdBy uuid.UUID) (uuid.UUID, error) {
+func (r *PostgresRepository) CreateProject(ctx context.Context, q db.DBTX, title string, description *string, difficulty string, minLevel int, createdBy uuid.UUID) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := q.QueryRow(ctx, `
-		INSERT INTO rating_projects (title, description, difficulty, created_by)
-		VALUES ($1, $2, $3, $4) RETURNING id`,
-		title, description, difficulty, createdBy).Scan(&id)
+		INSERT INTO rating_projects (title, description, difficulty, min_level, created_by)
+		VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+		title, description, difficulty, minLevel, createdBy).Scan(&id)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("rating: create project: %w", err)
 	}
@@ -312,14 +319,15 @@ func (r *PostgresRepository) SetProgress(ctx context.Context, q db.DBTX, taskID,
 	return nil
 }
 
-func (r *PostgresRepository) ListFinance(ctx context.Context, q db.DBTX) ([]FinanceRow, error) {
+func (r *PostgresRepository) ListFinance(ctx context.Context, q db.DBTX, actorLevel int) ([]FinanceRow, error) {
 	rows, err := q.Query(ctx, `
 		SELECT p.title, t.title, f.income_kopecks, f.expense_kopecks, f.note, u.display_name, f.created_at
 		FROM rating_finance_entries f
 		JOIN rating_projects p ON p.id = f.project_id
 		LEFT JOIN rating_tasks t ON t.id = f.task_id
 		JOIN users u ON u.id = f.created_by
-		ORDER BY f.created_at`)
+		WHERE p.min_level >= $1
+		ORDER BY f.created_at`, actorLevel)
 	if err != nil {
 		return nil, fmt.Errorf("rating: list finance: %w", err)
 	}

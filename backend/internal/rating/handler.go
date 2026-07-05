@@ -99,10 +99,11 @@ func (h *Handler) auth(w http.ResponseWriter, r *http.Request) (Actor, bool) {
 func taskID(r *http.Request) (uuid.UUID, error) { return uuid.Parse(chi.URLParam(r, "id")) }
 
 func (h *Handler) board(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.auth(w, r); !ok {
+	actor, ok := h.auth(w, r)
+	if !ok {
 		return
 	}
-	board, err := h.svc.Board(r.Context())
+	board, err := h.svc.Board(r.Context(), actor.RoleLevel)
 	if err != nil {
 		h.fail(w, r, err)
 		return
@@ -111,10 +112,11 @@ func (h *Handler) board(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) analytics(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.auth(w, r); !ok {
+	actor, ok := h.auth(w, r)
+	if !ok {
 		return
 	}
-	a, err := h.svc.Analytics(r.Context())
+	a, err := h.svc.Analytics(r.Context(), actor.RoleLevel)
 	if err != nil {
 		h.fail(w, r, err)
 		return
@@ -128,10 +130,11 @@ func rubles(kopecks int64) string {
 
 // exportCSV streams the profit ledger as a CSV download.
 func (h *Handler) exportCSV(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.auth(w, r); !ok {
+	actor, ok := h.auth(w, r)
+	if !ok {
 		return
 	}
-	rows, err := h.svc.ExportFinance(r.Context())
+	rows, err := h.svc.ExportFinance(r.Context(), actor.RoleLevel)
 	if err != nil {
 		h.fail(w, r, err)
 		return
@@ -174,6 +177,7 @@ type createProjectRequest struct {
 	Title       string  `json:"title"`
 	Description *string `json:"description"`
 	Difficulty  string  `json:"difficulty"`
+	MinLevel    int     `json:"minLevel"`
 }
 
 func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
@@ -186,7 +190,7 @@ func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "malformed JSON body")
 		return
 	}
-	id, err := h.svc.CreateProject(r.Context(), CreateProjectInput{Title: req.Title, Description: req.Description, Difficulty: req.Difficulty}, actor)
+	id, err := h.svc.CreateProject(r.Context(), CreateProjectInput{Title: req.Title, Description: req.Description, Difficulty: req.Difficulty, MinLevel: req.MinLevel}, actor)
 	if err != nil {
 		h.fail(w, r, err)
 		return

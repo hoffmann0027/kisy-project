@@ -26,8 +26,8 @@ export function useRatingMutations() {
 
   return {
     createProject: useMutation({
-      mutationFn: (a: { title: string; difficulty: string; description?: string }) =>
-        ratingApi.createProject(a.title, a.difficulty, a.description),
+      mutationFn: (a: { title: string; minLevel: number; description?: string }) =>
+        ratingApi.createProject(a.title, a.minLevel, a.description),
       onSuccess: refresh,
     }),
     deleteProject: useMutation({ mutationFn: (id: string) => ratingApi.deleteProject(id), onSuccess: refresh }),

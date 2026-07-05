@@ -151,8 +151,8 @@ export const searchApi = {
 export const ratingApi = {
   board: () => apiClient.get<RatingBoard>("/rating/board"),
   analytics: () => apiClient.get<RatingAnalytics>("/rating/analytics"),
-  createProject: (title: string, difficulty: string, description?: string) =>
-    apiClient.post<{ id: string }>("/rating/projects", { title, difficulty, description }),
+  createProject: (title: string, minLevel: number, description?: string) =>
+    apiClient.post<{ id: string }>("/rating/projects", { title, minLevel, description }),
   deleteProject: (id: string) => apiClient.del<{ deleted: boolean }>(`/rating/projects/${id}`),
   createTask: (projectId: string, title: string) =>
     apiClient.post<{ id: string }>(`/rating/projects/${projectId}/tasks`, { title }),

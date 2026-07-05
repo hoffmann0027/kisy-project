@@ -15,22 +15,37 @@ type Board struct {
 	Projects []ProjectDTO `json:"projects"`
 }
 
+// ChangePublisher notifies every connected client that the shared rating board
+// changed, so they refetch. Injected to avoid a rating→ws cycle; may be nil.
+type ChangePublisher func()
+
 type Service struct {
-	pool *pgxpool.Pool
-	repo Repository
+	pool    *pgxpool.Pool
+	repo    Repository
+	changed ChangePublisher
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository) *Service {
 	return &Service{pool: pool, repo: repo}
 }
 
-// Board returns every project with its tasks grouped underneath.
-func (s *Service) Board(ctx context.Context) (Board, error) {
-	projects, err := s.repo.ListProjects(ctx, s.pool)
+// SetChangePublisher wires real-time board-change notifications.
+func (s *Service) SetChangePublisher(p ChangePublisher) { s.changed = p }
+
+func (s *Service) notify() {
+	if s.changed != nil {
+		s.changed()
+	}
+}
+
+// Board returns the projects the actor may see (clearance L sees a project when
+// L <= min_level), with their tasks grouped underneath.
+func (s *Service) Board(ctx context.Context, actorLevel int) (Board, error) {
+	projects, err := s.repo.ListProjects(ctx, s.pool, actorLevel)
 	if err != nil {
 		return Board{}, err
 	}
-	tasks, err := s.repo.ListTasks(ctx, s.pool)
+	tasks, err := s.repo.ListTasks(ctx, s.pool, actorLevel)
 	if err != nil {
 		return Board{}, err
 	}
@@ -50,9 +65,10 @@ func (s *Service) Board(ctx context.Context) (Board, error) {
 	return Board{Projects: projects}, nil
 }
 
-// Analytics returns the per-project profit share and monthly totals.
-func (s *Service) Analytics(ctx context.Context) (AnalyticsDTO, error) {
-	a, err := s.repo.Analytics(ctx, s.pool)
+// Analytics returns the per-project profit share and monthly totals, scoped to
+// projects the actor may see.
+func (s *Service) Analytics(ctx context.Context, actorLevel int) (AnalyticsDTO, error) {
+	a, err := s.repo.Analytics(ctx, s.pool, actorLevel)
 	if err != nil {
 		return AnalyticsDTO{}, err
 	}
@@ -65,16 +81,18 @@ func (s *Service) Analytics(ctx context.Context) (AnalyticsDTO, error) {
 	return a, nil
 }
 
-// ExportFinance returns the full profit ledger for CSV export.
-func (s *Service) ExportFinance(ctx context.Context) ([]FinanceRow, error) {
-	return s.repo.ListFinance(ctx, s.pool)
+// ExportFinance returns the profit ledger the actor may see, for CSV export.
+func (s *Service) ExportFinance(ctx context.Context, actorLevel int) ([]FinanceRow, error) {
+	return s.repo.ListFinance(ctx, s.pool, actorLevel)
 }
 
-// CreateProjectInput is validated by the service.
+// CreateProjectInput is validated by the service. MinLevel (1–10) is the
+// project's access level: users of clearance L see it when L <= MinLevel.
 type CreateProjectInput struct {
 	Title       string
 	Description *string
 	Difficulty  string
+	MinLevel    int
 }
 
 // CreateProject adds a backlog project. Only the CEO may create projects.
@@ -92,7 +110,14 @@ func (s *Service) CreateProject(ctx context.Context, in CreateProjectInput, acto
 	if !validDifficulty[in.Difficulty] {
 		return uuid.Nil, ErrValidation
 	}
-	return s.repo.CreateProject(ctx, s.pool, in.Title, in.Description, in.Difficulty, actor.UserID)
+	if in.MinLevel < 1 || in.MinLevel > 10 {
+		return uuid.Nil, ErrValidation
+	}
+	id, err := s.repo.CreateProject(ctx, s.pool, in.Title, in.Description, in.Difficulty, in.MinLevel, actor.UserID)
+	if err == nil {
+		s.notify()
+	}
+	return id, err
 }
 
 // DeleteProject removes a project and its tasks/ledger. CEO only.
@@ -100,7 +125,11 @@ func (s *Service) DeleteProject(ctx context.Context, id uuid.UUID, actor Actor) 
 	if !actor.isCEO() {
 		return ErrForbidden
 	}
-	return s.repo.DeleteProject(ctx, s.pool, id)
+	err := s.repo.DeleteProject(ctx, s.pool, id)
+	if err == nil {
+		s.notify()
+	}
+	return err
 }
 
 // CreateTask adds a task to a project's backlog. CEO only.
@@ -119,14 +148,22 @@ func (s *Service) CreateTask(ctx context.Context, projectID uuid.UUID, title str
 	if !exists {
 		return uuid.Nil, ErrNotFound
 	}
-	return s.repo.CreateTask(ctx, s.pool, projectID, title)
+	id, err := s.repo.CreateTask(ctx, s.pool, projectID, title)
+	if err == nil {
+		s.notify()
+	}
+	return id, err
 }
 
 // AssignSelf claims a backlog task for the acting user, moving it to
 // "in progress". A user may only assign themselves — the handler passes the
 // actor's own id, so there is no way to assign anyone else.
 func (s *Service) AssignSelf(ctx context.Context, taskID uuid.UUID, actor Actor) error {
-	return s.repo.Assign(ctx, s.pool, taskID, actor.UserID)
+	err := s.repo.Assign(ctx, s.pool, taskID, actor.UserID)
+	if err == nil {
+		s.notify()
+	}
+	return err
 }
 
 // SetProgress updates a task's progress (0–100). Only the assignee may do so.
@@ -162,7 +199,11 @@ func (s *Service) SetProgress(ctx context.Context, taskID uuid.UUID, progress in
 			}
 		}
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	s.notify()
+	return nil
 }
 
 // ReturnTask sends an in-progress task back to the backlog. The current
@@ -176,7 +217,11 @@ func (s *Service) ReturnTask(ctx context.Context, taskID uuid.UUID, actor Actor)
 	if !isAssignee && !actor.isCEO() {
 		return ErrForbidden
 	}
-	return s.repo.ReturnTask(ctx, s.pool, taskID)
+	err = s.repo.ReturnTask(ctx, s.pool, taskID)
+	if err == nil {
+		s.notify()
+	}
+	return err
 }
 
 // DeleteTask removes a task at any stage. CEO only.
@@ -184,7 +229,11 @@ func (s *Service) DeleteTask(ctx context.Context, taskID uuid.UUID, actor Actor)
 	if !actor.isCEO() {
 		return ErrForbidden
 	}
-	return s.repo.DeleteTask(ctx, s.pool, taskID)
+	err := s.repo.DeleteTask(ctx, s.pool, taskID)
+	if err == nil {
+		s.notify()
+	}
+	return err
 }
 
 // FinanceInput carries a new ledger entry (money in integer minor units — euro
@@ -212,5 +261,9 @@ func (s *Service) AddFinance(ctx context.Context, projectID uuid.UUID, in Financ
 	if !exists {
 		return ErrNotFound
 	}
-	return s.repo.AddFinance(ctx, s.pool, projectID, nil, in.IncomeKopecks, in.ExpenseKopecks, in.Note, actor.UserID)
+	err = s.repo.AddFinance(ctx, s.pool, projectID, nil, in.IncomeKopecks, in.ExpenseKopecks, in.Note, actor.UserID)
+	if err == nil {
+		s.notify()
+	}
+	return err
 }
