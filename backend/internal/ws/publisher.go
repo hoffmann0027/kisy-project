@@ -50,6 +50,12 @@ func (p *Publisher) PublishBoardChanged(groupID uuid.UUID) {
 	p.hub.publishToChat("group", groupID, encode(EventBoardChanged, map[string]any{"groupId": groupID}))
 }
 
+// PublishRatingChanged tells every connected client the shared rating board
+// changed, so they refetch it; satisfies rating.ChangePublisher.
+func (p *Publisher) PublishRatingChanged() {
+	p.hub.broadcast(encode(EventRatingChanged, map[string]any{}))
+}
+
 // PublishGroupChanged tells a group's members the group's metadata (e.g. its
 // avatar) changed so they can refetch it; satisfies groups.ChangePublisher.
 func (p *Publisher) PublishGroupChanged(groupID uuid.UUID) {

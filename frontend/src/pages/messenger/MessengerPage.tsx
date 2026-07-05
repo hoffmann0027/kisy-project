@@ -16,10 +16,8 @@ import type { Chat, Group } from "@shared/api/types";
 import { useChats } from "@entities/chat/queries";
 import { useGroups } from "@entities/group/queries";
 import { usePresenceStore } from "@shared/store/presence";
-import { useRealtime } from "@app/useRealtime";
 
 export function MessengerPage() {
-  useRealtime();
   const navigate = useNavigate();
   const { chatId, groupId } = useParams();
   const { data: chats } = useChats();

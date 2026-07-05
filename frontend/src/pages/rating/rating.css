@@ -195,11 +195,64 @@
   padding-top: 4px;
 }
 
+.rating-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+}
+.rating-chevron {
+  color: var(--color-text-secondary);
+  transition: transform 0.15s;
+  font-size: 12px;
+  flex: none;
+}
+.rating-chevron--open {
+  transform: rotate(90deg);
+}
+.rating-card__header .rating-card__title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rating-card__count-chip {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-round);
+  padding: 1px 7px;
+  flex: none;
+}
+.rating-card__expand {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+.rating-level-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
 .rating-diff {
   font-size: 11px;
   padding: 2px 8px;
   border-radius: var(--radius-round);
   white-space: nowrap;
+  flex: none;
+}
+.rating-diff--level {
+  background: rgba(90, 139, 246, 0.16);
+  color: #7aa5f7;
 }
 .rating-diff--easy {
   background: rgba(34, 195, 166, 0.16);

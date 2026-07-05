@@ -27,8 +27,9 @@ type ChatAuthorizer func(ctx context.Context, chatType string, chatID, actorID u
 // presence changes are broadcast and filtered per-instance by local
 // subscription state.
 const (
-	channelFanout   = "kisy:ws:fanout"
-	channelPresence = "kisy:ws:presence"
+	channelFanout    = "kisy:ws:fanout"
+	channelPresence  = "kisy:ws:presence"
+	channelBroadcast = "kisy:ws:broadcast"
 )
 
 // RecipientResolver returns the user IDs that should receive events for a
@@ -95,7 +96,7 @@ func (h *Hub) SetPresenceSink(onOffline func(ctx context.Context, userID uuid.UU
 // Run subscribes to the Redis channels and delivers received events to
 // local clients until ctx is cancelled. It should run in its own goroutine.
 func (h *Hub) Run(ctx context.Context) {
-	sub := h.rdb.Subscribe(ctx, channelFanout, channelPresence)
+	sub := h.rdb.Subscribe(ctx, channelFanout, channelPresence, channelBroadcast)
 	defer sub.Close()
 
 	ch := sub.Channel()
@@ -112,6 +113,8 @@ func (h *Hub) Run(ctx context.Context) {
 				h.onFanout([]byte(msg.Payload))
 			case channelPresence:
 				h.onPresence([]byte(msg.Payload))
+			case channelBroadcast:
+				h.onBroadcast([]byte(msg.Payload))
 			}
 		}
 	}
@@ -252,6 +255,24 @@ func (h *Hub) publishToUsers(recipients []uuid.UUID, frame []byte) {
 	payload, _ := json.Marshal(env)
 	if err := h.rdb.Publish(context.Background(), channelFanout, payload).Err(); err != nil {
 		h.log.Warn("fanout publish failed", "error", err)
+	}
+}
+
+// Broadcast delivers a frame to every connected client on every instance, for
+// app-wide events (e.g. the shared rating board changed).
+func (h *Hub) broadcast(frame []byte) {
+	if err := h.rdb.Publish(context.Background(), channelBroadcast, frame).Err(); err != nil {
+		h.log.Warn("broadcast publish failed", "error", err)
+	}
+}
+
+func (h *Hub) onBroadcast(frame []byte) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, set := range h.clients {
+		for c := range set {
+			c.enqueue(frame)
+		}
 	}
 }
 

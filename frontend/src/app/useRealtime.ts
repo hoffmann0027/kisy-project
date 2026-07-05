@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { wsClient } from "@shared/ws/client";
 import type { ServerEvent } from "@shared/ws/events";
@@ -12,12 +13,27 @@ import { useTypingStore } from "@shared/store/typing";
 import { useReadReceiptStore } from "@shared/store/readReceipts";
 import { useAuthStore } from "@shared/store/auth";
 
-// useRealtime connects the WebSocket for the session and routes server
-// events into the query cache and the presence/typing stores. It is
-// mounted once by the messenger shell.
+// useRealtime connects the WebSocket for the session and routes server events
+// into the query cache and the presence/typing stores. Mounted once by the
+// authenticated app layout so it stays connected across every page.
 export function useRealtime() {
   const qc = useQueryClient();
   const meId = useAuthStore((s) => s.user?.id);
+
+  // Which chat/group is open right now — an incoming message for it must not
+  // raise an unread badge (the user is already looking at it).
+  const params = useParams();
+  const activeChatId = params.chatId ?? params.groupId ?? null;
+  const activeChatRef = useRef<string | null>(activeChatId);
+  activeChatRef.current = activeChatId;
+
+  // Clear the unread badge of the chat the user just opened.
+  useEffect(() => {
+    if (!activeChatId) return;
+    qc.setQueryData<Chat[]>(chatKeys.list, (prev) =>
+      prev?.map((c) => (c.id === activeChatId ? { ...c, unreadCount: 0 } : c)),
+    );
+  }, [activeChatId, qc]);
 
   useEffect(() => {
     if (!meId) return;
@@ -45,7 +61,7 @@ export function useRealtime() {
     const unsub = wsClient.subscribe((ev: ServerEvent) => {
       switch (ev.event) {
         case "message.created":
-          handleMessageCreated(qc, ev.data, meId);
+          handleMessageCreated(qc, ev.data, meId, activeChatRef.current);
           break;
         case "message.updated": {
           const upd = ev.data;
@@ -96,6 +112,9 @@ export function useRealtime() {
         case "group.changed":
           qc.invalidateQueries({ queryKey: groupKeys.list });
           break;
+        case "rating.changed":
+          qc.invalidateQueries({ queryKey: ["rating"] });
+          break;
         case "notification.created":
           qc.invalidateQueries({ queryKey: notificationKeys.list });
           break;
@@ -143,7 +162,12 @@ function handleMessageRead(
   useReadReceiptStore.getState().advance(chatId, iso);
 }
 
-function handleMessageCreated(qc: ReturnType<typeof useQueryClient>, msg: Message, meId: string) {
+function handleMessageCreated(
+  qc: ReturnType<typeof useQueryClient>,
+  msg: Message,
+  meId: string,
+  activeChatId: string | null,
+) {
   // Insert into the open conversation's cache if present.
   qc.setQueryData(messageKeys.list(msg.chatType, msg.chatId), (old: any) => {
     if (!old) return old;
@@ -153,8 +177,10 @@ function handleMessageCreated(qc: ReturnType<typeof useQueryClient>, msg: Messag
     return { ...old, pages: [first, ...pages.slice(1)] };
   });
 
-  // Bump unread + reorder the chat list for messages from others.
+  // Reorder the chat list for messages from others; only raise the unread
+  // badge when the chat is NOT the one currently open on screen.
   if (msg.senderId !== meId) {
+    const isActive = msg.chatId === activeChatId;
     qc.setQueryData<Chat[]>(chatKeys.list, (prev) => {
       if (!prev) return prev;
       const idx = prev.findIndex((c) => c.id === msg.chatId);
@@ -163,7 +189,7 @@ function handleMessageCreated(qc: ReturnType<typeof useQueryClient>, msg: Messag
         qc.invalidateQueries({ queryKey: chatKeys.list });
         return prev;
       }
-      const updated = { ...prev[idx], unreadCount: prev[idx].unreadCount + 1 };
+      const updated = { ...prev[idx], unreadCount: isActive ? 0 : prev[idx].unreadCount + 1 };
       const rest = prev.filter((_, i) => i !== idx);
       return [updated, ...rest];
     });

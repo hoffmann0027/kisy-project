@@ -1351,6 +1351,7 @@ paths:
                 title: { type: string, minLength: 1, maxLength: 128 }
                 description: { type: [string, 'null'] }
                 difficulty: { type: string, enum: [easy, medium, hard] }
+                minLevel: { type: integer, minimum: 1, maximum: 10, description: Access level; users of clearance L see it when L <= minLevel. }
       responses:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
         '400': { $ref: '#/components/responses/ValidationError' }
@@ -1764,6 +1765,7 @@ components:
         title: { type: string }
         description: { type: [string, 'null'] }
         difficulty: { type: string, enum: [easy, medium, hard] }
+        minLevel: { type: integer, minimum: 1, maximum: 10 }
         status: { type: string, enum: [active, done] }
         createdBy: { type: string, format: uuid }
         totalProfitKopecks: { type: integer, format: int64, description: Profit in euro cents. }
