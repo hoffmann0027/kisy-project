@@ -13,6 +13,7 @@ import type {
   Invitation,
   Message,
   MessagePage,
+  Note,
   Notification,
   RatingAnalytics,
   RatingBoard,
@@ -165,6 +166,18 @@ export const ratingApi = {
   deleteTask: (taskId: string) => apiClient.del<{ deleted: boolean }>(`/rating/tasks/${taskId}`),
   addFinance: (projectId: string, incomeKopecks: number, expenseKopecks: number, note?: string) =>
     apiClient.post<{ ok: boolean }>(`/rating/projects/${projectId}/finance`, { incomeKopecks, expenseKopecks, note }),
+};
+
+export const notesApi = {
+  list: () => apiClient.get<{ notes: Note[] }>("/notes"),
+  createText: (text: string) => apiClient.post<{ note: Note }>("/notes", { text }),
+  createFile: (file: File, text?: string) =>
+    apiClient.uploadFile<{ note: Note }>(
+      "/notes/file",
+      file,
+      text ? { "X-Note-Text": encodeURIComponent(text) } : undefined,
+    ),
+  del: (id: string) => apiClient.del<{ deleted: boolean }>(`/notes/${id}`),
 };
 
 export const adminApi = {

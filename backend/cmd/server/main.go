@@ -205,6 +205,10 @@ func newRouter(d routerDeps) http.Handler {
 				m.feedbackHandler.Routes(r)
 			})
 
+			r.Route("/notes", func(r chi.Router) {
+				m.notesHandler.Routes(r)
+			})
+
 			r.Route("/rating", func(r chi.Router) {
 				m.ratingHandler.Routes(r)
 			})

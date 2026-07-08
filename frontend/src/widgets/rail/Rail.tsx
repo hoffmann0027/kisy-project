@@ -10,9 +10,10 @@ interface Props {
   onProfile: () => void;
   onNotifications: () => void;
   onFeedback: () => void;
+  onNotes: () => void;
 }
 
-export function Rail({ onProfile, onNotifications, onFeedback }: Props) {
+export function Rail({ onProfile, onNotifications, onFeedback, onNotes }: Props) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
@@ -57,6 +58,9 @@ export function Rail({ onProfile, onNotifications, onFeedback }: Props) {
           </button>
         )}
       </div>
+      <button className="rail__item" title="Заметки" onClick={onNotes}>
+        <Icon.Note />
+      </button>
       <button className="rail__item" title="Отзывы и предложения" onClick={onFeedback}>
         <Icon.Feedback />
       </button>

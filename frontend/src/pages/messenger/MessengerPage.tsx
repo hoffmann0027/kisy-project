@@ -10,6 +10,7 @@ import { NewGroupModal } from "@features/new-chat/NewGroupModal";
 import { ProfileModal } from "@features/profile/ProfileModal";
 import { NotificationsModal } from "@features/notifications/NotificationsModal";
 import { FeedbackModal } from "@features/feedback/FeedbackModal";
+import { NotesModal } from "@features/notes/NotesModal";
 import { Icon } from "@shared/ui/icons";
 import { formatRelative } from "@shared/lib/format";
 import type { Chat, Group } from "@shared/api/types";
@@ -29,6 +30,7 @@ export function MessengerPage() {
   const [profile, setProfile] = useState(false);
   const [notifications, setNotifications] = useState(false);
   const [feedback, setFeedback] = useState(false);
+  const [notes, setNotes] = useState(false);
 
   const activeChat: Chat | undefined = chats?.find((c) => c.id === chatId);
   const activeGroup: Group | undefined = groups?.find((g) => g.id === groupId);
@@ -47,6 +49,7 @@ export function MessengerPage() {
         onProfile={() => setProfile(true)}
         onNotifications={() => setNotifications(true)}
         onFeedback={() => setFeedback(true)}
+        onNotes={() => setNotes(true)}
       />
 
       <ChatList
@@ -88,6 +91,7 @@ export function MessengerPage() {
       <ProfileModal open={profile} onClose={() => setProfile(false)} />
       <NotificationsModal open={notifications} onClose={() => setNotifications(false)} />
       <FeedbackModal open={feedback} onClose={() => setFeedback(false)} />
+      <NotesModal open={notes} onClose={() => setNotes(false)} />
     </div>
   );
 }

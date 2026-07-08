@@ -126,6 +126,17 @@ export interface FeedbackPage {
   hasMore: boolean;
 }
 
+export interface Note {
+  id: string;
+  text: string | null;
+  hasFile: boolean;
+  fileName: string | null;
+  fileType: string | null;
+  fileSize: number;
+  fileUrl: string | null;
+  createdAt: string;
+}
+
 export interface BoardCard {
   id: string;
   columnId: string;
