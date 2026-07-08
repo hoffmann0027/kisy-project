@@ -434,3 +434,17 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* On mobile the nav rail is a fixed bottom bar (see messenger.css), so give the
+   rating content room above it and let the shell use the dynamic viewport. */
+@media (max-width: 760px) {
+  .rating-shell {
+    height: 100dvh;
+  }
+  .rating__scroll {
+    padding: 16px 16px calc(58px + 24px);
+  }
+  .rating__topbar {
+    flex-wrap: wrap;
+  }
+}

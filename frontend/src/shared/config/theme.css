@@ -60,8 +60,24 @@ body,
   height: 100%;
 }
 
+/* Use the dynamic viewport unit where supported so mobile browser chrome
+   (address bar) does not cover the bottom navigation. */
+@supports (height: 100dvh) {
+  html,
+  body,
+  #root {
+    height: 100dvh;
+  }
+}
+
 body {
   margin: 0;
+  /* Stop the whole page from bouncing/refreshing when a scroll region hits
+     its edge — this is what caused the "pull up and the site reloads" bug on
+     mobile. Inner scroll areas (chat list, conversation) keep scrolling. */
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
   background:
     radial-gradient(1200px 800px at 15% -10%, rgba(10, 132, 255, 0.10), transparent 60%),
     radial-gradient(1000px 700px at 110% 10%, rgba(120, 80, 255, 0.08), transparent 55%),
