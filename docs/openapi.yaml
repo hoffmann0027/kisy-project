@@ -31,6 +31,8 @@ tags:
     description: Per-user notifications (@mentions)
   - name: notes
     description: Personal notes (private per-user scratchpad with optional files)
+  - name: conditions
+    description: Promotion-requirement ladder (CEO edits all; members see only their next level)
   - name: admin
     description: CEO administration (users, roles, credentials, audit)
   - name: websocket
@@ -1347,6 +1349,38 @@ paths:
         '200': { description: File bytes, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  /conditions:
+    get:
+      tags: [conditions]
+      summary: List all nine promotion rules (CEO only)
+      responses:
+        '200': { description: Rules, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /conditions/next:
+    get:
+      tags: [conditions]
+      summary: The single rule for the caller's next level (null if already at the top)
+      responses:
+        '200': { description: Rule or null, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /conditions/{level}:
+    put:
+      tags: [conditions]
+      summary: Upsert the rule for a target level 1..9 (CEO only)
+      parameters:
+        - { name: level, in: path, required: true, schema: { type: integer, minimum: 1, maximum: 9 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [body], properties: { body: { type: string, maxLength: 4000 } } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 
   /rating/board:
     get:

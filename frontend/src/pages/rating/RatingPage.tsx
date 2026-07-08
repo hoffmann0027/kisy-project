@@ -8,6 +8,7 @@ import { ProfileModal } from "@features/profile/ProfileModal";
 import { NotificationsModal } from "@features/notifications/NotificationsModal";
 import { FeedbackModal } from "@features/feedback/FeedbackModal";
 import { NotesModal } from "@features/notes/NotesModal";
+import { ConditionsModal } from "@features/conditions/ConditionsModal";
 import { useRatingAnalytics, useRatingBoard, useRatingMutations } from "@entities/rating/queries";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
@@ -21,6 +22,7 @@ export function RatingPage() {
   const [notifications, setNotifications] = useState(false);
   const [feedback, setFeedback] = useState(false);
   const [notes, setNotes] = useState(false);
+  const [conditions, setConditions] = useState(false);
 
   return (
     <div className="rating-shell">
@@ -29,6 +31,7 @@ export function RatingPage() {
         onNotifications={() => setNotifications(true)}
         onFeedback={() => setFeedback(true)}
         onNotes={() => setNotes(true)}
+        onConditions={() => setConditions(true)}
       />
 
       <main className="rating">
@@ -56,6 +59,7 @@ export function RatingPage() {
       <NotificationsModal open={notifications} onClose={() => setNotifications(false)} />
       <FeedbackModal open={feedback} onClose={() => setFeedback(false)} />
       <NotesModal open={notes} onClose={() => setNotes(false)} />
+      <ConditionsModal open={conditions} onClose={() => setConditions(false)} />
     </div>
   );
 }

@@ -209,6 +209,10 @@ func newRouter(d routerDeps) http.Handler {
 				m.notesHandler.Routes(r)
 			})
 
+			r.Route("/conditions", func(r chi.Router) {
+				m.conditionsHandler.Routes(r)
+			})
+
 			r.Route("/rating", func(r chi.Router) {
 				m.ratingHandler.Routes(r)
 			})

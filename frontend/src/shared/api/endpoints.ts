@@ -11,6 +11,7 @@ import type {
   FeedbackPage,
   Group,
   Invitation,
+  LevelCondition,
   Message,
   MessagePage,
   Note,
@@ -178,6 +179,12 @@ export const notesApi = {
       text ? { "X-Note-Text": encodeURIComponent(text) } : undefined,
     ),
   del: (id: string) => apiClient.del<{ deleted: boolean }>(`/notes/${id}`),
+};
+
+export const conditionsApi = {
+  list: () => apiClient.get<{ conditions: LevelCondition[] }>("/conditions"),
+  next: () => apiClient.get<{ condition: LevelCondition | null }>("/conditions/next"),
+  set: (level: number, body: string) => apiClient.put<{ ok: boolean }>(`/conditions/${level}`, { body }),
 };
 
 export const adminApi = {

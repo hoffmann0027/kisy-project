@@ -126,6 +126,12 @@ export interface FeedbackPage {
   hasMore: boolean;
 }
 
+export interface LevelCondition {
+  targetLevel: number;
+  body: string;
+  updatedAt: string;
+}
+
 export interface Note {
   id: string;
   text: string | null;
