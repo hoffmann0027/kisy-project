@@ -15,6 +15,35 @@ function LevelBadge({ level }: { level: number }) {
   );
 }
 
+// LevelControl shows the project's access level. For the CEO it is an inline
+// dropdown that changes the level at any stage (any column); everyone else
+// sees a read-only badge.
+function LevelControl({ project, m, isCEO }: { project: RatingProject; m: Mutations; isCEO: boolean }) {
+  if (!isCEO) return <LevelBadge level={project.minLevel} />;
+  return (
+    <select
+      className="rating-level-select"
+      title="Уровень доступа (виден с этого уровня и выше)"
+      value={project.minLevel}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => {
+        const minLevel = Number(e.target.value);
+        if (minLevel === project.minLevel) return;
+        m.setProjectLevel.mutate(
+          { id: project.id, minLevel },
+          { onError: () => toast.error("Не удалось изменить уровень") },
+        );
+      }}
+    >
+      {Array.from({ length: 10 }, (_, i) => i + 1).map((lvl) => (
+        <option key={lvl} value={lvl}>
+          Ур. {lvl}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 interface Props {
   board: RatingBoard;
   m: Mutations;
@@ -114,14 +143,16 @@ function ProjectCard({ project, m, isCEO }: { project: RatingProject; m: Mutatio
 
   return (
     <div className="rating-card">
-      <button className="rating-card__header" onClick={() => setExpanded((v) => !v)}>
-        <span className={"rating-chevron" + (expanded ? " rating-chevron--open" : "")}>▸</span>
-        <span className="rating-card__title">{project.title}</span>
-        <LevelBadge level={project.minLevel} />
-        <span className="rating-card__count-chip" title="Задач">
-          {activeTasks}
-        </span>
-      </button>
+      <div className="rating-card__header-row">
+        <button className="rating-card__header" onClick={() => setExpanded((v) => !v)}>
+          <span className={"rating-chevron" + (expanded ? " rating-chevron--open" : "")}>▸</span>
+          <span className="rating-card__title">{project.title}</span>
+          <span className="rating-card__count-chip" title="Задач">
+            {activeTasks}
+          </span>
+        </button>
+        <LevelControl project={project} m={m} isCEO={isCEO} />
+      </div>
 
       {expanded && (
         <div className="rating-card__expand">
@@ -280,7 +311,7 @@ function DoneProjectCard({ project, m, isCEO }: { project: RatingProject; m: Mut
     <div className="rating-card">
       <div className="rating-card__top">
         <div className="rating-card__title">{project.title}</div>
-        <LevelBadge level={project.minLevel} />
+        <LevelControl project={project} m={m} isCEO={isCEO} />
       </div>
       <div className="rating-profit">
         <span>Прибыль за всё время</span>

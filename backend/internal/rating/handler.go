@@ -29,6 +29,7 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Get("/analytics", h.analytics)
 	r.Get("/export.csv", h.exportCSV)
 	r.Post("/projects", h.createProject)
+	r.Patch("/projects/{id}/level", h.setProjectLevel)
 	r.Delete("/projects/{id}", h.deleteProject)
 	r.Post("/projects/{id}/tasks", h.createTask)
 	r.Post("/projects/{id}/finance", h.addFinance)
@@ -196,6 +197,32 @@ func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpresponse.OK(w, r, http.StatusCreated, map[string]any{"id": id})
+}
+
+type setLevelRequest struct {
+	MinLevel int `json:"minLevel"`
+}
+
+func (h *Handler) setProjectLevel(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.auth(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "project not found")
+		return
+	}
+	var req setLevelRequest
+	if err := httpjson.Decode(w, r, &req); err != nil {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "malformed JSON body")
+		return
+	}
+	if err := h.svc.SetProjectLevel(r.Context(), id, req.MinLevel, actor); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (h *Handler) deleteProject(w http.ResponseWriter, r *http.Request) {

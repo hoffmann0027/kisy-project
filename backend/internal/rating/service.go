@@ -120,6 +120,22 @@ func (s *Service) CreateProject(ctx context.Context, in CreateProjectInput, acto
 	return id, err
 }
 
+// SetProjectLevel changes a project's access level (1–10) at any stage. CEO
+// only. Existing task assignees keep their tasks; only visibility changes.
+func (s *Service) SetProjectLevel(ctx context.Context, id uuid.UUID, minLevel int, actor Actor) error {
+	if !actor.isCEO() {
+		return ErrForbidden
+	}
+	if minLevel < 1 || minLevel > 10 {
+		return ErrValidation
+	}
+	err := s.repo.SetProjectLevel(ctx, s.pool, id, minLevel)
+	if err == nil {
+		s.notify()
+	}
+	return err
+}
+
 // DeleteProject removes a project and its tasks/ledger. CEO only.
 func (s *Service) DeleteProject(ctx context.Context, id uuid.UUID, actor Actor) error {
 	if !actor.isCEO() {

@@ -30,6 +30,8 @@ type Repository interface {
 	Analytics(ctx context.Context, q db.DBTX, actorLevel int) (AnalyticsDTO, error)
 
 	CreateProject(ctx context.Context, q db.DBTX, title string, description *string, difficulty string, minLevel int, createdBy uuid.UUID) (uuid.UUID, error)
+	// SetProjectLevel updates a project's access level (min_level).
+	SetProjectLevel(ctx context.Context, q db.DBTX, id uuid.UUID, minLevel int) error
 	DeleteProject(ctx context.Context, q db.DBTX, id uuid.UUID) error
 	ProjectExists(ctx context.Context, q db.DBTX, id uuid.UUID) (bool, error)
 	CreateTask(ctx context.Context, q db.DBTX, projectID uuid.UUID, title string) (uuid.UUID, error)
@@ -196,6 +198,17 @@ func (r *PostgresRepository) CreateProject(ctx context.Context, q db.DBTX, title
 		return uuid.Nil, fmt.Errorf("rating: create project: %w", err)
 	}
 	return id, nil
+}
+
+func (r *PostgresRepository) SetProjectLevel(ctx context.Context, q db.DBTX, id uuid.UUID, minLevel int) error {
+	tag, err := q.Exec(ctx, `UPDATE rating_projects SET min_level = $2 WHERE id = $1`, id, minLevel)
+	if err != nil {
+		return fmt.Errorf("rating: set project level: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (r *PostgresRepository) DeleteProject(ctx context.Context, q db.DBTX, id uuid.UUID) error {
