@@ -767,3 +767,96 @@
 .user-row:hover { background: rgba(255, 255, 255, 0.06); }
 .user-row__name { font-weight: 560; }
 .user-row__role { font-size: 12px; color: var(--color-text-tertiary); }
+
+/* Mobile back button in the conversation header (hidden on desktop where both
+   columns are visible side by side). */
+.conv__back {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  flex: none;
+  margin-right: 2px;
+}
+.conv__back:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-primary);
+}
+
+/* --- Mobile layout (single column, bottom nav) --- */
+@media (max-width: 760px) {
+  .msgr,
+  .msgr--with-panel {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+    height: 100dvh;
+  }
+
+  /* The nav rail becomes a fixed horizontal bar along the bottom. */
+  .rail {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    flex-direction: row;
+    align-items: center;
+    height: 58px;
+    padding: 0 8px;
+    gap: 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: none;
+    border-top: 1px solid var(--color-border);
+  }
+  .rail__logo { display: none; }
+  .rail__nav {
+    flex-direction: row;
+    flex: 0 0 auto;
+    gap: 4px;
+  }
+  .rail__item {
+    flex: 0 0 auto;
+    width: 44px;
+    height: 44px;
+  }
+
+  /* Columns share the single grid cell; only one is shown at a time. Height
+     leaves room for the bottom nav bar. */
+  .chatlist,
+  .conv,
+  .ui-empty {
+    grid-column: 1;
+    grid-row: 1;
+    height: calc(100dvh - 58px);
+    min-height: 0;
+  }
+  .chatlist {
+    border-right: none;
+    display: flex;
+  }
+  .conv,
+  .ui-empty {
+    display: none;
+  }
+
+  /* When a chat/group is open, swap: hide the list, show the conversation. */
+  .msgr--chat-open .chatlist { display: none; }
+  .msgr--chat-open .conv { display: flex; }
+  .msgr--chat-open .ui-empty { display: none; }
+
+  /* The supplementary context panel is not shown on narrow screens. */
+  .ctx-panel { display: none; }
+
+  .conv__back { display: flex; }
+
+  /* Roomier tap targets and full-width bubbles. */
+  .bubble { max-width: 86%; }
+  .chatlist__header { padding: var(--space-3) var(--space-4); }
+}

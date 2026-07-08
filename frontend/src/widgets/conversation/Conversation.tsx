@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { cn } from "@shared/lib/cn";
 import { formatDay } from "@shared/lib/format";
 import { Avatar, Button, Spinner, toast } from "@shared/ui";
@@ -42,6 +43,7 @@ interface Props {
 
 export function Conversation({ target, headerActions }: Props) {
   const { chatType, chatId } = target;
+  const navigate = useNavigate();
   const me = useAuthStore((s) => s.user!);
   const typingByChat = useTypingStore((s) => s.byChat);
   const { data, isPending, fetchNextPage, hasNextPage, isFetchingNextPage } = useMessages(chatType, chatId);
@@ -153,6 +155,9 @@ export function Conversation({ target, headerActions }: Props) {
   return (
     <section className="conv">
       <header className="conv__header">
+        <button className="conv__back" title="Назад" onClick={() => navigate("/")}>
+          <Icon.Back size={22} />
+        </button>
         <Avatar name={target.avatarName} url={target.avatarUrl} presence={target.online ? "online" : undefined} />
         <div className="conv__header-body">
           <div className="conv__title">{target.title}</div>

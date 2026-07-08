@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { cn } from "@shared/lib/cn";
 import { Icon } from "@shared/ui/icons";
 import type { Group } from "@shared/api/types";
@@ -10,6 +11,7 @@ import { GroupMembersModal } from "@features/profile/GroupMembersModal";
 type Tab = "chat" | "board";
 
 export function GroupView({ group }: { group: Group }) {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("chat");
   const [membersOpen, setMembersOpen] = useState(false);
   const isFounder = useAuthStore((s) => s.user?.id === group.createdBy);
@@ -38,6 +40,9 @@ export function GroupView({ group }: { group: Group }) {
     return (
       <section className="conv">
         <header className="conv__header">
+          <button className="conv__back" title="Назад" onClick={() => navigate("/")}>
+            <Icon.Back size={22} />
+          </button>
           <div className="conv__header-body">
             <div className="conv__title">{group.name}</div>
             <div className="conv__status">Доска задач</div>

@@ -48,7 +48,7 @@ export function MessengerPage() {
   const offlineLabel = other?.lastSeen ? `был(а) в сети ${formatRelative(other.lastSeen)}` : "не в сети";
 
   return (
-    <div className="msgr">
+    <div className={activeId ? "msgr msgr--chat-open" : "msgr"}>
       <Rail
         onProfile={() => setProfile(true)}
         onNotifications={() => setNotifications(true)}
