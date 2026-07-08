@@ -29,6 +29,8 @@ tags:
     description: Chat messages (editing disabled by design)
   - name: notifications
     description: Per-user notifications (@mentions)
+  - name: notes
+    description: Personal notes (private per-user scratchpad with optional files)
   - name: admin
     description: CEO administration (users, roles, credentials, audit)
   - name: websocket
@@ -1290,6 +1292,60 @@ paths:
         '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /notes:
+    get:
+      tags: [notes]
+      summary: List the current user's personal notes (newest first)
+      responses:
+        '200': { description: Notes, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [notes]
+      summary: Create a text-only note
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [text], properties: { text: { type: string, minLength: 1, maxLength: 10000 } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /notes/file:
+    post:
+      tags: [notes]
+      summary: Create a note carrying a file (raw body; X-File-Name and optional X-Note-Text headers)
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413': { description: File too large }
+  /notes/{id}:
+    delete:
+      tags: [notes]
+      summary: Delete one of your own notes (owner only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /notes/{id}/file:
+    get:
+      tags: [notes]
+      summary: Download a note's attached file (owner only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: File bytes, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
   /rating/board:

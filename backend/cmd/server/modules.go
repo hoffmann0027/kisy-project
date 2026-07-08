@@ -26,6 +26,7 @@ import (
 	"kisy-backend/internal/groups"
 	"kisy-backend/internal/invitations"
 	"kisy-backend/internal/messages"
+	"kisy-backend/internal/notes"
 	"kisy-backend/internal/notifications"
 	"kisy-backend/internal/platform/ratelimit"
 	"kisy-backend/internal/push"
@@ -54,6 +55,7 @@ type modules struct {
 	readstateHandler     *readstate.Handler
 	favoritesHandler     *favorites.Handler
 	feedbackHandler      *feedback.Handler
+	notesHandler         *notes.Handler
 	searchHandler        *search.Handler
 	pushHandler          *push.Handler
 	notificationsHandler *notifications.Handler
@@ -343,6 +345,16 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		return feedback.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
 	})
 
+	// --- personal notes ---
+	notesSvc := notes.NewService(pool, notes.NewPostgresRepository())
+	notesHandler := notes.NewHandler(notesSvc, func(r *http.Request) (uuid.UUID, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return uuid.Nil, false
+		}
+		return claims.UserID, true
+	})
+
 	// --- notifications (@mentions) ---
 	usernameResolver := func(ctx context.Context, username string) (uuid.UUID, bool) {
 		u, err := usersRepo.GetByUsername(ctx, pool, username)
@@ -437,6 +449,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		readstateHandler:     readstateHandler,
 		favoritesHandler:     favoritesHandler,
 		feedbackHandler:      feedbackHandler,
+		notesHandler:         notesHandler,
 		searchHandler:        searchHandler,
 		pushHandler:          pushHandler,
 		notificationsHandler: notificationsHandler,

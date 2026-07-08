@@ -60,4 +60,31 @@ export const Icon = {
       </>,
       size,
     ),
+  Note: ({ size }: IconProps) =>
+    svg(
+      <>
+        <path d="M4 4a2 2 0 0 1 2-2h8l6 6v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" />
+        <path d="M14 2v6h6" />
+        <path d="M8 13h8M8 17h5" />
+      </>,
+      size,
+    ),
+  Levels: ({ size }: IconProps) =>
+    svg(
+      <>
+        <path d="M4 20h4v-6H4Z" />
+        <path d="M10 20h4V9h-4Z" />
+        <path d="M16 20h4V4h-4Z" />
+      </>,
+      size,
+    ),
+  Vote: ({ size }: IconProps) =>
+    svg(
+      <>
+        <path d="m9 12 2 2 4-4" />
+        <path d="M5 7h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" />
+        <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      </>,
+      size,
+    ),
 };

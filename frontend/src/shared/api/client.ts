@@ -41,13 +41,15 @@ export const apiClient = {
   postBlob: <T>(path: string, blob: Blob) =>
     request<T>(path, { method: "POST", body: blob, headers: { "Content-Type": blob.type } }),
   // uploadFile posts a File as the raw body, carrying its name in a header.
-  uploadFile: <T>(path: string, file: File) =>
+  // extraHeaders lets callers attach metadata (already URL-encoded) alongside.
+  uploadFile: <T>(path: string, file: File, extraHeaders?: Record<string, string>) =>
     request<T>(path, {
       method: "POST",
       body: file,
       headers: {
         "Content-Type": file.type || "application/octet-stream",
         "X-File-Name": encodeURIComponent(file.name),
+        ...extraHeaders,
       },
     }),
 };
