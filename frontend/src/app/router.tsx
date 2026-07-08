@@ -6,13 +6,19 @@ import { RatingPage } from "@pages/rating/RatingPage";
 import { AdminPage } from "@pages/admin/AdminPage";
 import { RequireAuth, RequireCEO, RedirectIfAuth } from "./guards";
 import { useRealtime } from "./useRealtime";
+import { CallProvider } from "@features/call/CallProvider";
 
 // AuthedLayout keeps the WebSocket connection alive across every authenticated
 // route (messenger, rating, admin) so real-time events reach whichever page is
-// open — the layout stays mounted while its child routes swap.
+// open — the layout stays mounted while its child routes swap. CallProvider
+// wraps it so incoming/ongoing calls surface on any page.
 function AuthedLayout() {
   useRealtime();
-  return <Outlet />;
+  return (
+    <CallProvider>
+      <Outlet />
+    </CallProvider>
+  );
 }
 
 export const router = createBrowserRouter([

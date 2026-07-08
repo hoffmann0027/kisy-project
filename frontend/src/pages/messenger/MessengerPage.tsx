@@ -13,6 +13,7 @@ import { FeedbackModal } from "@features/feedback/FeedbackModal";
 import { NotesModal } from "@features/notes/NotesModal";
 import { ConditionsModal } from "@features/conditions/ConditionsModal";
 import { VotingModal } from "@features/voting/VotingModal";
+import { CallHistoryModal } from "@features/call/CallHistoryModal";
 import { Icon } from "@shared/ui/icons";
 import { formatRelative } from "@shared/lib/format";
 import type { Chat, Group } from "@shared/api/types";
@@ -35,6 +36,7 @@ export function MessengerPage() {
   const [notes, setNotes] = useState(false);
   const [conditions, setConditions] = useState(false);
   const [voting, setVoting] = useState(false);
+  const [callHistory, setCallHistory] = useState(false);
 
   const activeChat: Chat | undefined = chats?.find((c) => c.id === chatId);
   const activeGroup: Group | undefined = groups?.find((g) => g.id === groupId);
@@ -56,6 +58,7 @@ export function MessengerPage() {
         onNotes={() => setNotes(true)}
         onConditions={() => setConditions(true)}
         onVoting={() => setVoting(true)}
+        onCalls={() => setCallHistory(true)}
       />
 
       <ChatList
@@ -80,6 +83,7 @@ export function MessengerPage() {
             online: chatOnline,
             offlineLabel,
             otherLastReadAt: activeChat.otherLastReadAt,
+            peerUserId: other.id,
           }}
         />
       ) : (
@@ -100,6 +104,7 @@ export function MessengerPage() {
       <NotesModal open={notes} onClose={() => setNotes(false)} />
       <ConditionsModal open={conditions} onClose={() => setConditions(false)} />
       <VotingModal open={voting} onClose={() => setVoting(false)} />
+      <CallHistoryModal open={callHistory} onClose={() => setCallHistory(false)} />
     </div>
   );
 }

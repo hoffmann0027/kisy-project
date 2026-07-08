@@ -10,6 +10,7 @@ import { FeedbackModal } from "@features/feedback/FeedbackModal";
 import { NotesModal } from "@features/notes/NotesModal";
 import { ConditionsModal } from "@features/conditions/ConditionsModal";
 import { VotingModal } from "@features/voting/VotingModal";
+import { CallHistoryModal } from "@features/call/CallHistoryModal";
 import { useRatingAnalytics, useRatingBoard, useRatingMutations } from "@entities/rating/queries";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
@@ -25,6 +26,7 @@ export function RatingPage() {
   const [notes, setNotes] = useState(false);
   const [conditions, setConditions] = useState(false);
   const [voting, setVoting] = useState(false);
+  const [callHistory, setCallHistory] = useState(false);
 
   return (
     <div className="rating-shell">
@@ -35,6 +37,7 @@ export function RatingPage() {
         onNotes={() => setNotes(true)}
         onConditions={() => setConditions(true)}
         onVoting={() => setVoting(true)}
+        onCalls={() => setCallHistory(true)}
       />
 
       <main className="rating">
@@ -64,6 +67,7 @@ export function RatingPage() {
       <NotesModal open={notes} onClose={() => setNotes(false)} />
       <ConditionsModal open={conditions} onClose={() => setConditions(false)} />
       <VotingModal open={voting} onClose={() => setVoting(false)} />
+      <CallHistoryModal open={callHistory} onClose={() => setCallHistory(false)} />
     </div>
   );
 }
