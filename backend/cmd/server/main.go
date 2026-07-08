@@ -221,6 +221,12 @@ func newRouter(d routerDeps) http.Handler {
 				m.votingHandler.Routes(r)
 			})
 
+			r.Route("/calls", func(r chi.Router) {
+				// ICE-config/history reads; live signaling runs over /ws.
+				r.Use(m.limiter.Limit("calls", 60, time.Minute))
+				m.callsHandler.Routes(r)
+			})
+
 			r.Route("/search", func(r chi.Router) {
 				m.searchHandler.Routes(r)
 			})

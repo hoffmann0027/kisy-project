@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -39,6 +40,9 @@ type Config struct {
 	VAPIDPrivateKey string
 	VAPIDSubject    string
 
+	// ICE configures WebRTC connectivity for 1:1 audio calls (STUN/TURN).
+	ICE ICEConfig
+
 	// BootstrapCEOUsername/Password create the very first Level-1 account
 	// when the users table is empty. Optional after first launch.
 	BootstrapCEOUsername string
@@ -65,6 +69,20 @@ func (c *Config) PostgresDSN() string {
 		return c.DatabaseURL
 	}
 	return c.Postgres.DSN()
+}
+
+// ICEConfig holds the WebRTC ICE servers offered to clients via
+// GET /calls/ice-config. STUNURLs are plain STUN endpoints; TURNURLs are relay
+// endpoints whose short-lived credentials the backend derives from TURNSecret
+// (coturn "static-auth-secret" / TURN REST API). An empty TURNSecret disables
+// TURN and serves STUN only. Secrets never reach the client — only ephemeral,
+// time-limited credentials do.
+type ICEConfig struct {
+	STUNURLs   []string
+	TURNURLs   []string
+	TURNSecret string
+	TURNRealm  string
+	TURNTTL    time.Duration
 }
 
 type PostgresConfig struct {
@@ -177,6 +195,17 @@ func Load() (*Config, error) {
 	cfg.VAPIDPublicKey = os.Getenv("VAPID_PUBLIC_KEY")
 	cfg.VAPIDPrivateKey = os.Getenv("VAPID_PRIVATE_KEY")
 	cfg.VAPIDSubject = getEnv("VAPID_SUBJECT", "mailto:admin@kisy.local")
+
+	// ICE / WebRTC (audio calls). All optional: with no TURN configured the
+	// client still gets STUN and works on non-symmetric NATs.
+	cfg.ICE.STUNURLs = getEnvList("STUN_URLS")
+	cfg.ICE.TURNURLs = getEnvList("TURN_URLS")
+	cfg.ICE.TURNSecret = os.Getenv("TURN_SECRET")
+	cfg.ICE.TURNRealm = getEnv("TURN_REALM", "kisy")
+	if cfg.ICE.TURNTTL, err = getEnvDuration("TURN_TTL", 12*time.Hour); err != nil {
+		return nil, err
+	}
+
 	cfg.WebDir = os.Getenv("WEB_DIR")
 
 	// Migrations run automatically outside production; RUN_MIGRATIONS
@@ -194,6 +223,22 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// getEnvList parses a comma-separated environment variable into a trimmed,
+// non-empty slice. An unset or empty variable yields nil.
+func getEnvList(key string) []string {
+	v := os.Getenv(key)
+	if v == "" {
+		return nil
+	}
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		if s := strings.TrimSpace(part); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func requireEnv(key string) (string, error) {
