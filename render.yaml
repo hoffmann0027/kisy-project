@@ -44,6 +44,12 @@ services:
         value: ceo
       - key: BOOTSTRAP_CEO_PASSWORD
         sync: false # set this yourself in the dashboard on first deploy
+      # Voice calls (WebRTC): public STUN lets most calls connect. Render's
+      # free tier can't host coturn (no UDP), so for calls across strict/
+      # symmetric NATs add a managed TURN service and set TURN_URLS / TURN_SECRET
+      # in the dashboard. See docs/deploy-render.md.
+      - key: STUN_URLS
+        value: stun:stun.l.google.com:19302
 
   - type: redis
     name: kisy-redis

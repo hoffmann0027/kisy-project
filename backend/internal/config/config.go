@@ -199,6 +199,12 @@ func Load() (*Config, error) {
 	// ICE / WebRTC (audio calls). All optional: with no TURN configured the
 	// client still gets STUN and works on non-symmetric NATs.
 	cfg.ICE.STUNURLs = getEnvList("STUN_URLS")
+	if len(cfg.ICE.STUNURLs) == 0 {
+		// A public STUN default so NAT discovery works out of the box (e.g. on
+		// Render, where no coturn is deployed). TURN still needs explicit
+		// configuration for symmetric-NAT relaying.
+		cfg.ICE.STUNURLs = []string{"stun:stun.l.google.com:19302"}
+	}
 	cfg.ICE.TURNURLs = getEnvList("TURN_URLS")
 	cfg.ICE.TURNSecret = os.Getenv("TURN_SECRET")
 	cfg.ICE.TURNRealm = getEnv("TURN_REALM", "kisy")

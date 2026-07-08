@@ -20,8 +20,11 @@ func presKey(userID uuid.UUID) string { return "kisy:presence:" + userID.String(
 // TTLs: a ringing call is short-lived; an answered call is kept alive for the
 // duration cap so the busy markers stay accurate through a long conversation.
 const (
-	ringingTTL  = RingTimeout + 15*time.Second
-	answeredTTL = 6 * time.Hour
+	ringingTTL = RingTimeout + 15*time.Second
+	// A backstop for answered calls: the "busy" markers self-expire even if a
+	// client vanishes without a clean hangup and the disconnect hook is missed.
+	// Kept modest so a stale marker can never block calling for long.
+	answeredTTL = 2 * time.Hour
 )
 
 // RedisStore is the production CallStore.
@@ -97,6 +100,31 @@ func (s *RedisStore) Delete(ctx context.Context, callID uuid.UUID) error {
 	}
 	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("calls: store delete: %w", err)
+	}
+	return nil
+}
+
+// CallIDForUser returns the call a user is currently marked busy on, if any.
+func (s *RedisStore) CallIDForUser(ctx context.Context, userID uuid.UUID) (uuid.UUID, bool, error) {
+	v, err := s.rdb.Get(ctx, busyKey(userID)).Result()
+	if err == redis.Nil {
+		return uuid.Nil, false, nil
+	}
+	if err != nil {
+		return uuid.Nil, false, fmt.Errorf("calls: call for user: %w", err)
+	}
+	id, perr := uuid.Parse(v)
+	if perr != nil {
+		return uuid.Nil, false, nil
+	}
+	return id, true, nil
+}
+
+// ClearUserBusy removes a user's busy marker (used to reap orphaned markers
+// whose call state has already expired).
+func (s *RedisStore) ClearUserBusy(ctx context.Context, userID uuid.UUID) error {
+	if err := s.rdb.Del(ctx, busyKey(userID)).Err(); err != nil {
+		return fmt.Errorf("calls: clear busy: %w", err)
 	}
 	return nil
 }
