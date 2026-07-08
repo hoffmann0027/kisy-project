@@ -31,6 +31,10 @@ export function useRatingMutations() {
       onSuccess: refresh,
     }),
     deleteProject: useMutation({ mutationFn: (id: string) => ratingApi.deleteProject(id), onSuccess: refresh }),
+    setProjectLevel: useMutation({
+      mutationFn: (a: { id: string; minLevel: number }) => ratingApi.setProjectLevel(a.id, a.minLevel),
+      onSuccess: refresh,
+    }),
     createTask: useMutation({
       mutationFn: (a: { projectId: string; title: string }) => ratingApi.createTask(a.projectId, a.title),
       onSuccess: refresh,

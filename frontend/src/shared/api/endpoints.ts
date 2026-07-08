@@ -153,6 +153,8 @@ export const ratingApi = {
   analytics: () => apiClient.get<RatingAnalytics>("/rating/analytics"),
   createProject: (title: string, minLevel: number, description?: string) =>
     apiClient.post<{ id: string }>("/rating/projects", { title, minLevel, description }),
+  setProjectLevel: (id: string, minLevel: number) =>
+    apiClient.patch<{ ok: boolean }>(`/rating/projects/${id}/level`, { minLevel }),
   deleteProject: (id: string) => apiClient.del<{ deleted: boolean }>(`/rating/projects/${id}`),
   createTask: (projectId: string, title: string) =>
     apiClient.post<{ id: string }>(`/rating/projects/${projectId}/tasks`, { title }),

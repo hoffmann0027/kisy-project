@@ -120,6 +120,7 @@ export function BoardView({ group }: Props) {
       </div>
 
       <CardModal
+        key={editCard?.id ?? "none"}
         card={editCard}
         members={memberList}
         canDelete={!!editCard && (editCard.createdBy === me.id || founder)}

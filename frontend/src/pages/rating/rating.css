@@ -195,6 +195,16 @@
   padding-top: 4px;
 }
 
+.rating-card__header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rating-card__header-row .rating-card__header {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+}
 .rating-card__header {
   display: flex;
   align-items: center;
@@ -206,6 +216,26 @@
   cursor: pointer;
   color: inherit;
   text-align: left;
+}
+/* CEO inline level dropdown, styled like the level badge. */
+.rating-level-select {
+  flex: none;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: var(--radius-round);
+  background: rgba(90, 139, 246, 0.16);
+  color: #7aa5f7;
+  border: 1px solid transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.rating-level-select:hover {
+  border-color: rgba(90, 139, 246, 0.5);
+}
+.rating-level-select option {
+  color: var(--color-text-primary);
+  background: var(--color-bg);
 }
 .rating-chevron {
   color: var(--color-text-secondary);
