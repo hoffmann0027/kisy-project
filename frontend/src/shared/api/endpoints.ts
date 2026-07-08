@@ -9,7 +9,9 @@ import type {
   Favorite,
   FeedbackItem,
   FeedbackPage,
+  CallLogItem,
   Group,
+  IceConfig,
   Invitation,
   LevelCondition,
   Message,
@@ -189,6 +191,12 @@ export const pollsApi = {
   vote: (optionId: string) => apiClient.post<{ voted: boolean }>(`/polls/options/${optionId}/vote`),
   close: (id: string) => apiClient.post<{ closed: boolean }>(`/polls/${id}/close`),
   del: (id: string) => apiClient.del<{ deleted: boolean }>(`/polls/${id}`),
+};
+
+export const callsApi = {
+  iceConfig: () => apiClient.get<IceConfig>("/calls/ice-config"),
+  history: (limit = 50, offset = 0) =>
+    apiClient.get<{ calls: CallLogItem[] }>(`/calls/history?limit=${limit}&offset=${offset}`),
 };
 
 export const conditionsApi = {

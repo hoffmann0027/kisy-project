@@ -29,7 +29,9 @@ func Headers(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		h.Set("Permissions-Policy", "geolocation=(), microphone=(), camera=(), payment=()")
+		// microphone=(self): required for WebRTC audio calls (getUserMedia) on
+		// the same origin. Camera/geolocation/payment stay fully disabled.
+		h.Set("Permissions-Policy", "geolocation=(), microphone=(self), camera=(), payment=()")
 		h.Set("Cross-Origin-Opener-Policy", "same-origin")
 		h.Set("Cross-Origin-Resource-Policy", "same-origin")
 		// HSTS is only honored over HTTPS; harmless over plain HTTP and

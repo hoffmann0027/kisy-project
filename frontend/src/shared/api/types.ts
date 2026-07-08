@@ -126,6 +126,28 @@ export interface FeedbackPage {
   hasMore: boolean;
 }
 
+export interface IceServer {
+  urls: string[];
+  username?: string;
+  credential?: string;
+}
+
+export interface IceConfig {
+  iceServers: IceServer[];
+}
+
+export interface CallLogItem {
+  id: string;
+  direction: "incoming" | "outgoing";
+  status: "completed" | "missed" | "rejected" | "canceled" | "failed";
+  peer: { id: string; displayName: string; avatarUrl: string | null };
+  chatId: string;
+  startedAt: string;
+  answeredAt: string | null;
+  endedAt: string | null;
+  durationSeconds: number;
+}
+
 export interface PollVoter {
   id: string;
   displayName: string;

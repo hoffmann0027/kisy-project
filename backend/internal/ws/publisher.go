@@ -1,6 +1,8 @@
 package ws
 
 import (
+	"encoding/json"
+
 	"github.com/google/uuid"
 
 	"kisy-backend/internal/messages"
@@ -66,6 +68,48 @@ func (p *Publisher) PublishPollChanged() {
 // avatar) changed so they can refetch it; satisfies groups.ChangePublisher.
 func (p *Publisher) PublishGroupChanged(groupID uuid.UUID) {
 	p.hub.publishToChat("group", groupID, encode(EventGroupChanged, map[string]any{"groupId": groupID}))
+}
+
+// --- call signaling relay (satisfies calls.CallPublisher structurally) ---
+//
+// Each method relays one server→client call event to a single user's connected
+// clients on any node. Media is peer-to-peer; only signaling passes through here.
+
+func (p *Publisher) Incoming(to, callID, fromID uuid.UUID, fromName string, fromAvatar *string, chatID uuid.UUID, sdp string) {
+	p.hub.publishToUsers([]uuid.UUID{to}, encode(EventCallIncoming, callIncomingData{
+		CallID: callID,
+		From:   callFrom{ID: fromID, DisplayName: fromName, AvatarURL: fromAvatar},
+		ChatID: chatID,
+		SDP:    sdp,
+	}))
+}
+
+func (p *Publisher) Answered(to, callID uuid.UUID, sdp string) {
+	p.hub.publishToUsers([]uuid.UUID{to}, encode(EventCallAnswered, callAnsweredData{CallID: callID, SDP: sdp}))
+}
+
+func (p *Publisher) ICE(to, callID, from uuid.UUID, candidate json.RawMessage) {
+	p.hub.publishToUsers([]uuid.UUID{to}, encode(EventCallICE, callICEData{CallID: callID, FromUserID: from, Candidate: candidate}))
+}
+
+func (p *Publisher) Rejected(to, callID uuid.UUID) {
+	p.hub.publishToUsers([]uuid.UUID{to}, encode(EventCallRejected, callRefData{CallID: callID}))
+}
+
+func (p *Publisher) Canceled(to, callID uuid.UUID) {
+	p.hub.publishToUsers([]uuid.UUID{to}, encode(EventCallCanceled, callRefData{CallID: callID}))
+}
+
+func (p *Publisher) Ended(to, callID uuid.UUID, reason string) {
+	p.hub.publishToUsers([]uuid.UUID{to}, encode(EventCallEnded, callEndedData{CallID: callID, Reason: reason}))
+}
+
+func (p *Publisher) Busy(to, callID uuid.UUID) {
+	p.hub.publishToUsers([]uuid.UUID{to}, encode(EventCallBusy, callRefData{CallID: callID}))
+}
+
+func (p *Publisher) Timeout(to, callID uuid.UUID) {
+	p.hub.publishToUsers([]uuid.UUID{to}, encode(EventCallTimeout, callRefData{CallID: callID}))
 }
 
 // PublishReaction broadcasts a reaction change; satisfies the

@@ -23,6 +23,20 @@ type Sender interface {
 // (typing, read) into a chat. Returns a non-nil error to deny.
 type ChatAuthorizer func(ctx context.Context, chatType string, chatID, actorID uuid.UUID, actorLevel int) error
 
+// CallActor identifies the user emitting a call-signaling frame.
+type CallActor struct {
+	UserID    uuid.UUID
+	SessionID uuid.UUID
+	RoleLevel int
+}
+
+// CallSignaler validates and relays a single "call.*" signaling frame. A
+// returned error is surfaced to the sender as a generic error event. Satisfied
+// structurally by *calls.Service; injected to avoid a ws→calls dependency here.
+type CallSignaler interface {
+	HandleSignal(ctx context.Context, actor CallActor, msgType string, data json.RawMessage) error
+}
+
 // Redis pub/sub channels. Targeted events carry an explicit recipient list;
 // presence changes are broadcast and filtered per-instance by local
 // subscription state.
@@ -53,6 +67,7 @@ type Hub struct {
 	// onRead persists a read receipt (best-effort, may be nil).
 	sender        Sender
 	authorizeChat ChatAuthorizer
+	calls         CallSignaler
 	onRead        func(ctx context.Context, userID uuid.UUID, chatType string, chatID, messageID uuid.UUID)
 	// onOffline records a user's last-seen time when their final connection
 	// closes (best-effort; may be nil).
@@ -92,6 +107,10 @@ func (h *Hub) SetHandlers(sender Sender, authorizeChat ChatAuthorizer, onRead fu
 func (h *Hub) SetPresenceSink(onOffline func(ctx context.Context, userID uuid.UUID)) {
 	h.onOffline = onOffline
 }
+
+// SetCallSignaler wires the voice-call signaling handler. May be nil to
+// disable calling.
+func (h *Hub) SetCallSignaler(cs CallSignaler) { h.calls = cs }
 
 // Run subscribes to the Redis channels and delivers received events to
 // local clients until ctx is cancelled. It should run in its own goroutine.

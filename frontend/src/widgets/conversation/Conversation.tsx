@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@shared/lib/cn";
+import { useCallControls } from "@features/call/CallProvider";
 import { formatDay } from "@shared/lib/format";
 import { Avatar, Button, Spinner, toast } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
@@ -33,6 +34,8 @@ export interface ConversationTarget {
   offlineLabel?: string;
   /** Counterpart's last-read position, seeds read receipts for private chats. */
   otherLastReadAt?: string | null;
+  /** Direct-chat peer's user id; enables the audio-call button (private only). */
+  peerUserId?: string;
 }
 
 interface Props {
@@ -44,6 +47,7 @@ interface Props {
 export function Conversation({ target, headerActions }: Props) {
   const { chatType, chatId } = target;
   const navigate = useNavigate();
+  const { startCall, busy: callBusy } = useCallControls();
   const me = useAuthStore((s) => s.user!);
   const typingByChat = useTypingStore((s) => s.byChat);
   const { data, isPending, fetchNextPage, hasNextPage, isFetchingNextPage } = useMessages(chatType, chatId);
@@ -169,6 +173,21 @@ export function Conversation({ target, headerActions }: Props) {
                 : (target.offlineLabel ?? "не в сети")}
           </div>
         </div>
+        {chatType === "private" && target.peerUserId && (
+          <button
+            className="conv__call"
+            title="Позвонить"
+            disabled={callBusy}
+            onClick={() =>
+              startCall(
+                { id: target.peerUserId!, displayName: target.title, avatarUrl: target.avatarUrl ?? null },
+                chatId,
+              )
+            }
+          >
+            <Icon.Phone size={20} />
+          </button>
+        )}
         {headerActions}
       </header>
 

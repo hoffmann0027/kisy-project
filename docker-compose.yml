@@ -59,6 +59,11 @@ services:
       WS_ALLOWED_ORIGIN: ${WS_ALLOWED_ORIGIN:-}
       BOOTSTRAP_CEO_USERNAME: ${BOOTSTRAP_CEO_USERNAME:-}
       BOOTSTRAP_CEO_PASSWORD: ${BOOTSTRAP_CEO_PASSWORD:-}
+      STUN_URLS: ${STUN_URLS:-}
+      TURN_URLS: ${TURN_URLS:-}
+      TURN_SECRET: ${TURN_SECRET:-}
+      TURN_REALM: ${TURN_REALM:-kisy}
+      TURN_TTL: ${TURN_TTL:-12h}
     depends_on:
       postgres:
         condition: service_healthy
@@ -87,6 +92,21 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    networks:
+      - kisy-net
+
+  coturn:
+    image: coturn/coturn:4.6-alpine
+    restart: unless-stopped
+    # The shared secret and realm are injected here so they stay out of the
+    # committed turnserver.conf. Media (TURN relay) bypasses Nginx entirely.
+    command: ["-c", "/etc/coturn/turnserver.conf", "--static-auth-secret=${TURN_SECRET}", "--realm=${TURN_REALM:-kisy}"]
+    volumes:
+      - ./deploy/coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "49160-49200:49160-49200/udp"
     networks:
       - kisy-net
 

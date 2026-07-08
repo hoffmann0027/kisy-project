@@ -28,7 +28,19 @@ const (
 	EventGroupChanged    = "group.changed"
 	EventRatingChanged   = "rating.changed"
 	EventPollChanged     = "poll.changed"
-	EventError           = "error"
+
+	// Voice-call signaling (server→client). Client→server call frames are
+	// prefix-routed ("call.*") to the calls package, which owns their names.
+	EventCallIncoming = "call.incoming"
+	EventCallAnswered = "call.answered"
+	EventCallICE      = "call.ice"
+	EventCallRejected = "call.rejected"
+	EventCallCanceled = "call.canceled"
+	EventCallEnded    = "call.ended"
+	EventCallBusy     = "call.busy"
+	EventCallTimeout  = "call.timeout"
+
+	EventError = "error"
 )
 
 // Client→Server message types.
@@ -106,4 +118,40 @@ type reactionData struct {
 	MessageID uuid.UUID `json:"messageId"`
 	UserID    uuid.UUID `json:"userId"`
 	Emoji     string    `json:"emoji"`
+}
+
+// --- call signaling (server→client) payloads ---
+
+type callFrom struct {
+	ID          uuid.UUID `json:"id"`
+	DisplayName string    `json:"displayName"`
+	AvatarURL   *string   `json:"avatarUrl"`
+}
+
+type callIncomingData struct {
+	CallID uuid.UUID `json:"callId"`
+	From   callFrom  `json:"from"`
+	ChatID uuid.UUID `json:"chatId"`
+	SDP    string    `json:"sdp"`
+}
+
+type callAnsweredData struct {
+	CallID uuid.UUID `json:"callId"`
+	SDP    string    `json:"sdp"`
+}
+
+type callICEData struct {
+	CallID     uuid.UUID       `json:"callId"`
+	FromUserID uuid.UUID       `json:"fromUserId"`
+	Candidate  json.RawMessage `json:"candidate"`
+}
+
+// callRefData carries just the call id (rejected/canceled/busy/timeout).
+type callRefData struct {
+	CallID uuid.UUID `json:"callId"`
+}
+
+type callEndedData struct {
+	CallID uuid.UUID `json:"callId"`
+	Reason string    `json:"reason"`
 }

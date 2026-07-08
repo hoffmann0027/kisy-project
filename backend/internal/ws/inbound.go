@@ -3,6 +3,7 @@ package ws
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"kisy-backend/internal/messages"
 )
@@ -17,6 +18,22 @@ func (h *Hub) handleInbound(c *Client, raw []byte) {
 	}
 
 	ctx := context.Background()
+
+	// Voice-call signaling frames ("call.invite", "call.answer", …) are
+	// prefix-routed to the calls package, which owns their validation and
+	// relay. A rejected/unauthorized signal yields a generic error to the
+	// sender — internal details are never leaked.
+	if strings.HasPrefix(in.Type, "call.") {
+		if h.calls == nil {
+			c.enqueue(encode(EventError, map[string]string{"message": "calling is unavailable"}))
+			return
+		}
+		if err := h.calls.HandleSignal(ctx, CallActor{UserID: c.userID, SessionID: c.sessionID, RoleLevel: c.roleLevel}, in.Type, in.Data); err != nil {
+			c.enqueue(encode(EventError, map[string]string{"message": "call signaling rejected"}))
+		}
+		return
+	}
+
 	switch in.Type {
 	case TypeMessageSend:
 		var p sendPayload

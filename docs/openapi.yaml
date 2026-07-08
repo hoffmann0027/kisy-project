@@ -35,6 +35,8 @@ tags:
     description: Promotion-requirement ladder (CEO edits all; members see only their next level)
   - name: voting
     description: Polls (CEO-created; public votes with voter avatars; results audited on close)
+  - name: calls
+    description: 1:1 WebRTC audio calls — ICE config and call journal (live signaling runs over the WebSocket gateway)
   - name: admin
     description: CEO administration (users, roles, credentials, audit)
   - name: websocket
@@ -1071,7 +1073,18 @@ paths:
         Server→Client `event`: message.created, message.updated,
         message.deleted, message.read, typing.started, typing.stopped, user.online,
         user.offline, user.updated, reaction.added, reaction.removed,
-        notification.created, board.changed, group.changed, error.
+        notification.created, board.changed, group.changed, rating.changed,
+        poll.changed, error.
+
+        Voice-call signaling (1:1 audio, media is peer-to-peer over WebRTC; the
+        server only relays these frames after authorizing that sender and target
+        share the direct chat). Client→Server `type`: call.invite
+        { callId, toUserId, chatId, sdp }, call.answer { callId, sdp }, call.ice
+        { callId, candidate }, call.reject/call.cancel/call.hangup { callId }.
+        Server→Client `event`: call.incoming { callId, from{id,displayName,avatarUrl},
+        chatId, sdp }, call.answered { callId, sdp }, call.ice { callId, fromUserId,
+        candidate }, call.rejected/call.canceled/call.busy/call.timeout { callId },
+        call.ended { callId, reason }.
       parameters:
         - { name: access_token, in: query, required: false, schema: { type: string } }
       responses:
@@ -1442,6 +1455,30 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  /calls/ice-config:
+    get:
+      tags: [calls]
+      summary: WebRTC ICE servers for the caller (STUN + ephemeral TURN credentials)
+      description: >
+        Returns an RTCConfiguration.iceServers array. TURN entries carry
+        short-lived credentials derived from the coturn shared secret
+        (username = "<expiry>:<userId>", credential = base64(HMAC-SHA1)); the
+        secret itself never leaves the server. Rate-limited.
+      responses:
+        '200': { description: ICE configuration, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { description: Too many requests }
+  /calls/history:
+    get:
+      tags: [calls]
+      summary: The caller's call journal, newest first
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200': { description: Calls, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /rating/board:
     get:

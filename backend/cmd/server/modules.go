@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"kisy-backend/internal/avatars"
 	"kisy-backend/internal/boards"
 	"kisy-backend/internal/bootstrap"
+	"kisy-backend/internal/calls"
 	"kisy-backend/internal/chats"
 	"kisy-backend/internal/conditions"
 	"kisy-backend/internal/config"
@@ -65,6 +67,7 @@ type modules struct {
 	boardsHandler        *boards.Handler
 	ratingHandler        *rating.Handler
 	votingHandler        *voting.Handler
+	callsHandler         *calls.Handler
 	adminHandler         *admin.Handler
 	wsHandler            *ws.Handler
 	hub                  *ws.Hub
@@ -257,6 +260,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	}
 	hub := ws.NewHub(log, rdb, recipientResolver)
 	wsPublisher := ws.NewPublisher(hub)
+	limiter := ratelimit.NewLimiter(rdb, log)
 	messagesSvc.SetPublisher(wsPublisher)
 	// Real-time profile/group propagation (Stage B: name/avatar changes).
 	usersSvc.SetBroadcaster(func(_ context.Context, audience []uuid.UUID, profile users.DTO) {
@@ -441,6 +445,41 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		return voting.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
 	})
 
+	// --- voice calls (WebRTC signaling over WS + call journal) ---
+	callsSvc := calls.NewService(
+		pool,
+		calls.NewPostgresRepository(),
+		calls.NewRedisStore(rdb),
+		chatsSvc, // ChatAccess: IsParticipant / ParticipantIDs
+		auditRec,
+		calls.ICESettings{
+			STUNURLs:   cfg.ICE.STUNURLs,
+			TURNURLs:   cfg.ICE.TURNURLs,
+			TURNSecret: cfg.ICE.TURNSecret,
+			TURNTTL:    cfg.ICE.TURNTTL,
+		},
+		log,
+	)
+	callsSvc.SetPublisher(wsPublisher)
+	callsSvc.SetProfileLookup(func(ctx context.Context, id uuid.UUID) (string, *string, bool) {
+		u, err := usersRepo.GetByID(ctx, pool, id)
+		if err != nil || !u.IsActive {
+			return "", nil, false
+		}
+		return u.DisplayName, u.AvatarURL, true
+	})
+	callsSvc.SetRateGuard(func(ctx context.Context, id uuid.UUID) bool {
+		return limiter.Allow(ctx, "call.invite", id.String(), 10, time.Minute)
+	})
+	hub.SetCallSignaler(callSignalAdapter{svc: callsSvc})
+	callsHandler := calls.NewHandler(callsSvc, func(r *http.Request) (calls.Actor, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return calls.Actor{}, false
+		}
+		return calls.Actor{UserID: claims.UserID, SessionID: claims.SessionID, RoleLevel: claims.RoleLevel}, true
+	})
+
 	// --- admin (CEO) ---
 	adminSvc := admin.NewService(pool, usersRepo, sessionsRepo, auditRec)
 	adminHandler := admin.NewHandler(adminSvc, audit.NewReader(pool), func(r *http.Request) (admin.ActorMeta, bool) {
@@ -482,9 +521,23 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		boardsHandler:        boardsHandler,
 		ratingHandler:        ratingHandler,
 		votingHandler:        votingHandler,
+		callsHandler:         callsHandler,
 		adminHandler:         adminHandler,
 		wsHandler:            wsHandler,
 		hub:                  hub,
-		limiter:              ratelimit.NewLimiter(rdb, log),
+		limiter:              limiter,
 	}, nil
+}
+
+// callSignalAdapter converts the ws-layer CallActor into the calls-layer Actor,
+// letting *calls.Service satisfy ws.CallSignaler without either package
+// importing the other (both are wired here in the composition root).
+type callSignalAdapter struct{ svc *calls.Service }
+
+func (a callSignalAdapter) HandleSignal(ctx context.Context, actor ws.CallActor, msgType string, data json.RawMessage) error {
+	return a.svc.HandleSignal(ctx, calls.Actor{
+		UserID:    actor.UserID,
+		SessionID: actor.SessionID,
+		RoleLevel: actor.RoleLevel,
+	}, msgType, data)
 }
