@@ -16,6 +16,7 @@ import type {
   MessagePage,
   Note,
   Notification,
+  Poll,
   RatingAnalytics,
   RatingBoard,
   SearchResult,
@@ -179,6 +180,15 @@ export const notesApi = {
       text ? { "X-Note-Text": encodeURIComponent(text) } : undefined,
     ),
   del: (id: string) => apiClient.del<{ deleted: boolean }>(`/notes/${id}`),
+};
+
+export const pollsApi = {
+  list: () => apiClient.get<{ polls: Poll[] }>("/polls"),
+  create: (question: string, options: string[]) =>
+    apiClient.post<{ id: string }>("/polls", { question, options }),
+  vote: (optionId: string) => apiClient.post<{ voted: boolean }>(`/polls/options/${optionId}/vote`),
+  close: (id: string) => apiClient.post<{ closed: boolean }>(`/polls/${id}/close`),
+  del: (id: string) => apiClient.del<{ deleted: boolean }>(`/polls/${id}`),
 };
 
 export const conditionsApi = {

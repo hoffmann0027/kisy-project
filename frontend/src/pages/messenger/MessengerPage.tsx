@@ -12,6 +12,7 @@ import { NotificationsModal } from "@features/notifications/NotificationsModal";
 import { FeedbackModal } from "@features/feedback/FeedbackModal";
 import { NotesModal } from "@features/notes/NotesModal";
 import { ConditionsModal } from "@features/conditions/ConditionsModal";
+import { VotingModal } from "@features/voting/VotingModal";
 import { Icon } from "@shared/ui/icons";
 import { formatRelative } from "@shared/lib/format";
 import type { Chat, Group } from "@shared/api/types";
@@ -33,6 +34,7 @@ export function MessengerPage() {
   const [feedback, setFeedback] = useState(false);
   const [notes, setNotes] = useState(false);
   const [conditions, setConditions] = useState(false);
+  const [voting, setVoting] = useState(false);
 
   const activeChat: Chat | undefined = chats?.find((c) => c.id === chatId);
   const activeGroup: Group | undefined = groups?.find((g) => g.id === groupId);
@@ -53,6 +55,7 @@ export function MessengerPage() {
         onFeedback={() => setFeedback(true)}
         onNotes={() => setNotes(true)}
         onConditions={() => setConditions(true)}
+        onVoting={() => setVoting(true)}
       />
 
       <ChatList
@@ -96,6 +99,7 @@ export function MessengerPage() {
       <FeedbackModal open={feedback} onClose={() => setFeedback(false)} />
       <NotesModal open={notes} onClose={() => setNotes(false)} />
       <ConditionsModal open={conditions} onClose={() => setConditions(false)} />
+      <VotingModal open={voting} onClose={() => setVoting(false)} />
     </div>
   );
 }

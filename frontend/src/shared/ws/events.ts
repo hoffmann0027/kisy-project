@@ -17,6 +17,7 @@ export type ServerEvent =
   | { event: "board.changed"; data: { groupId: string } }
   | { event: "group.changed"; data: { groupId: string } }
   | { event: "rating.changed"; data: Record<string, never> }
+  | { event: "poll.changed"; data: Record<string, never> }
   | { event: "error"; data: { message: string } };
 
 export interface TypingData {

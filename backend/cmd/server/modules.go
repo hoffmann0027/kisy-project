@@ -36,6 +36,7 @@ import (
 	"kisy-backend/internal/readstate"
 	"kisy-backend/internal/search"
 	"kisy-backend/internal/users"
+	"kisy-backend/internal/voting"
 	"kisy-backend/internal/ws"
 )
 
@@ -63,6 +64,7 @@ type modules struct {
 	notificationsHandler *notifications.Handler
 	boardsHandler        *boards.Handler
 	ratingHandler        *rating.Handler
+	votingHandler        *voting.Handler
 	adminHandler         *admin.Handler
 	wsHandler            *ws.Handler
 	hub                  *ws.Hub
@@ -428,6 +430,17 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		return rating.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
 	})
 
+	// --- voting (CEO-created polls) ---
+	votingSvc := voting.NewService(pool, voting.NewPostgresRepository(), auditRec)
+	votingSvc.SetChangePublisher(wsPublisher.PublishPollChanged)
+	votingHandler := voting.NewHandler(votingSvc, func(r *http.Request) (voting.Actor, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return voting.Actor{}, false
+		}
+		return voting.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
+	})
+
 	// --- admin (CEO) ---
 	adminSvc := admin.NewService(pool, usersRepo, sessionsRepo, auditRec)
 	adminHandler := admin.NewHandler(adminSvc, audit.NewReader(pool), func(r *http.Request) (admin.ActorMeta, bool) {
@@ -468,6 +481,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		notificationsHandler: notificationsHandler,
 		boardsHandler:        boardsHandler,
 		ratingHandler:        ratingHandler,
+		votingHandler:        votingHandler,
 		adminHandler:         adminHandler,
 		wsHandler:            wsHandler,
 		hub:                  hub,

@@ -56,6 +56,12 @@ func (p *Publisher) PublishRatingChanged() {
 	p.hub.broadcast(encode(EventRatingChanged, map[string]any{}))
 }
 
+// PublishPollChanged tells every connected client the voting board changed,
+// so they refetch it; satisfies voting.ChangePublisher.
+func (p *Publisher) PublishPollChanged() {
+	p.hub.broadcast(encode(EventPollChanged, map[string]any{}))
+}
+
 // PublishGroupChanged tells a group's members the group's metadata (e.g. its
 // avatar) changed so they can refetch it; satisfies groups.ChangePublisher.
 func (p *Publisher) PublishGroupChanged(groupID uuid.UUID) {

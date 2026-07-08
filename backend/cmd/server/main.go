@@ -217,6 +217,10 @@ func newRouter(d routerDeps) http.Handler {
 				m.ratingHandler.Routes(r)
 			})
 
+			r.Route("/polls", func(r chi.Router) {
+				m.votingHandler.Routes(r)
+			})
+
 			r.Route("/search", func(r chi.Router) {
 				m.searchHandler.Routes(r)
 			})
