@@ -12,9 +12,10 @@ interface Props {
   onFeedback: () => void;
   onNotes: () => void;
   onConditions: () => void;
+  onVoting: () => void;
 }
 
-export function Rail({ onProfile, onNotifications, onFeedback, onNotes, onConditions }: Props) {
+export function Rail({ onProfile, onNotifications, onFeedback, onNotes, onConditions, onVoting }: Props) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
@@ -59,6 +60,9 @@ export function Rail({ onProfile, onNotifications, onFeedback, onNotes, onCondit
           </button>
         )}
       </div>
+      <button className="rail__item" title="Голосование" onClick={onVoting}>
+        <Icon.Vote />
+      </button>
       <button className="rail__item" title="Условия повышения уровня" onClick={onConditions}>
         <Icon.Levels />
       </button>

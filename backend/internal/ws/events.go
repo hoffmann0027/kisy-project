@@ -27,6 +27,7 @@ const (
 	EventBoardChanged    = "board.changed"
 	EventGroupChanged    = "group.changed"
 	EventRatingChanged   = "rating.changed"
+	EventPollChanged     = "poll.changed"
 	EventError           = "error"
 )
 

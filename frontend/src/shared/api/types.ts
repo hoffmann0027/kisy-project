@@ -126,6 +126,30 @@ export interface FeedbackPage {
   hasMore: boolean;
 }
 
+export interface PollVoter {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+export interface PollOption {
+  id: string;
+  body: string;
+  votes: number;
+  voters: PollVoter[];
+}
+
+export interface Poll {
+  id: string;
+  question: string;
+  status: "open" | "closed";
+  options: PollOption[];
+  totalVotes: number;
+  myOptionId: string | null;
+  createdAt: string;
+  closedAt: string | null;
+}
+
 export interface LevelCondition {
   targetLevel: number;
   body: string;

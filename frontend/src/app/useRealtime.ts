@@ -115,6 +115,9 @@ export function useRealtime() {
         case "rating.changed":
           qc.invalidateQueries({ queryKey: ["rating"] });
           break;
+        case "poll.changed":
+          qc.invalidateQueries({ queryKey: ["polls"] });
+          break;
         case "notification.created":
           qc.invalidateQueries({ queryKey: notificationKeys.list });
           break;

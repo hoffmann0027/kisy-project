@@ -33,6 +33,8 @@ tags:
     description: Personal notes (private per-user scratchpad with optional files)
   - name: conditions
     description: Promotion-requirement ladder (CEO edits all; members see only their next level)
+  - name: voting
+    description: Polls (CEO-created; public votes with voter avatars; results audited on close)
   - name: admin
     description: CEO administration (users, roles, credentials, audit)
   - name: websocket
@@ -1381,6 +1383,65 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+
+  /polls:
+    get:
+      tags: [voting]
+      summary: List all polls with options, tallies, voters and the caller's vote
+      responses:
+        '200': { description: Polls, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [voting]
+      summary: Create a poll (CEO only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question, options]
+              properties:
+                question: { type: string, minLength: 1, maxLength: 500 }
+                options: { type: array, minItems: 2, maxItems: 10, items: { type: string, maxLength: 200 } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /polls/options/{optionID}/vote:
+    post:
+      tags: [voting]
+      summary: Cast or change your vote (any user; poll must be open)
+      parameters:
+        - { name: optionID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Voted, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: Poll is closed }
+  /polls/{id}/close:
+    post:
+      tags: [voting]
+      summary: Close a poll and record its tally in the audit log (CEO only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Closed, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /polls/{id}:
+    delete:
+      tags: [voting]
+      summary: Delete a poll and its votes (CEO only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /rating/board:
     get:
