@@ -106,7 +106,11 @@ func (s *Service) onInvite(ctx context.Context, actor Actor, data json.RawMessag
 	}
 
 	if busy, _ := s.store.UserBusy(ctx, actor.UserID); busy {
-		return ErrForbidden // caller already on a call
+		// The caller is already marked busy (a parallel or stale call). End this
+		// new attempt gracefully on the caller instead of a raw error frame, so
+		// their UI never gets stuck "dialing".
+		s.pub.Ended(actor.UserID, p.CallID, "busy")
+		return nil
 	}
 	if busy, _ := s.store.UserBusy(ctx, p.ToUserID); busy {
 		s.logInstant(ctx, actor.UserID, p, StatusMissed)
@@ -252,6 +256,39 @@ func (s *Service) onRingTimeout(ctx context.Context, callID uuid.UUID) {
 	s.pub.Timeout(st.Caller, callID)
 	s.pub.Timeout(st.Callee, callID)
 	s.auditCall(ctx, st.Caller, callID, "call.timeout")
+}
+
+// HandleDisconnect ends a user's in-flight call when their last WebSocket
+// connection closes, so a dropped tab or network never leaves the other party
+// ringing forever or a stale "busy" marker blocking future calls. Called from
+// the hub's presence sink (fires only on the last connection).
+func (s *Service) HandleDisconnect(ctx context.Context, userID uuid.UUID) {
+	callID, ok, err := s.store.CallIDForUser(ctx, userID)
+	if err != nil || !ok {
+		return
+	}
+	st, found, err := s.store.Get(ctx, callID)
+	if err != nil {
+		return
+	}
+	if !found || !st.involves(userID) {
+		// The call state already expired but a busy marker lingered — reap it.
+		_ = s.store.ClearUserBusy(ctx, userID)
+		return
+	}
+	var status string
+	switch {
+	case st.AnsweredAt != nil:
+		status = StatusCompleted
+	case userID == st.Caller:
+		status = StatusCanceled
+	default:
+		status = StatusRejected
+	}
+	s.finalize(ctx, st, status)
+	_ = s.store.Delete(ctx, callID)
+	s.pub.Ended(st.other(userID), callID, "peer-disconnected")
+	s.auditCall(ctx, userID, callID, "call.ended")
 }
 
 // --- helpers ---

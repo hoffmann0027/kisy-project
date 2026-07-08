@@ -404,7 +404,8 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	})
 
 	hub.SetHandlers(messagesSvc, chatAuthorizer, readstateSvc.PersistRead)
-	hub.SetPresenceSink(usersSvc.TouchLastSeen)
+	// SetPresenceSink is wired below once the calls service exists, so a user's
+	// last-connection close both records last-seen and ends any in-flight call.
 
 	// --- task boards (per group) ---
 	boardsSvc := boards.NewService(pool, boards.NewPostgresRepository(), boards.Access{
@@ -472,6 +473,12 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		return limiter.Allow(ctx, "call.invite", id.String(), 10, time.Minute)
 	})
 	hub.SetCallSignaler(callSignalAdapter{svc: callsSvc})
+	// A user's final disconnect records last-seen and tears down any call they
+	// were on (prevents the other party ringing forever / stale busy markers).
+	hub.SetPresenceSink(func(ctx context.Context, userID uuid.UUID) {
+		usersSvc.TouchLastSeen(ctx, userID)
+		callsSvc.HandleDisconnect(ctx, userID)
+	})
 	callsHandler := calls.NewHandler(callsSvc, func(r *http.Request) (calls.Actor, bool) {
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {

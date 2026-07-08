@@ -131,6 +131,11 @@ type CallStore interface {
 	Delete(ctx context.Context, callID uuid.UUID) error
 	UserBusy(ctx context.Context, userID uuid.UUID) (bool, error)
 	IsOnline(ctx context.Context, userID uuid.UUID) (bool, error)
+	// CallIDForUser returns the call a user is currently busy on (from the busy
+	// marker), for disconnect cleanup.
+	CallIDForUser(ctx context.Context, userID uuid.UUID) (uuid.UUID, bool, error)
+	// ClearUserBusy removes an orphaned busy marker whose call state is gone.
+	ClearUserBusy(ctx context.Context, userID uuid.UUID) error
 }
 
 // Repository persists the call journal (call_logs).

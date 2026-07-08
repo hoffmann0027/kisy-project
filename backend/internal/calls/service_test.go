@@ -19,22 +19,22 @@ import (
 
 type fakeStore struct {
 	calls  map[uuid.UUID]CallState
-	busy   map[uuid.UUID]bool
+	busy   map[uuid.UUID]uuid.UUID // user -> callID (mirrors the Redis busy marker)
 	online map[uuid.UUID]bool
 }
 
 func newFakeStore() *fakeStore {
 	return &fakeStore{
 		calls:  map[uuid.UUID]CallState{},
-		busy:   map[uuid.UUID]bool{},
+		busy:   map[uuid.UUID]uuid.UUID{},
 		online: map[uuid.UUID]bool{},
 	}
 }
 
 func (f *fakeStore) Create(_ context.Context, s CallState) error {
 	f.calls[s.ID] = s
-	f.busy[s.Caller] = true
-	f.busy[s.Callee] = true
+	f.busy[s.Caller] = s.ID
+	f.busy[s.Callee] = s.ID
 	return nil
 }
 func (f *fakeStore) Get(_ context.Context, id uuid.UUID) (CallState, bool, error) {
@@ -59,8 +59,19 @@ func (f *fakeStore) Delete(_ context.Context, id uuid.UUID) error {
 	delete(f.calls, id)
 	return nil
 }
-func (f *fakeStore) UserBusy(_ context.Context, id uuid.UUID) (bool, error) { return f.busy[id], nil }
+func (f *fakeStore) UserBusy(_ context.Context, id uuid.UUID) (bool, error) {
+	_, ok := f.busy[id]
+	return ok, nil
+}
 func (f *fakeStore) IsOnline(_ context.Context, id uuid.UUID) (bool, error) { return f.online[id], nil }
+func (f *fakeStore) CallIDForUser(_ context.Context, id uuid.UUID) (uuid.UUID, bool, error) {
+	cid, ok := f.busy[id]
+	return cid, ok, nil
+}
+func (f *fakeStore) ClearUserBusy(_ context.Context, id uuid.UUID) error {
+	delete(f.busy, id)
+	return nil
+}
 
 type pubEvent struct {
 	method string
@@ -249,7 +260,7 @@ func TestInviteDeniedForNonParticipant(t *testing.T) {
 
 func TestInviteBusyCallee(t *testing.T) {
 	h := newHarness(t)
-	h.store.busy[h.bob] = true
+	h.store.busy[h.bob] = uuid.New() // Bob already on another call
 	callID := uuid.New()
 	if err := h.invite(t, h.alice, h.bob, callID); err != nil {
 		t.Fatalf("invite: %v", err)
@@ -280,10 +291,17 @@ func TestGlareSecondInviteRejected(t *testing.T) {
 	if err := h.invite(t, h.alice, h.bob, uuid.New()); err != nil {
 		t.Fatalf("first invite: %v", err)
 	}
-	// Bob simultaneously invites Alice: Bob is now busy → rejected.
-	err := h.invite(t, h.bob, h.alice, uuid.New())
-	if !errors.Is(err, ErrForbidden) {
-		t.Fatalf("glare: got %v, want ErrForbidden", err)
+	// Bob simultaneously invites Alice: Bob is now busy → his attempt ends
+	// gracefully (call.ended to Bob), and Alice is not rung a second time.
+	glareID := uuid.New()
+	if err := h.invite(t, h.bob, h.alice, glareID); err != nil {
+		t.Fatalf("glare invite should not error, got %v", err)
+	}
+	if !h.pub.has("ended", h.bob) {
+		t.Fatal("busy caller should receive call.ended for the glare attempt")
+	}
+	if h.pub.has("incoming", h.alice) {
+		t.Fatal("Alice must not be rung by the glare invite")
 	}
 }
 
@@ -416,6 +434,44 @@ func TestRingTimeoutNoopAfterAnswer(t *testing.T) {
 	}
 	if _, ok := h.store.calls[callID]; !ok {
 		t.Fatal("answered call state must survive a stale timeout")
+	}
+}
+
+func TestDisconnectEndsRingingCall(t *testing.T) {
+	h := newHarness(t)
+	callID := uuid.New()
+	if err := h.invite(t, h.alice, h.bob, callID); err != nil {
+		t.Fatal(err)
+	}
+	logID := h.store.calls[callID].LogID
+	// Caller's last connection drops while the call is still ringing.
+	h.svc.HandleDisconnect(context.Background(), h.alice)
+
+	if !h.pub.has("ended", h.bob) {
+		t.Fatal("callee should be told the call ended when caller disconnects")
+	}
+	if _, ok := h.store.calls[callID]; ok {
+		t.Fatal("call state should be cleared on disconnect")
+	}
+	if busy, _ := h.store.UserBusy(context.Background(), h.alice); busy {
+		t.Fatal("caller busy marker should be cleared")
+	}
+	if h.repo.final[logID].status != StatusCanceled {
+		t.Fatalf("status = %q, want canceled", h.repo.final[logID].status)
+	}
+	// A fresh call can now be placed (no stale busy marker blocking it).
+	if err := h.invite(t, h.alice, h.bob, uuid.New()); err != nil {
+		t.Fatalf("call after disconnect should succeed, got %v", err)
+	}
+}
+
+func TestDisconnectReapsOrphanBusyMarker(t *testing.T) {
+	h := newHarness(t)
+	// Simulate an orphaned marker: busy set but no live call state.
+	h.store.busy[h.alice] = uuid.New()
+	h.svc.HandleDisconnect(context.Background(), h.alice)
+	if busy, _ := h.store.UserBusy(context.Background(), h.alice); busy {
+		t.Fatal("orphaned busy marker should be reaped on disconnect")
 	}
 }
 
