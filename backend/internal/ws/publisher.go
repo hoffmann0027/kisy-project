@@ -70,6 +70,19 @@ func (p *Publisher) PublishGroupChanged(groupID uuid.UUID) {
 	p.hub.publishToChat("group", groupID, encode(EventGroupChanged, map[string]any{"groupId": groupID}))
 }
 
+// PublishE2EEHandshake tells a chat's connected members an MLS commit or
+// proposal arrived so they advance their group state; satisfies the
+// e2ee.Publisher port structurally.
+func (p *Publisher) PublishE2EEHandshake(chatType string, chatID uuid.UUID, data any) {
+	p.hub.publishToChat(chatType, chatID, encode(EventE2EEHandshake, data))
+}
+
+// PublishE2EEWelcome tells one user's connected clients an MLS welcome
+// awaits one of their devices.
+func (p *Publisher) PublishE2EEWelcome(userID uuid.UUID, data any) {
+	p.hub.publishToUsers([]uuid.UUID{userID}, encode(EventE2EEWelcome, data))
+}
+
 // --- call signaling relay (satisfies calls.CallPublisher structurally) ---
 //
 // Each method relays one server→client call event to a single user's connected

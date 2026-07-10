@@ -1,6 +1,7 @@
 package messages
 
 import (
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"strconv"
@@ -116,6 +117,12 @@ type sendRequest struct {
 	Text          string   `json:"text"`
 	ReplyTo       *string  `json:"replyTo"`
 	AttachmentIDs []string `json:"attachmentIds"`
+
+	// E2EE body (base64 MLS ciphertext) — mutually exclusive with text.
+	Ciphertext  string `json:"ciphertext"`
+	Alg         *int16 `json:"alg"`
+	Epoch       *int64 `json:"epoch"`
+	ContentKind *int16 `json:"contentKind"`
 }
 
 func (h *Handler) send(w http.ResponseWriter, r *http.Request) {
@@ -158,12 +165,25 @@ func (h *Handler) send(w http.ResponseWriter, r *http.Request) {
 		attachmentIDs = append(attachmentIDs, id)
 	}
 
+	var ciphertext []byte
+	if req.Ciphertext != "" {
+		ciphertext, err = base64.StdEncoding.DecodeString(req.Ciphertext)
+		if err != nil {
+			httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "ciphertext must be base64")
+			return
+		}
+	}
+
 	dto, err := h.svc.Send(r.Context(), SendInput{
 		ChatType:      req.ChatType,
 		ChatID:        chatID,
 		Text:          req.Text,
 		ReplyTo:       replyTo,
 		AttachmentIDs: attachmentIDs,
+		Ciphertext:    ciphertext,
+		Alg:           req.Alg,
+		Epoch:         req.Epoch,
+		ContentKind:   req.ContentKind,
 	}, actor)
 	if err != nil {
 		h.writeError(w, r, err)

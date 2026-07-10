@@ -40,6 +40,12 @@ const (
 	EventCallBusy     = "call.busy"
 	EventCallTimeout  = "call.timeout"
 
+	// E2EE (MLS) handshake delivery: a commit/proposal reached the chat, or
+	// a welcome awaits one of the user's devices. Payloads are references —
+	// clients fetch the ciphertext frames via /api/v1/e2ee.
+	EventE2EEHandshake = "e2ee.handshake"
+	EventE2EEWelcome   = "e2ee.welcome"
+
 	EventError = "error"
 )
 
@@ -81,6 +87,12 @@ type sendPayload struct {
 	ChatID   uuid.UUID  `json:"chatId"`
 	Text     string     `json:"text"`
 	ReplyTo  *uuid.UUID `json:"replyTo"`
+
+	// E2EE body (base64 MLS ciphertext) — mutually exclusive with text.
+	Ciphertext  []byte `json:"ciphertext"`
+	Alg         *int16 `json:"alg"`
+	Epoch       *int64 `json:"epoch"`
+	ContentKind *int16 `json:"contentKind"`
 }
 
 type readPayload struct {

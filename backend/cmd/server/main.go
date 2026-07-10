@@ -231,6 +231,13 @@ func newRouter(d routerDeps) http.Handler {
 				m.searchHandler.Routes(r)
 			})
 
+			r.Route("/e2ee", func(r chi.Router) {
+				// Key directory + MLS handshake mailbox. Uploads are
+				// rate-limited: key material churn is low-frequency.
+				r.Use(m.limiter.Limit("e2ee", 120, time.Minute))
+				m.e2eeHandler.Routes(r)
+			})
+
 			r.Route("/push", func(r chi.Router) {
 				m.pushHandler.Routes(r)
 			})

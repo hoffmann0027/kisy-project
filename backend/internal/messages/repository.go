@@ -36,12 +36,13 @@ type PostgresRepository struct{}
 
 func NewPostgresRepository() *PostgresRepository { return &PostgresRepository{} }
 
-const messageColumns = `id, chat_type, chat_id, sender_id, text, reply_to, is_deleted, deleted_at, edited_at, pinned_at, pinned_by, created_at`
+const messageColumns = `id, chat_type, chat_id, sender_id, text, reply_to, is_deleted, deleted_at, edited_at, pinned_at, pinned_by, created_at, ciphertext, alg, epoch, content_kind`
 
 func scanMessage(row pgx.Row) (*Message, error) {
 	var m Message
 	err := row.Scan(&m.ID, &m.ChatType, &m.ChatID, &m.SenderID, &m.Text, &m.ReplyTo,
-		&m.IsDeleted, &m.DeletedAt, &m.EditedAt, &m.PinnedAt, &m.PinnedBy, &m.CreatedAt)
+		&m.IsDeleted, &m.DeletedAt, &m.EditedAt, &m.PinnedAt, &m.PinnedBy, &m.CreatedAt,
+		&m.Ciphertext, &m.Alg, &m.Epoch, &m.ContentKind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -53,10 +54,10 @@ func scanMessage(row pgx.Row) (*Message, error) {
 
 func (r *PostgresRepository) Create(ctx context.Context, q db.DBTX, m *Message) error {
 	err := q.QueryRow(ctx, `
-		INSERT INTO messages (chat_type, chat_id, sender_id, text, reply_to)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO messages (chat_type, chat_id, sender_id, text, reply_to, ciphertext, alg, epoch, content_kind)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, is_deleted, created_at`,
-		m.ChatType, m.ChatID, m.SenderID, m.Text, m.ReplyTo,
+		m.ChatType, m.ChatID, m.SenderID, m.Text, m.ReplyTo, m.Ciphertext, m.Alg, m.Epoch, m.ContentKind,
 	).Scan(&m.ID, &m.IsDeleted, &m.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("messages: create: %w", err)
@@ -96,7 +97,8 @@ func (r *PostgresRepository) ListPage(ctx context.Context, q db.DBTX, chatType s
 	for rows.Next() {
 		var m Message
 		if err := rows.Scan(&m.ID, &m.ChatType, &m.ChatID, &m.SenderID, &m.Text, &m.ReplyTo,
-			&m.IsDeleted, &m.DeletedAt, &m.EditedAt, &m.PinnedAt, &m.PinnedBy, &m.CreatedAt); err != nil {
+			&m.IsDeleted, &m.DeletedAt, &m.EditedAt, &m.PinnedAt, &m.PinnedBy, &m.CreatedAt,
+			&m.Ciphertext, &m.Alg, &m.Epoch, &m.ContentKind); err != nil {
 			return nil, fmt.Errorf("messages: scan row: %w", err)
 		}
 		out = append(out, m)
@@ -140,7 +142,8 @@ func (r *PostgresRepository) ListPinned(ctx context.Context, q db.DBTX, chatType
 	for rows.Next() {
 		var m Message
 		if err := rows.Scan(&m.ID, &m.ChatType, &m.ChatID, &m.SenderID, &m.Text, &m.ReplyTo,
-			&m.IsDeleted, &m.DeletedAt, &m.EditedAt, &m.PinnedAt, &m.PinnedBy, &m.CreatedAt); err != nil {
+			&m.IsDeleted, &m.DeletedAt, &m.EditedAt, &m.PinnedAt, &m.PinnedBy, &m.CreatedAt,
+			&m.Ciphertext, &m.Alg, &m.Epoch, &m.ContentKind); err != nil {
 			return nil, fmt.Errorf("messages: scan pinned: %w", err)
 		}
 		out = append(out, m)

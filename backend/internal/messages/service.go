@@ -148,21 +148,35 @@ func (s *Service) authorize(ctx context.Context, chatType string, chatID uuid.UU
 	}
 }
 
-// SendInput is validated by the handler.
+// SendInput is validated by the handler. A message body is either Text
+// (legacy plaintext) or Ciphertext (E2EE, docs/e2ee-design.md) — never both.
 type SendInput struct {
 	ChatType      string
 	ChatID        uuid.UUID
 	Text          string
 	ReplyTo       *uuid.UUID
 	AttachmentIDs []uuid.UUID
+
+	Ciphertext  []byte
+	Alg         *int16
+	Epoch       *int64
+	ContentKind *int16
 }
 
 // Send validates access, persists the message and publishes it, returning the
 // enriched DTO (including any attachments).
 func (s *Service) Send(ctx context.Context, in SendInput, actor ActorMeta) (DTO, error) {
 	text := strings.TrimSpace(in.Text)
-	// A message must carry either text or at least one attachment.
-	if text == "" && len(in.AttachmentIDs) == 0 {
+	// A message carries text, ciphertext or at least one attachment — and
+	// never both plaintext and ciphertext (E2EE chats send only the latter).
+	if text != "" && len(in.Ciphertext) > 0 {
+		return DTO{}, ErrEmptyContent
+	}
+	if text == "" && len(in.Ciphertext) == 0 && len(in.AttachmentIDs) == 0 {
+		return DTO{}, ErrEmptyContent
+	}
+	// An encrypted body is size-capped and must declare its scheme version.
+	if len(in.Ciphertext) > MaxCiphertextBytes || (len(in.Ciphertext) > 0 && in.Alg == nil) {
 		return DTO{}, ErrEmptyContent
 	}
 	if len(text) > MaxTextLength {
@@ -186,10 +200,14 @@ func (s *Service) Send(ctx context.Context, in SendInput, actor ActorMeta) (DTO,
 	}
 
 	m := &Message{
-		ChatType: in.ChatType,
-		ChatID:   in.ChatID,
-		SenderID: actor.UserID,
-		ReplyTo:  in.ReplyTo,
+		ChatType:    in.ChatType,
+		ChatID:      in.ChatID,
+		SenderID:    actor.UserID,
+		ReplyTo:     in.ReplyTo,
+		Ciphertext:  in.Ciphertext,
+		Alg:         in.Alg,
+		Epoch:       in.Epoch,
+		ContentKind: in.ContentKind,
 	}
 	if text != "" {
 		m.Text = &text

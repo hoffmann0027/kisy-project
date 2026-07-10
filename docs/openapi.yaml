@@ -788,12 +788,18 @@ paths:
           application/json:
             schema:
               type: object
-              required: [chatType, chatId, text]
+              required: [chatType, chatId]
+              description: The body is text (legacy), ciphertext (E2EE) or attachments — text and ciphertext are mutually exclusive.
               properties:
                 chatType: { type: string, enum: [private, group] }
                 chatId: { type: string, format: uuid }
-                text: { type: string, minLength: 1, maxLength: 8000 }
+                text: { type: string, maxLength: 8000 }
                 replyTo: { type: [string, 'null'], format: uuid }
+                attachmentIds: { type: array, items: { type: string, format: uuid } }
+                ciphertext: { type: string, format: byte, description: Base64 MLS ciphertext (max 64 KiB decoded). Requires alg. }
+                alg: { type: integer, description: E2EE scheme version; required with ciphertext. }
+                epoch: { type: integer, format: int64 }
+                contentKind: { type: integer, description: 1 text, 2 attachment, 3 system. }
       responses:
         '201':
           description: Message created
@@ -1763,6 +1769,286 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /e2ee/devices:
+    post:
+      tags: [e2ee]
+      summary: Register the acting user's device identity key (E2EE directory)
+      description: >
+        Announces a device's Ed25519 public key. An optional cross-signing
+        vouch (signedBy + signature over "KISY-device-vouch-v1" || key) links a
+        newly QR-paired device to an existing one. The server sanity-checks the
+        vouch but is NOT the trust root — clients verify via TOFU/safety numbers.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deviceId, ed25519Pub]
+              properties:
+                deviceId: { type: string, format: uuid }
+                name: { type: string, maxLength: 128 }
+                ed25519Pub: { type: string, format: byte, description: 32-byte Ed25519 public key, base64. }
+                signedBy: { type: [string, 'null'], format: uuid }
+                signature: { type: string, format: byte }
+      responses:
+        '201':
+          description: Device registered
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          device: { $ref: '#/components/schemas/E2EEDevice' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /e2ee/users/{userID}/devices:
+    get:
+      tags: [e2ee]
+      summary: List a user's active devices (public keys for TOFU)
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Active devices
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          devices:
+                            type: array
+                            items: { $ref: '#/components/schemas/E2EEDevice' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /e2ee/devices/{deviceID}:
+    delete:
+      tags: [e2ee]
+      summary: Revoke one of the acting user's own devices
+      parameters:
+        - { name: deviceID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Device revoked }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /e2ee/key-packages:
+    post:
+      tags: [e2ee]
+      summary: Upload a batch of one-time MLS key packages for an own device
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deviceId, keyPackages]
+              properties:
+                deviceId: { type: string, format: uuid }
+                keyPackages:
+                  type: array
+                  maxItems: 100
+                  items: { type: string, format: byte, description: Encoded MLS key package, base64 (max 8 KiB). }
+      responses:
+        '201': { description: Packages stored }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /e2ee/key-packages/count:
+    get:
+      tags: [e2ee]
+      summary: Remaining unconsumed key packages for an own device
+      parameters:
+        - { name: deviceId, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Available count
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          available: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /e2ee/users/{userID}/key-packages/claim:
+    post:
+      tags: [e2ee]
+      summary: Atomically consume one key package per active device of a user
+      description: Called when adding that user to an MLS group. Devices with an empty pool are skipped.
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: One package per device
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          keyPackages:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                deviceId: { type: string, format: uuid }
+                                keyPackage: { type: string, format: byte }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /e2ee/handshake:
+    post:
+      tags: [e2ee]
+      summary: Publish an MLS handshake frame (welcome, commit or proposal)
+      description: >
+        Commits/proposals fan out to the chat (e2ee.handshake WS event);
+        welcomes are stored per recipient device (e2ee.welcome WS event).
+        Payloads are protocol ciphertext the server cannot read.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [chatType, chatId, kind, senderDevice, payload]
+              properties:
+                chatType: { type: string, enum: [private, group] }
+                chatId: { type: string, format: uuid }
+                kind: { type: string, enum: [welcome, commit, proposal] }
+                senderDevice: { type: string, format: uuid }
+                payload: { type: string, format: byte, description: Encoded MLS message, base64 (max 256 KiB). }
+                epoch: { type: [integer, 'null'], format: int64 }
+                recipients:
+                  type: object
+                  description: For welcomes — deviceId → userId of each recipient.
+                  additionalProperties: { type: string, format: uuid }
+      responses:
+        '201': { description: Published }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /e2ee/handshake/{chatType}/{chatID}:
+    get:
+      tags: [e2ee]
+      summary: List a chat's commits/proposals (member-only), oldest first
+      parameters:
+        - { name: chatType, in: path, required: true, schema: { type: string, enum: [private, group] } }
+        - { name: chatID, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: afterId, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Handshake frames
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          messages:
+                            type: array
+                            items: { $ref: '#/components/schemas/E2EEGroupMessage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /e2ee/welcomes:
+    get:
+      tags: [e2ee]
+      summary: Unfetched welcome messages addressed to an own device
+      parameters:
+        - { name: deviceId, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Pending welcomes
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          welcomes:
+                            type: array
+                            items: { $ref: '#/components/schemas/E2EEGroupMessage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /e2ee/welcomes/{welcomeID}/ack:
+    post:
+      tags: [e2ee]
+      summary: Acknowledge a processed welcome (stops re-delivery)
+      parameters:
+        - { name: welcomeID, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: deviceId, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Acknowledged }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /e2ee/backup:
+    put:
+      tags: [e2ee]
+      summary: Store the user's encrypted key/history backup
+      description: >
+        The blob is encrypted CLIENT-SIDE under a key derived from a recovery
+        passphrase (Argon2id). The server cannot decrypt it; kdfParams carries
+        only public KDF inputs (salt, opslimit, memlimit).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [blob, kdfParams]
+              properties:
+                blob: { type: string, format: byte, description: Ciphertext, base64 (max 16 MiB decoded). }
+                kdfParams: { type: object }
+      responses:
+        '201': { description: Backup stored }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    get:
+      tags: [e2ee]
+      summary: Fetch the user's encrypted backup
+      responses:
+        '200':
+          description: Backup blob and KDF params
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          backup:
+                            type: object
+                            properties:
+                              blob: { type: string, format: byte }
+                              kdfParams: { type: object }
+                              updatedAt: { type: string, format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [e2ee]
+      summary: Delete the user's encrypted backup
+      responses:
+        '200': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
 components:
   securitySchemes:
     accessCookie:
@@ -1900,6 +2186,10 @@ components:
         pinnedAt: { type: [string, 'null'], format: date-time }
         readCount: { type: [integer, 'null'], description: For own group messages, recipients who have read it. }
         readTotal: { type: [integer, 'null'], description: For own group messages, total recipients. }
+        ciphertext: { type: [string, 'null'], format: byte, description: E2EE body (base64 MLS ciphertext); text is null when present. }
+        alg: { type: [integer, 'null'], description: E2EE scheme version (1 = MLS X25519/ChaCha20-Poly1305/Ed25519). }
+        epoch: { type: [integer, 'null'], format: int64, description: MLS epoch the message was sent in. }
+        contentKind: { type: [integer, 'null'], description: 1 text, 2 attachment, 3 system — without revealing content. }
     MessagePage:
       type: object
       properties:
@@ -1914,6 +2204,29 @@ components:
         emoji: { type: string }
         count: { type: integer }
         reacted: { type: boolean }
+    E2EEDevice:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        name: { type: string }
+        ed25519Pub: { type: string, format: byte, description: Ed25519 identity public key, base64. }
+        signedBy: { type: [string, 'null'], format: uuid, description: Device that vouched for this one (cross-signing). }
+        signature: { type: [string, 'null'], format: byte }
+        createdAt: { type: string, format: date-time }
+        revokedAt: { type: [string, 'null'], format: date-time }
+    E2EEGroupMessage:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        chatType: { type: string, enum: [private, group] }
+        chatId: { type: string, format: uuid }
+        kind: { type: integer, description: 1 welcome, 2 commit, 3 proposal. }
+        senderDevice: { type: [string, 'null'], format: uuid }
+        recipientDevice: { type: [string, 'null'], format: uuid }
+        payload: { type: string, format: byte, description: Encoded MLS message, base64. }
+        epoch: { type: [integer, 'null'], format: int64 }
+        createdAt: { type: string, format: date-time }
     Favorite:
       type: object
       properties:

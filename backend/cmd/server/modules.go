@@ -24,6 +24,7 @@ import (
 	"kisy-backend/internal/chats"
 	"kisy-backend/internal/conditions"
 	"kisy-backend/internal/config"
+	"kisy-backend/internal/e2ee"
 	"kisy-backend/internal/favorites"
 	"kisy-backend/internal/feedback"
 	"kisy-backend/internal/groups"
@@ -68,6 +69,7 @@ type modules struct {
 	ratingHandler        *rating.Handler
 	votingHandler        *voting.Handler
 	callsHandler         *calls.Handler
+	e2eeHandler          *e2ee.Handler
 	adminHandler         *admin.Handler
 	wsHandler            *ws.Handler
 	hub                  *ws.Hub
@@ -487,6 +489,39 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		return calls.Actor{UserID: claims.UserID, SessionID: claims.SessionID, RoleLevel: claims.RoleLevel}, true
 	})
 
+	// --- E2EE directory & handshake mailbox (docs/e2ee-design.md §5) ---
+	e2eeSvc := e2ee.NewService(pool, e2ee.NewPostgresRepository(), e2ee.Authorizer{
+		Private: func(ctx context.Context, chatID, actorID uuid.UUID) error {
+			ok, err := chatsSvc.IsParticipant(ctx, chatID, actorID)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return e2ee.ErrNotFound
+			}
+			return nil
+		},
+		Group: func(ctx context.Context, groupID, actorID uuid.UUID, actorLevel int) error {
+			err := groupsSvc.EnsureMember(ctx, groupID, groups.ActorMeta{UserID: actorID, RoleLevel: actorLevel})
+			switch {
+			case errors.Is(err, groups.ErrNotFound):
+				return e2ee.ErrNotFound
+			case errors.Is(err, groups.ErrNotMember):
+				return e2ee.ErrForbidden
+			default:
+				return err
+			}
+		},
+	})
+	e2eeSvc.SetPublisher(wsPublisher)
+	e2eeHandler := e2ee.NewHandler(e2eeSvc, func(r *http.Request) (e2ee.Actor, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return e2ee.Actor{}, false
+		}
+		return e2ee.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
+	})
+
 	// --- admin (CEO) ---
 	adminSvc := admin.NewService(pool, usersRepo, sessionsRepo, auditRec)
 	adminHandler := admin.NewHandler(adminSvc, audit.NewReader(pool), func(r *http.Request) (admin.ActorMeta, bool) {
@@ -529,6 +564,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		ratingHandler:        ratingHandler,
 		votingHandler:        votingHandler,
 		callsHandler:         callsHandler,
+		e2eeHandler:          e2eeHandler,
 		adminHandler:         adminHandler,
 		wsHandler:            wsHandler,
 		hub:                  hub,

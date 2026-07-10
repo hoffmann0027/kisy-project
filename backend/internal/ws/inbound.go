@@ -72,10 +72,14 @@ func (h *Hub) handleSend(ctx context.Context, c *Client, p sendPayload) {
 		return
 	}
 	_, err := h.sender.Send(ctx, messages.SendInput{
-		ChatType: p.ChatType,
-		ChatID:   p.ChatID,
-		Text:     p.Text,
-		ReplyTo:  p.ReplyTo,
+		ChatType:    p.ChatType,
+		ChatID:      p.ChatID,
+		Text:        p.Text,
+		ReplyTo:     p.ReplyTo,
+		Ciphertext:  p.Ciphertext,
+		Alg:         p.Alg,
+		Epoch:       p.Epoch,
+		ContentKind: p.ContentKind,
 	}, messages.ActorMeta{
 		UserID:    c.userID,
 		RoleLevel: c.roleLevel,

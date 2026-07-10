@@ -25,6 +25,9 @@ const (
 // MaxTextLength bounds a single message body.
 const MaxTextLength = 8000
 
+// MaxCiphertextBytes bounds an E2EE message body (mirrors the DB CHECK).
+const MaxCiphertextBytes = 65536
+
 // Message mirrors the messages table.
 type Message struct {
 	ID        uuid.UUID
@@ -39,6 +42,15 @@ type Message struct {
 	PinnedAt  *time.Time
 	PinnedBy  *uuid.UUID
 	CreatedAt time.Time
+
+	// E2EE body (docs/e2ee-design.md §6.1): MLS ciphertext the server cannot
+	// read. A live message carries either Text or Ciphertext, never both.
+	// Alg versions the encryption scheme, Epoch is the MLS epoch, ContentKind
+	// says text/attachment/system without revealing the content itself.
+	Ciphertext  []byte
+	Alg         *int16
+	Epoch       *int64
+	ContentKind *int16
 }
 
 // ReactionSummary aggregates one emoji on a message: how many users chose
@@ -72,6 +84,13 @@ type DTO struct {
 	// how many recipients have read it out of the total. Nil otherwise.
 	ReadCount *int `json:"readCount"`
 	ReadTotal *int `json:"readTotal"`
+
+	// E2EE body: MLS ciphertext as base64 ([]byte's default JSON encoding).
+	// Present only on encrypted messages; Text is nil for those.
+	Ciphertext  []byte `json:"ciphertext,omitempty"`
+	Alg         *int16 `json:"alg,omitempty"`
+	Epoch       *int64 `json:"epoch,omitempty"`
+	ContentKind *int16 `json:"contentKind,omitempty"`
 }
 
 func (m *Message) ToDTO() DTO {
@@ -92,6 +111,10 @@ func (m *Message) ToDTO() DTO {
 	}
 	if !m.IsDeleted {
 		dto.Text = m.Text
+		dto.Ciphertext = m.Ciphertext
+		dto.Alg = m.Alg
+		dto.Epoch = m.Epoch
+		dto.ContentKind = m.ContentKind
 	}
 	return dto
 }
