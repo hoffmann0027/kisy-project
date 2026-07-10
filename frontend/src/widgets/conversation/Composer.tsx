@@ -1,12 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@shared/ui/icons";
-import { IconButton, Spinner, toast } from "@shared/ui";
+import { IconButton, toast } from "@shared/ui";
 import type { Attachment, Message } from "@shared/api/types";
-import { attachmentsApi } from "@shared/api/endpoints";
+import { fileTypeLabel, formatBytes, uploadFile } from "@entities/attachment/upload";
+import { useUploadLimit } from "@entities/attachment/queries";
 import { wsClient } from "@shared/ws/client";
 import { useDraftStore } from "@shared/store/drafts";
 
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
+// Conservative fallback while the server-provided limit loads.
+const FALLBACK_MAX_BYTES = 10 * 1024 * 1024;
+
+interface UploadItem {
+  key: string;
+  fileName: string;
+  /** 0..1 confirmed progress; null while a single-shot request is in flight. */
+  progress: number | null;
+  abort: AbortController;
+}
 
 interface Props {
   chatType: "private" | "group";
@@ -20,7 +30,8 @@ interface Props {
 export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply, onSend }: Props) {
   const [text, setText] = useState(() => useDraftStore.getState().drafts[chatId] ?? "");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [uploading, setUploading] = useState(0);
+  const [uploads, setUploads] = useState<UploadItem[]>([]);
+  const { data: limit } = useUploadLimit();
   const fileRef = useRef<HTMLInputElement>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const typingSent = useRef(false);
@@ -38,19 +49,26 @@ export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply
   }, [chatId]);
 
   const uploadFiles = async (files: FileList | File[]) => {
+    const maxBytes = limit?.maxBytes ?? FALLBACK_MAX_BYTES;
     for (const file of Array.from(files)) {
-      if (file.size > MAX_FILE_BYTES) {
-        toast.error(`«${file.name}» больше 10 МБ`);
+      if (file.size > maxBytes) {
+        toast.error(`«${file.name}» больше ${formatBytes(maxBytes)}`);
         continue;
       }
-      setUploading((n) => n + 1);
+      const key = crypto.randomUUID();
+      const abort = new AbortController();
+      setUploads((prev) => [...prev, { key, fileName: file.name, progress: null, abort }]);
       try {
-        const { attachment } = await attachmentsApi.upload(file);
+        const attachment = await uploadFile(file, {
+          signal: abort.signal,
+          onProgress: (fraction) =>
+            setUploads((prev) => prev.map((u) => (u.key === key ? { ...u, progress: fraction } : u))),
+        });
         setAttachments((prev) => [...prev, attachment]);
       } catch {
-        toast.error(`Не удалось загрузить «${file.name}»`);
+        if (!abort.signal.aborted) toast.error(`Не удалось загрузить «${file.name}»`);
       } finally {
-        setUploading((n) => n - 1);
+        setUploads((prev) => prev.filter((u) => u.key !== key));
       }
     }
   };
@@ -107,11 +125,15 @@ export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply
           </IconButton>
         </div>
       )}
-      {(attachments.length > 0 || uploading > 0) && (
+      {(attachments.length > 0 || uploads.length > 0) && (
         <div className="composer__attachments">
           {attachments.map((a) => (
             <div key={a.id} className="composer__chip">
-              {a.isImage ? <img src={a.url} alt="" className="composer__chip-img" /> : <Icon.Paperclip size={14} />}
+              {a.isImage ? (
+                <img src={a.url} alt="" className="composer__chip-img" />
+              ) : (
+                <span className="composer__chip-type">{fileTypeLabel(a.fileName)}</span>
+              )}
               <span className="composer__chip-name">{a.fileName}</span>
               <button
                 className="composer__chip-x"
@@ -122,7 +144,21 @@ export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply
               </button>
             </div>
           ))}
-          {uploading > 0 && <Spinner size={16} />}
+          {uploads.map((u) => (
+            <div key={u.key} className="composer__chip composer__chip--uploading">
+              <span className="composer__chip-type">{fileTypeLabel(u.fileName)}</span>
+              <span className="composer__chip-name">{u.fileName}</span>
+              <span className="composer__chip-progress">
+                <span
+                  className="composer__chip-progress-bar"
+                  style={{ width: `${Math.round((u.progress ?? 0) * 100)}%` }}
+                />
+              </span>
+              <button className="composer__chip-x" onClick={() => u.abort.abort()} title="Отменить загрузку">
+                ✕
+              </button>
+            </div>
+          ))}
         </div>
       )}
       <div

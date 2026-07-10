@@ -42,14 +42,23 @@ export const apiClient = {
     request<T>(path, { method: "POST", body: blob, headers: { "Content-Type": blob.type } }),
   // uploadFile posts a File as the raw body, carrying its name in a header.
   // extraHeaders lets callers attach metadata (already URL-encoded) alongside.
-  uploadFile: <T>(path: string, file: File, extraHeaders?: Record<string, string>) =>
+  uploadFile: <T>(path: string, file: File, extraHeaders?: Record<string, string>, signal?: AbortSignal) =>
     request<T>(path, {
       method: "POST",
       body: file,
+      signal,
       headers: {
         "Content-Type": file.type || "application/octet-stream",
         "X-File-Name": encodeURIComponent(file.name),
         ...extraHeaders,
       },
+    }),
+  // putBlob uploads raw binary with PUT (chunked attachment upload).
+  putBlob: <T>(path: string, blob: Blob, signal?: AbortSignal) =>
+    request<T>(path, {
+      method: "PUT",
+      body: blob,
+      signal,
+      headers: { "Content-Type": "application/octet-stream" },
     }),
 };

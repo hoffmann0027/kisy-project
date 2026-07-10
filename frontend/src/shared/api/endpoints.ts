@@ -1,6 +1,7 @@
 import { apiClient } from "./client";
 import type {
   Attachment,
+  AttachmentMeta,
   AuditEntry,
   Board,
   CardInput,
@@ -22,6 +23,8 @@ import type {
   RatingAnalytics,
   RatingBoard,
   SearchResult,
+  UploadLimit,
+  UploadSession,
   User,
 } from "./types";
 
@@ -189,8 +192,28 @@ export const messagesApi = {
     apiClient.post<{ ok: boolean }>("/read", { chatType, chatId, messageId }),
 };
 
+// metaHeaders encodes AttachmentMeta for the single-shot raw-body upload.
+function metaHeaders(meta?: AttachmentMeta): Record<string, string> {
+  if (!meta) return {};
+  const h: Record<string, string> = {};
+  if (meta.kind) h["X-Attachment-Kind"] = meta.kind;
+  if (meta.durationMs !== undefined) h["X-Attachment-Duration-Ms"] = String(meta.durationMs);
+  if (meta.width !== undefined) h["X-Attachment-Width"] = String(meta.width);
+  if (meta.height !== undefined) h["X-Attachment-Height"] = String(meta.height);
+  return h;
+}
+
 export const attachmentsApi = {
-  upload: (file: File) => apiClient.uploadFile<{ attachment: Attachment }>("/attachments", file),
+  upload: (file: File, meta?: AttachmentMeta, signal?: AbortSignal) =>
+    apiClient.uploadFile<{ attachment: Attachment }>("/attachments", file, metaHeaders(meta), signal),
+  limit: () => apiClient.get<UploadLimit>("/attachments/limit"),
+  initUpload: (fileName: string, sizeBytes: number, meta?: AttachmentMeta) =>
+    apiClient.post<{ upload: UploadSession }>("/attachments/init", { fileName, sizeBytes, ...meta }),
+  uploadStatus: (id: string) => apiClient.get<{ upload: UploadSession }>(`/attachments/${id}/upload-status`),
+  putChunk: (id: string, index: number, chunk: Blob, signal?: AbortSignal) =>
+    apiClient.putBlob<{ stored: boolean; index: number }>(`/attachments/${id}/chunk?index=${index}`, chunk, signal),
+  completeUpload: (id: string) =>
+    apiClient.post<{ attachment: Attachment }>(`/attachments/${id}/complete`),
 };
 
 export const pushApi = {

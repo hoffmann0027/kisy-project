@@ -398,6 +398,35 @@
 .composer__chip-x:hover {
   color: #ff6b6b;
 }
+/* Compact file-type badge for non-image attachments (e.g. PDF, DOCX). */
+.composer__chip-type {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  padding: 2px 4px;
+}
+/* In-flight upload: thin confirmed-bytes progress bar (stage A). */
+.composer__chip--uploading {
+  opacity: 0.85;
+}
+.composer__chip-progress {
+  flex: 0 0 56px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-border);
+  overflow: hidden;
+}
+.composer__chip-progress-bar {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--color-accent, #4c8dff);
+  transition: width 0.2s ease;
+}
 .bubble--out .mention {
   color: #cfe0ff;
 }

@@ -216,7 +216,15 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	})
 
 	// --- attachments (files/images stored in the DB) ---
-	attachmentsSvc := attachments.NewService(pool, attachments.NewPostgresRepository())
+	attachmentsSvc := attachments.NewService(pool, attachments.NewPostgresRepository(), attachments.Limits{
+		MaxBytesLeadership: cfg.Upload.MaxBytesLeadership,
+		MaxBytesStaff:      cfg.Upload.MaxBytesStaff,
+		LeadershipMaxLevel: config.LeadershipMaxLevel,
+		ChunkBytes:         cfg.Upload.ChunkBytes,
+		SessionTTL:         cfg.Upload.SessionTTL,
+	})
+	// Reap abandoned chunked-upload sessions hourly (chunks cascade).
+	attachmentsSvc.StartSessionCleanup(ctx, time.Hour, log)
 	attachmentsSvc.SetMessageAccess(func(ctx context.Context, messageID, actorID uuid.UUID, actorLevel int) bool {
 		_, _, err := messagesSvc.ResolveAccessible(ctx, messageID, messages.ActorMeta{UserID: actorID, RoleLevel: actorLevel})
 		return err == nil

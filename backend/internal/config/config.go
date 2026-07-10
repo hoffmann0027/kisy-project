@@ -43,6 +43,10 @@ type Config struct {
 	// ICE configures WebRTC connectivity for 1:1 audio calls (STUN/TURN).
 	ICE ICEConfig
 
+	// Upload bounds attachment uploads (stage A: chunked uploads with
+	// clearance-differentiated limits — no hardcoded 10 MiB).
+	Upload UploadConfig
+
 	// BootstrapCEOUsername/Password create the very first Level-1 account
 	// when the users table is empty. Optional after first launch.
 	BootstrapCEOUsername string
@@ -83,6 +87,29 @@ type ICEConfig struct {
 	TURNSecret string
 	TURNRealm  string
 	TURNTTL    time.Duration
+}
+
+// UploadConfig bounds attachment uploads. Limits differ by clearance:
+// leadership (levels 1–3) gets MaxBytesLeadership, everyone else
+// MaxBytesStaff. ChunkBytes is the server-advertised chunk size for the
+// chunked upload flow; SessionTTL reaps abandoned upload sessions.
+type UploadConfig struct {
+	MaxBytesLeadership int64
+	MaxBytesStaff      int64
+	ChunkBytes         int
+	SessionTTL         time.Duration
+}
+
+// LeadershipMaxLevel is the strongest clearance band for upload limits:
+// levels 1..3 (CEO, deputies, department heads) get the larger allowance.
+const LeadershipMaxLevel = 3
+
+// MaxBytesFor returns the upload ceiling for a clearance level.
+func (u UploadConfig) MaxBytesFor(roleLevel int) int64 {
+	if roleLevel <= LeadershipMaxLevel {
+		return u.MaxBytesLeadership
+	}
+	return u.MaxBytesStaff
 }
 
 type PostgresConfig struct {
@@ -209,6 +236,29 @@ func Load() (*Config, error) {
 	cfg.ICE.TURNSecret = os.Getenv("TURN_SECRET")
 	cfg.ICE.TURNRealm = getEnv("TURN_REALM", "kisy")
 	if cfg.ICE.TURNTTL, err = getEnvDuration("TURN_TTL", 12*time.Hour); err != nil {
+		return nil, err
+	}
+
+	// Attachment upload limits (stage A). Values are megabytes in env for
+	// operator ergonomics; bytes internally.
+	leadershipMB, err := getEnvInt("UPLOAD_MAX_MB_LEADERSHIP", 200)
+	if err != nil {
+		return nil, err
+	}
+	staffMB, err := getEnvInt("UPLOAD_MAX_MB_STAFF", 50)
+	if err != nil {
+		return nil, err
+	}
+	chunkKB, err := getEnvInt("UPLOAD_CHUNK_KB", 1024)
+	if err != nil {
+		return nil, err
+	}
+	cfg.Upload = UploadConfig{
+		MaxBytesLeadership: int64(leadershipMB) << 20,
+		MaxBytesStaff:      int64(staffMB) << 20,
+		ChunkBytes:         chunkKB << 10,
+	}
+	if cfg.Upload.SessionTTL, err = getEnvDuration("UPLOAD_SESSION_TTL", 24*time.Hour); err != nil {
 		return nil, err
 	}
 

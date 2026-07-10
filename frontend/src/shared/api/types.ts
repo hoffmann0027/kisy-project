@@ -43,6 +43,8 @@ export interface ReactionSummary {
 
 export type ChatType = "private" | "group";
 
+export type AttachmentKind = "file" | "image" | "voice" | "video";
+
 export interface Attachment {
   id: string;
   fileName: string;
@@ -50,6 +52,36 @@ export interface Attachment {
   sizeBytes: number;
   isImage: boolean;
   url: string;
+  kind: AttachmentKind;
+  /** Playback length for voice/video. */
+  durationMs?: number | null;
+  /** Base64 peak envelope for voice bubbles (≤1024 bytes decoded). */
+  waveform?: string | null;
+  width?: number | null;
+  height?: number | null;
+}
+
+/** Client-declared media properties sent with an upload. */
+export interface AttachmentMeta {
+  kind?: AttachmentKind;
+  durationMs?: number;
+  waveform?: string; // base64
+  width?: number;
+  height?: number;
+}
+
+/** Chunked upload session (init → chunk → complete). */
+export interface UploadSession {
+  id: string;
+  chunkBytes: number;
+  declaredBytes: number;
+  expiresAt: string;
+  receivedChunks: number[];
+}
+
+export interface UploadLimit {
+  maxBytes: number;
+  chunkBytes: number;
 }
 
 export interface Message {

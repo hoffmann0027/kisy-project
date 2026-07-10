@@ -967,10 +967,15 @@ paths:
   /attachments:
     post:
       tags: [messages]
-      summary: Upload a file attachment (raw body; name in X-File-Name header)
+      summary: Upload a file attachment in one request (raw body; name in X-File-Name header)
       description: >
-        Max 10 MiB. Returns metadata; link it to a message by passing its id in
-        the message's attachmentIds. Stored in the database.
+        Single-shot path for small files. The size limit is clearance-based
+        (see GET /attachments/limit); larger files use the chunked flow
+        (init → chunk → complete). Optional media metadata travels in
+        X-Attachment-Kind / X-Attachment-Duration-Ms / X-Attachment-Width /
+        X-Attachment-Height headers. Content is inspected server-side (MIME
+        sniffing; executables rejected) before the file becomes servable.
+        Link the returned id to a message via the message's attachmentIds.
       requestBody:
         required: true
         content:
@@ -988,18 +993,138 @@ paths:
                       data:
                         type: object
                         properties:
-                          attachment:
-                            type: object
-                            properties:
-                              id: { type: string, format: uuid }
-                              fileName: { type: string }
-                              mimeType: { type: string }
-                              sizeBytes: { type: integer, format: int64 }
-                              isImage: { type: boolean }
-                              url: { type: string }
+                          attachment: { $ref: '#/components/schemas/Attachment' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '413': { $ref: '#/components/responses/ValidationError' }
+        '415': { $ref: '#/components/responses/ValidationError' }
+  /attachments/limit:
+    get:
+      tags: [messages]
+      summary: The actor's upload policy (clearance-differentiated, from config)
+      responses:
+        '200':
+          description: Upload ceiling and chunk size
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          maxBytes: { type: integer, format: int64 }
+                          chunkBytes: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /attachments/init:
+    post:
+      tags: [messages]
+      summary: Open a resumable chunked upload session
+      description: >
+        Validates the declared size against the actor's limit before any bytes
+        travel. Chunks are then PUT by index; complete assembles and inspects.
+        Abandoned sessions expire (UPLOAD_SESSION_TTL) and are reaped.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileName, sizeBytes]
+              properties:
+                fileName: { type: string }
+                sizeBytes: { type: integer, format: int64 }
+                kind: { type: string, enum: [file, image, voice, video] }
+                durationMs: { type: integer }
+                waveform: { type: string, format: byte, description: Peak envelope, max 1024 bytes decoded. }
+                width: { type: integer }
+                height: { type: integer }
+      responses:
+        '201':
+          description: Session opened
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          upload: { $ref: '#/components/schemas/UploadSession' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413': { $ref: '#/components/responses/ValidationError' }
+  /attachments/{id}/upload-status:
+    get:
+      tags: [messages]
+      summary: Chunks already stored for a session (resume support)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          description: Session state
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          upload: { $ref: '#/components/schemas/UploadSession' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /attachments/{id}/chunk:
+    put:
+      tags: [messages]
+      summary: Store one chunk (idempotent by index)
+      description: >
+        Every chunk except the last must be exactly chunkBytes; the last must
+        land the total on the declared size. Re-sending an index overwrites
+        the same bytes, so network retries are safe.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: index, in: query, required: true, schema: { type: integer, minimum: 0 } }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        '200': { description: Chunk stored }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/ValidationError' }
+  /attachments/{id}/complete:
+    post:
+      tags: [messages]
+      summary: Assemble, inspect and finalize a chunked upload
+      description: >
+        Fails with 409 while chunks are missing. The assembled bytes pass the
+        same inspection as the single-shot path (MIME sniffing, executable
+        rejection) before the attachment is created; the session is removed
+        in the same transaction.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '201':
+          description: Attachment created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          attachment: { $ref: '#/components/schemas/Attachment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ValidationError' }
+        '415': { $ref: '#/components/responses/ValidationError' }
   /attachments/{id}:
     get:
       tags: [messages]
@@ -2205,6 +2330,31 @@ components:
         emoji: { type: string }
         count: { type: integer }
         reacted: { type: boolean }
+    Attachment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        fileName: { type: string }
+        mimeType: { type: string }
+        sizeBytes: { type: integer, format: int64 }
+        isImage: { type: boolean }
+        url: { type: string }
+        kind: { type: string, enum: [file, image, voice, video] }
+        durationMs: { type: [integer, 'null'], description: Playback length for voice/video. }
+        waveform: { type: [string, 'null'], format: byte, description: Base64 peak envelope for voice bubbles. }
+        width: { type: [integer, 'null'] }
+        height: { type: [integer, 'null'] }
+    UploadSession:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        chunkBytes: { type: integer }
+        declaredBytes: { type: integer, format: int64 }
+        expiresAt: { type: string, format: date-time }
+        receivedChunks:
+          type: array
+          items: { type: integer }
+          description: Chunk indexes already stored (resume support).
     E2EEDevice:
       type: object
       properties:

@@ -287,3 +287,27 @@ schema, validation rules, successful response example, error responses,
 RBAC matrix, audit events, websocket side-effects, performance target
 (\<200ms p95 where applicable), idempotency requirements and OpenAPI
 documentation.
+
+## Attachment Object (stage A: media metadata + chunked upload)
+
+id(UUID), fileName, mimeType (sniffed server-side, never trusted from the
+client), sizeBytes, isImage, url, kind(file|image|voice|video),
+durationMs?, waveform? (base64, ≤1024 bytes decoded), width?, height?.
+
+Upload limits are clearance-differentiated and configured via env
+(UPLOAD_MAX_MB_LEADERSHIP for levels 1–3, UPLOAD_MAX_MB_STAFF for 4–10);
+clients read them from `GET /attachments/limit` — never hardcoded.
+
+Two upload paths, both running the same content inspection (MIME sniffing +
+executable rejection) before a file becomes servable:
+
+- Single-shot `POST /attachments` (raw body, X-File-Name header, optional
+  X-Attachment-Kind/-Duration-Ms/-Width/-Height metadata headers) — small
+  files.
+- Chunked: `POST /attachments/init` (declared size validated upfront) →
+  `PUT /attachments/{id}/chunk?index=N` (idempotent by index; all chunks
+  except the last are exactly chunkBytes) → `POST /attachments/{id}/complete`
+  (assembles, inspects, creates the attachment, drops the session
+  transactionally). `GET /attachments/{id}/upload-status` lists stored chunk
+  indexes so interrupted clients resume instead of restarting. Sessions
+  expire after UPLOAD_SESSION_TTL and are reaped hourly.
