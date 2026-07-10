@@ -161,6 +161,10 @@ export const MessageBubble = memo(function MessageBubble({
               </button>
             </div>
           </div>
+        ) : message.undecryptable ? (
+          <span className="bubble__locked" title="Сообщение зашифровано ключом, которого нет на этом устройстве">
+            🔒 Зашифрованное сообщение
+          </span>
         ) : (
           <span>{message.text ? renderText(message.text) : null}</span>
         )}

@@ -276,6 +276,11 @@
   background: transparent;
   border: 1px dashed var(--color-border);
 }
+/* E2EE ciphertext this device has no key for (e.g. history predating it). */
+.bubble__locked {
+  font-style: italic;
+  opacity: 0.75;
+}
 .bubble__reply {
   border-left: 3px solid rgba(255, 255, 255, 0.5);
   padding: 2px 8px;

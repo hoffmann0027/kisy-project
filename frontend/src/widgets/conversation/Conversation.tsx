@@ -51,7 +51,7 @@ export function Conversation({ target, headerActions }: Props) {
   const me = useAuthStore((s) => s.user!);
   const typingByChat = useTypingStore((s) => s.byChat);
   const { data, isPending, fetchNextPage, hasNextPage, isFetchingNextPage } = useMessages(chatType, chatId);
-  const send = useSendMessage(chatType, chatId);
+  const send = useSendMessage(chatType, chatId, target.peerUserId);
   const del = useDeleteMessage();
   const edit = useEditMessage();
   const pin = usePinMessage(chatType, chatId);
@@ -235,7 +235,7 @@ export function Conversation({ target, headerActions }: Props) {
                 message={m}
                 mine={m.senderId === me.id}
                 canDelete={m.senderId === me.id || me.roleLevel === 1}
-                canEdit={m.senderId === me.id && !m.pending && !m.failed}
+                canEdit={m.senderId === me.id && !m.pending && !m.failed && !m.encrypted}
                 status={statusFor(m)}
                 replyPreview={previewFor(m.replyTo)}
                 onReply={setReplyTo}

@@ -54,6 +54,81 @@ export const invitesApi = {
   create: () => apiClient.post<Invitation>("/invites"),
 };
 
+// SendMessageBody carries either plaintext (legacy) or E2EE ciphertext.
+export interface SendMessageBody {
+  text?: string;
+  replyTo?: string;
+  attachmentIds?: string[];
+  /** Base64 MLS ciphertext — mutually exclusive with text. */
+  ciphertext?: string;
+  alg?: number;
+  epoch?: number;
+  contentKind?: number;
+}
+
+export interface E2EEDeviceDTO {
+  id: string;
+  userId: string;
+  name: string;
+  ed25519Pub: string; // base64
+  signedBy: string | null;
+  signature?: string | null;
+  createdAt: string;
+  revokedAt: string | null;
+}
+
+export interface E2EEGroupMessageDTO {
+  id: string;
+  chatType: ChatType;
+  chatId: string;
+  kind: number; // 1 welcome, 2 commit, 3 proposal
+  senderDevice: string | null;
+  recipientDevice?: string | null;
+  payload: string; // base64
+  epoch: number | null;
+  createdAt: string;
+}
+
+// E2EE key directory + MLS handshake mailbox (docs/e2ee-design.md §5).
+export const e2eeApi = {
+  registerDevice: (device: {
+    deviceId: string;
+    name: string;
+    ed25519Pub: string;
+    signedBy?: string;
+    signature?: string;
+  }) => apiClient.post<{ device: E2EEDeviceDTO }>("/e2ee/devices", device),
+  listDevices: (userId: string) =>
+    apiClient.get<{ devices: E2EEDeviceDTO[] }>(`/e2ee/users/${userId}/devices`),
+  uploadKeyPackages: (deviceId: string, keyPackages: string[]) =>
+    apiClient.post<{ uploaded: number }>("/e2ee/key-packages", { deviceId, keyPackages }),
+  countKeyPackages: (deviceId: string) =>
+    apiClient.get<{ available: number }>(`/e2ee/key-packages/count?deviceId=${deviceId}`),
+  claimKeyPackages: (userId: string, excludeDevice?: string) => {
+    const q = excludeDevice ? `?excludeDevice=${excludeDevice}` : "";
+    return apiClient.post<{ keyPackages: { deviceId: string; keyPackage: string }[] }>(
+      `/e2ee/users/${userId}/key-packages/claim${q}`,
+    );
+  },
+  publishHandshake: (body: {
+    chatType: ChatType;
+    chatId: string;
+    kind: "welcome" | "commit" | "proposal";
+    senderDevice: string;
+    payload: string;
+    epoch?: number;
+    recipients?: Record<string, string>; // deviceId → userId
+  }) => apiClient.post<{ published: boolean }>("/e2ee/handshake", body),
+  listHandshake: (chatType: ChatType, chatId: string, afterId?: string) => {
+    const q = afterId ? `?afterId=${afterId}` : "";
+    return apiClient.get<{ messages: E2EEGroupMessageDTO[] }>(`/e2ee/handshake/${chatType}/${chatId}${q}`);
+  },
+  listWelcomes: (deviceId: string) =>
+    apiClient.get<{ welcomes: E2EEGroupMessageDTO[] }>(`/e2ee/welcomes?deviceId=${deviceId}`),
+  ackWelcome: (welcomeId: string, deviceId: string) =>
+    apiClient.post<{ acked: boolean }>(`/e2ee/welcomes/${welcomeId}/ack?deviceId=${deviceId}`),
+};
+
 export const chatsApi = {
   list: () => apiClient.get<{ chats: Chat[] }>("/chats"),
   open: (userId: string) => apiClient.post<{ chat: Chat }>("/chats", { userId }),
@@ -97,8 +172,8 @@ export const messagesApi = {
     if (cursor) params.set("cursor", cursor);
     return apiClient.get<MessagePage>(`/messages?${params.toString()}`);
   },
-  send: (chatType: ChatType, chatId: string, text: string, replyTo?: string, attachmentIds?: string[]) =>
-    apiClient.post<{ message: Message }>("/messages", { chatType, chatId, text, replyTo, attachmentIds }),
+  send: (chatType: ChatType, chatId: string, body: SendMessageBody) =>
+    apiClient.post<{ message: Message }>("/messages", { chatType, chatId, ...body }),
   edit: (messageId: string, text: string) =>
     apiClient.patch<{ message: Message }>(`/messages/${messageId}`, { text }),
   remove: (messageId: string) => apiClient.del<{ deleted: boolean }>(`/messages/${messageId}`),

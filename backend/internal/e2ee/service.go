@@ -164,9 +164,11 @@ func (s *Service) UploadKeyPackages(ctx context.Context, actor Actor, deviceID u
 }
 
 // ClaimKeyPackages consumes one key package per active device of userID —
-// the caller is about to add that user to an MLS group.
-func (s *Service) ClaimKeyPackages(ctx context.Context, userID uuid.UUID) ([]ClaimedKeyPackage, error) {
-	claimed, err := s.repo.ClaimKeyPackages(ctx, s.pool, userID)
+// the caller is about to add that user to an MLS group. excludeDevice
+// (uuid.Nil = none) lets a user claim their OWN other devices without
+// burning the calling device's package.
+func (s *Service) ClaimKeyPackages(ctx context.Context, userID, excludeDevice uuid.UUID) ([]ClaimedKeyPackage, error) {
+	claimed, err := s.repo.ClaimKeyPackages(ctx, s.pool, userID, excludeDevice)
 	if err != nil {
 		return nil, err
 	}

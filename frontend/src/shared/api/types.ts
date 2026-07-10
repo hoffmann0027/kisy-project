@@ -76,6 +76,19 @@ export interface Message {
   pending?: boolean;
   /** Client-only: true if the optimistic send failed. */
   failed?: boolean;
+
+  /** E2EE body: base64 MLS ciphertext; the server never sees the text. */
+  ciphertext?: string | null;
+  /** E2EE scheme version (present on encrypted messages). */
+  alg?: number | null;
+  /** MLS epoch of the encrypted message. */
+  epoch?: number | null;
+  /** 1 text, 2 attachment, 3 system — without revealing content. */
+  contentKind?: number | null;
+  /** Client-only: text was decrypted locally from ciphertext. */
+  encrypted?: boolean;
+  /** Client-only: ciphertext could not be decrypted on this device. */
+  undecryptable?: boolean;
 }
 
 export interface MessagePage {

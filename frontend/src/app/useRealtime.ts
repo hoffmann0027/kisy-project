@@ -12,6 +12,7 @@ import { usePresenceStore } from "@shared/store/presence";
 import { useTypingStore } from "@shared/store/typing";
 import { useReadReceiptStore } from "@shared/store/readReceipts";
 import { useAuthStore } from "@shared/store/auth";
+import { e2eeSession, hydrateMessage, initE2EE, processChatHandshake, processWelcomes } from "@entities/e2ee";
 
 // useRealtime connects the WebSocket for the session and routes server events
 // into the query cache and the presence/typing stores. Mounted once by the
@@ -38,6 +39,12 @@ export function useRealtime() {
   useEffect(() => {
     if (!meId) return;
 
+    // Bootstrap E2EE for this session (device identity, key packages) and
+    // join any chats other devices/users invited us into while offline.
+    void initE2EE(meId).then((s) => {
+      if (s) return processWelcomes(s).catch(() => {});
+    });
+
     wsClient.connect();
 
     // Subscribe to presence of every known chat partner. Runs on every
@@ -61,8 +68,29 @@ export function useRealtime() {
     const unsub = wsClient.subscribe((ev: ServerEvent) => {
       switch (ev.event) {
         case "message.created":
-          handleMessageCreated(qc, ev.data, meId, activeChatRef.current);
+          void handleMessageCreated(qc, ev.data, meId, activeChatRef.current);
           break;
+        case "e2ee.welcome": {
+          // A Welcome awaits this device — join, then refetch the chat so
+          // freshly decryptable messages render.
+          const s = e2eeSession();
+          if (s) {
+            void processWelcomes(s).then((joined) => {
+              for (const chatId of joined) {
+                qc.invalidateQueries({ queryKey: messageKeys.list("private", chatId) });
+              }
+            });
+          }
+          break;
+        }
+        case "e2ee.handshake": {
+          // A commit/proposal advanced the chat's MLS epoch — apply it.
+          const s = e2eeSession();
+          if (s) {
+            void processChatHandshake(s, ev.data.chatType as ChatType, ev.data.chatId);
+          }
+          break;
+        }
         case "message.updated": {
           const upd = ev.data;
           patchMessage(qc, upd.chatType, upd.chatId, upd.id, (m) => ({
@@ -165,12 +193,26 @@ function handleMessageRead(
   useReadReceiptStore.getState().advance(chatId, iso);
 }
 
-function handleMessageCreated(
+async function handleMessageCreated(
   qc: ReturnType<typeof useQueryClient>,
-  msg: Message,
+  raw: Message,
   meId: string,
   activeChatId: string | null,
 ) {
+  // Decrypt E2EE messages at the boundary: everything past this point (query
+  // cache, UI) sees a normal message with text filled in. Our own echoes
+  // resolve from the plaintext cache written by the send path.
+  let msg = raw;
+  const s = e2eeSession();
+  if (s && raw.ciphertext) {
+    msg = await hydrateMessage(s, raw);
+    if (msg.undecryptable && raw.senderId === meId) {
+      // Own echo may beat the REST ack (which writes the cache) — skip the
+      // insert; the ack's resolvePending supplies the readable message.
+      return;
+    }
+  }
+
   // Insert into the open conversation's cache if present.
   qc.setQueryData(messageKeys.list(msg.chatType, msg.chatId), (old: any) => {
     if (!old) return old;

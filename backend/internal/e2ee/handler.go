@@ -198,7 +198,15 @@ func (h *Handler) claimKeyPackages(w http.ResponseWriter, r *http.Request) {
 		notFound(w, r)
 		return
 	}
-	claimed, err := h.svc.ClaimKeyPackages(r.Context(), userID)
+	excludeDevice := uuid.Nil
+	if raw := r.URL.Query().Get("excludeDevice"); raw != "" {
+		excludeDevice, err = uuid.Parse(raw)
+		if err != nil {
+			badRequest(w, r, "excludeDevice must be a valid UUID")
+			return
+		}
+	}
+	claimed, err := h.svc.ClaimKeyPackages(r.Context(), userID, excludeDevice)
 	if err != nil {
 		fail(w, r, err)
 		return

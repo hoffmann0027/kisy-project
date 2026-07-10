@@ -26,7 +26,17 @@ export type ServerEvent =
   | { event: "call.ended"; data: { callId: string; reason: string } }
   | { event: "call.busy"; data: { callId: string } }
   | { event: "call.timeout"; data: { callId: string } }
+  | { event: "e2ee.handshake"; data: E2EEHandshakeData }
+  | { event: "e2ee.welcome"; data: { chatType: string; chatId: string; deviceId: string } }
   | { event: "error"; data: { message: string } };
+
+export interface E2EEHandshakeData {
+  chatType: string;
+  chatId: string;
+  id: string;
+  kind: number;
+  epoch: number | null;
+}
 
 export interface CallIncomingData {
   callId: string;

@@ -1887,6 +1887,7 @@ paths:
       description: Called when adding that user to an MLS group. Devices with an empty pool are skipped.
       parameters:
         - { name: userID, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: excludeDevice, in: query, required: false, schema: { type: string, format: uuid }, description: Skip this device (used when claiming one's own other devices). }
       responses:
         '200':
           description: One package per device
