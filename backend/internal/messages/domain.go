@@ -14,6 +14,12 @@ var (
 	ErrForbidden    = errors.New("messages: not permitted")
 	ErrEmptyContent = errors.New("messages: message has no content")
 	ErrBadChatType  = errors.New("messages: unknown chat type")
+	// ErrForwardBroadens rejects a forward whose target audience is broader
+	// than the source's — moving content "up" the clearance hierarchy.
+	ErrForwardBroadens = errors.New("messages: cannot forward to a broader audience")
+	// ErrForwardEncrypted marks an E2EE source the server cannot forward
+	// itself; the client must decrypt and re-send (docs/e2ee-design.md).
+	ErrForwardEncrypted = errors.New("messages: encrypted messages are forwarded client-side")
 )
 
 // Chat types.
@@ -51,6 +57,13 @@ type Message struct {
 	Alg         *int16
 	Epoch       *int64
 	ContentKind *int16
+
+	// Forwarding (stage D). The source message id is kept for audit only and
+	// never exposed; the sender is a snapshot (id + name at forward time) so
+	// the forwarded bubble reveals nothing about the source chat.
+	ForwardedFromMessageID  *uuid.UUID
+	ForwardedFromSenderID   *uuid.UUID
+	ForwardedFromSenderName *string
 }
 
 // ReactionSummary aggregates one emoji on a message: how many users chose
@@ -91,6 +104,17 @@ type DTO struct {
 	Alg         *int16 `json:"alg,omitempty"`
 	Epoch       *int64 `json:"epoch,omitempty"`
 	ContentKind *int16 `json:"contentKind,omitempty"`
+
+	// Forwarding attribution: who originally wrote this, as a snapshot. The
+	// source chat/message is never exposed, so no cross-clearance leak.
+	ForwardedFrom *ForwardedFrom `json:"forwardedFrom,omitempty"`
+}
+
+// ForwardedFrom is the "Переслано от …" attribution shown on a forwarded
+// message. It carries only the original author snapshot.
+type ForwardedFrom struct {
+	SenderID   uuid.UUID `json:"senderId"`
+	SenderName string    `json:"senderName"`
 }
 
 func (m *Message) ToDTO() DTO {
@@ -115,6 +139,13 @@ func (m *Message) ToDTO() DTO {
 		dto.Alg = m.Alg
 		dto.Epoch = m.Epoch
 		dto.ContentKind = m.ContentKind
+		if m.ForwardedFromSenderID != nil {
+			name := ""
+			if m.ForwardedFromSenderName != nil {
+				name = *m.ForwardedFromSenderName
+			}
+			dto.ForwardedFrom = &ForwardedFrom{SenderID: *m.ForwardedFromSenderID, SenderName: name}
+		}
 	}
 	return dto
 }

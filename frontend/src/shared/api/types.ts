@@ -150,6 +150,10 @@ export interface Message {
   encrypted?: boolean;
   /** Client-only: ciphertext could not be decrypted on this device. */
   undecryptable?: boolean;
+
+  /** Forwarding attribution: the original author snapshot (never the source
+   * chat), shown as "Переслано от …". */
+  forwardedFrom?: { senderId: string; senderName: string } | null;
 }
 
 export interface MessagePage {

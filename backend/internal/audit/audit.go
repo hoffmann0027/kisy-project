@@ -31,6 +31,7 @@ const (
 	ActionUserPasswordReset  = "user.password_reset"
 	ActionUserActivated      = "user.activated"
 	ActionUserDeactivated    = "user.deactivated"
+	ActionMessageForwarded   = "message.forwarded"
 )
 
 // Event is one audit record. Optional fields are pointers/empty strings.

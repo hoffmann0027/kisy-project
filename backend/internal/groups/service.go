@@ -224,6 +224,17 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID, actor ActorMeta) (*Grou
 	return g, nil
 }
 
+// ClearanceLevel returns a group's audience breadth: its min_role_level, the
+// weakest clearance that can access it. Used by message forwarding to compare
+// audience sizes (access is verified separately by the caller).
+func (s *Service) ClearanceLevel(ctx context.Context, groupID uuid.UUID) (int, error) {
+	g, err := s.repo.GetByID(ctx, s.pool, groupID)
+	if err != nil {
+		return 0, err
+	}
+	return g.MinRoleLevel, nil
+}
+
 // AddMember adds a user to a group. The actor must be able to see the
 // group, and the target's clearance must also satisfy the group minimum.
 func (s *Service) AddMember(ctx context.Context, groupID, targetID uuid.UUID, targetLevel int, actor ActorMeta) error {

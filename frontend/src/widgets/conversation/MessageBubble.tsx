@@ -24,6 +24,12 @@ interface Props {
   onPin: (m: Message, pin: boolean) => void;
   /** Opens the media viewer instead of a new tab (stage C). */
   onOpenImage: (attachment: Attachment) => void;
+  /** Forward this single message (stage D). */
+  onForward: (m: Message) => void;
+  /** Multi-select mode (stage D): checkbox shown, click toggles selection. */
+  selectionMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (m: Message) => void;
 }
 
 const QUICK_EMOJI = ["👍", "❤️", "😂", "🔥", "👏"];
@@ -68,6 +74,10 @@ export const MessageBubble = memo(function MessageBubble({
   onReact,
   onPin,
   onOpenImage,
+  onForward,
+  selectionMode,
+  selected,
+  onToggleSelect,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.text ?? "");
@@ -90,6 +100,27 @@ export const MessageBubble = memo(function MessageBubble({
     );
   }
 
+  // In selection mode the whole row is a toggle; individual bubble actions
+  // are suppressed so a click only checks/unchecks.
+  if (selectionMode) {
+    return (
+      <div
+        className={cn("bubble-row bubble-row--select", mine ? "bubble-row--out" : "bubble-row--in", selected && "bubble-row--selected")}
+        onClick={() => onToggleSelect?.(message)}
+      >
+        <span className={cn("bubble-check", selected && "bubble-check--on")}>
+          {selected && <Icon.Check size={13} />}
+        </span>
+        <div className={cn("bubble", mine ? "bubble--out" : "bubble--in")}>
+          {message.forwardedFrom && (
+            <div className="bubble__forwarded">Переслано от {message.forwardedFrom.senderName || "пользователя"}</div>
+          )}
+          <span>{message.text ? renderText(message.text) : message.undecryptable ? "🔒 Зашифрованное сообщение" : ""}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={cn("bubble-row", mine ? "bubble-row--out" : "bubble-row--in")}>
       <div className={cn("bubble", mine ? "bubble--out" : "bubble--in")}>
@@ -102,6 +133,11 @@ export const MessageBubble = memo(function MessageBubble({
           <button className="bubble__action" onClick={() => onReply(message)} title="Ответить">
             <Icon.Reply size={15} />
           </button>
+          {!message.undecryptable && (
+            <button className="bubble__action" onClick={() => onForward(message)} title="Переслать">
+              <Icon.Forward size={15} />
+            </button>
+          )}
           <button
             className="bubble__action"
             onClick={() => onPin(message, !message.pinnedAt)}
@@ -120,6 +156,10 @@ export const MessageBubble = memo(function MessageBubble({
             </button>
           )}
         </div>
+
+        {message.forwardedFrom && (
+          <div className="bubble__forwarded">Переслано от {message.forwardedFrom.senderName || "пользователя"}</div>
+        )}
 
         {replyPreview && <div className="bubble__reply">{replyPreview}</div>}
 

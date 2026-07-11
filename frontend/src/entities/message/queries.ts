@@ -99,6 +99,78 @@ export function useDeleteMessage() {
   return useMutation({ mutationFn: (messageId: string) => messagesApi.remove(messageId) });
 }
 
+export interface ForwardTargetRef {
+  chatType: ChatType;
+  chatId: string;
+  /** Peer user id for private targets — enables E2EE re-encryption. */
+  peerUserId?: string;
+}
+
+/**
+ * Forward messages into a target chat. Plaintext messages go server-side in
+ * one batch (the server enforces the clearance hierarchy and stamps the
+ * attribution). Encrypted messages are re-sent client-side: re-encrypted for
+ * an E2EE private target, or — when forwarded out to a non-E2EE target — sent
+ * as the locally decrypted text (an explicit user choice). Attribution is
+ * preserved: an already-forwarded message keeps its original author.
+ */
+export function useForwardMessages() {
+  return useMutation({
+    mutationFn: async (args: {
+      target: ForwardTargetRef;
+      messages: Message[];
+      resolveName: (senderId: string) => string;
+    }) => {
+      const { target, messages, resolveName } = args;
+      const s = e2eeSession();
+
+      const plaintextIds: string[] = [];
+      const encrypted: Message[] = [];
+      for (const m of messages) {
+        // An undecryptable message (no local plaintext) cannot be forwarded.
+        if (m.undecryptable || (m.encrypted && !m.text)) continue;
+        if (m.encrypted) encrypted.push(m);
+        else plaintextIds.push(m.id);
+      }
+      if (plaintextIds.length === 0 && encrypted.length === 0) {
+        throw new Error("Нет сообщений, доступных для пересылки");
+      }
+
+      for (const m of encrypted) {
+        const senderId = m.forwardedFrom?.senderId ?? m.senderId;
+        const senderName = m.forwardedFrom?.senderName ?? resolveName(senderId);
+        const text = m.text ?? "";
+        let sent = false;
+        if (s && target.chatType === "private" && target.peerUserId && text) {
+          const enc = await encryptForChat(s, target.chatId, target.peerUserId, text).catch(() => null);
+          if (enc) {
+            const { message } = await messagesApi.send(target.chatType, target.chatId, {
+              ...enc,
+              contentKind: 1,
+              forwardedFromSenderId: senderId,
+              forwardedFromSenderName: senderName,
+            });
+            await cachePlaintext(s, message.id, text);
+            sent = true;
+          }
+        }
+        if (!sent) {
+          // Non-E2EE target: forwarding necessarily reveals the text there.
+          await messagesApi.send(target.chatType, target.chatId, {
+            text,
+            forwardedFromSenderId: senderId,
+            forwardedFromSenderName: senderName,
+          });
+        }
+      }
+
+      if (plaintextIds.length > 0) {
+        await messagesApi.forward(plaintextIds, target.chatType, target.chatId);
+      }
+    },
+  });
+}
+
 export function useEditMessage() {
   return useMutation({
     mutationFn: (args: { messageId: string; text: string }) => messagesApi.edit(args.messageId, args.text),

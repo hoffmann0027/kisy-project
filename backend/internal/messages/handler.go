@@ -26,6 +26,7 @@ func NewHandler(svc *Service, actor func(*http.Request) (ActorMeta, bool)) *Hand
 
 func (h *Handler) Routes(r chi.Router) {
 	r.Post("/messages", h.send)
+	r.Post("/messages/forward", h.forward)
 	r.Get("/messages", h.list)
 	r.Get("/messages/pinned", h.listPinned)
 	r.Patch("/messages/{messageID}", h.edit)
@@ -123,6 +124,10 @@ type sendRequest struct {
 	Alg         *int16 `json:"alg"`
 	Epoch       *int64 `json:"epoch"`
 	ContentKind *int16 `json:"contentKind"`
+
+	// Forwarded-from attribution for a client-side (E2EE) forward.
+	ForwardedFromSenderID   *string `json:"forwardedFromSenderId"`
+	ForwardedFromSenderName *string `json:"forwardedFromSenderName"`
 }
 
 func (h *Handler) send(w http.ResponseWriter, r *http.Request) {
@@ -174,22 +179,86 @@ func (h *Handler) send(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var fwdSenderID *uuid.UUID
+	if req.ForwardedFromSenderID != nil {
+		id, err := uuid.Parse(*req.ForwardedFromSenderID)
+		if err != nil {
+			httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "forwardedFromSenderId must be a valid UUID")
+			return
+		}
+		fwdSenderID = &id
+	}
+
 	dto, err := h.svc.Send(r.Context(), SendInput{
-		ChatType:      req.ChatType,
-		ChatID:        chatID,
-		Text:          req.Text,
-		ReplyTo:       replyTo,
-		AttachmentIDs: attachmentIDs,
-		Ciphertext:    ciphertext,
-		Alg:           req.Alg,
-		Epoch:         req.Epoch,
-		ContentKind:   req.ContentKind,
+		ChatType:                req.ChatType,
+		ChatID:                  chatID,
+		Text:                    req.Text,
+		ReplyTo:                 replyTo,
+		AttachmentIDs:           attachmentIDs,
+		Ciphertext:              ciphertext,
+		Alg:                     req.Alg,
+		Epoch:                   req.Epoch,
+		ContentKind:             req.ContentKind,
+		ForwardedFromSenderID:   fwdSenderID,
+		ForwardedFromSenderName: req.ForwardedFromSenderName,
 	}, actor)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
 	}
 	httpresponse.OK(w, r, http.StatusCreated, map[string]any{"message": dto})
+}
+
+type forwardRequest struct {
+	SourceMessageIDs []string `json:"sourceMessageIds"`
+	TargetChatType   string   `json:"targetChatType"`
+	TargetChatID     string   `json:"targetChatId"`
+}
+
+func (h *Handler) forward(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actor(r)
+	if !ok {
+		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
+		return
+	}
+	var req forwardRequest
+	if err := httpjson.Decode(w, r, &req); err != nil {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "malformed JSON body")
+		return
+	}
+	if req.TargetChatType != ChatPrivate && req.TargetChatType != ChatGroup {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "targetChatType must be 'private' or 'group'")
+		return
+	}
+	targetID, err := uuid.Parse(req.TargetChatID)
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "targetChatId must be a valid UUID")
+		return
+	}
+	if len(req.SourceMessageIDs) == 0 || len(req.SourceMessageIDs) > 50 {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "sourceMessageIds must contain 1..50 ids")
+		return
+	}
+	ids := make([]uuid.UUID, 0, len(req.SourceMessageIDs))
+	for _, raw := range req.SourceMessageIDs {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "sourceMessageIds must be valid UUIDs")
+			return
+		}
+		ids = append(ids, id)
+	}
+
+	dtos, err := h.svc.Forward(r.Context(), ForwardInput{
+		SourceMessageIDs: ids,
+		TargetChatType:   req.TargetChatType,
+		TargetChatID:     targetID,
+	}, actor)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	httpresponse.OK(w, r, http.StatusCreated, map[string]any{"messages": dtos})
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -268,6 +337,10 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "message text must not be empty")
 	case errors.Is(err, ErrBadChatType):
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "unknown chat type")
+	case errors.Is(err, ErrForwardBroadens):
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "cannot forward to a broader audience")
+	case errors.Is(err, ErrForwardEncrypted):
+		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrValidationFailed, "encrypted messages are forwarded from the app")
 	case errors.Is(err, ErrForbidden):
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "not permitted")
 	case errors.Is(err, ErrNotFound):

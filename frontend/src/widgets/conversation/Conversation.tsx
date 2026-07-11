@@ -7,11 +7,13 @@ import { Avatar, Button, Spinner, toast } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import { MediaViewer, type MediaViewerItem } from "@shared/ui/MediaViewer";
 import { ChatPanel } from "./ChatPanel";
+import { ForwardModal, type ForwardTarget } from "@features/forward/ForwardModal";
 import type { Attachment, ChatMediaItem, ChatType, Message } from "@shared/api/types";
 import {
   flattenMessages,
   useDeleteMessage,
   useEditMessage,
+  useForwardMessages,
   useMessageCacheWriter,
   useMessages,
   usePinMessage,
@@ -20,6 +22,7 @@ import {
   useSendMessage,
 } from "@entities/message/queries";
 import { messagesApi } from "@shared/api/endpoints";
+import { ApiError } from "@shared/api/envelope";
 import { useAuthStore } from "@shared/store/auth";
 import { useTypingStore } from "@shared/store/typing";
 import { useReadReceiptStore } from "@shared/store/readReceipts";
@@ -56,6 +59,7 @@ export function Conversation({ target, headerActions }: Props) {
   const send = useSendMessage(chatType, chatId, target.peerUserId);
   const del = useDeleteMessage();
   const edit = useEditMessage();
+  const forward = useForwardMessages();
   const pin = usePinMessage(chatType, chatId);
   const { data: pinned } = usePinnedMessages(chatType, chatId);
   const react = useReaction();
@@ -64,7 +68,12 @@ export function Conversation({ target, headerActions }: Props) {
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [viewer, setViewer] = useState<{ items: MediaViewerItem[]; index: number } | null>(null);
+  // Multi-select + forwarding (stage D).
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [forwardOpen, setForwardOpen] = useState(false);
+  const [forwardSource, setForwardSource] = useState<Message[] | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const selectionMode = selected.size > 0;
 
   const messages = useMemo(() => flattenMessages(data?.pages), [data]);
   const typers = Array.from(typingByChat[chatId] ?? []).filter((id) => id !== me.id);
@@ -149,6 +158,67 @@ export function Conversation({ target, headerActions }: Props) {
   const handleReact = (m: Message, emoji: string) => {
     const existing = m.reactions.find((r) => r.emoji === emoji);
     react.mutate({ messageId: m.id, emoji, remove: !!existing?.reacted });
+  };
+
+  const toggleSelect = (m: Message) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(m.id)) next.delete(m.id);
+      else next.add(m.id);
+      return next;
+    });
+
+  // Resolve the original author's display name for forward attribution: in a
+  // private chat the sender is either us or the peer; groups fall back to the
+  // server-side attribution for plaintext messages.
+  const resolveSenderName = (senderId: string): string => {
+    if (senderId === me.id) return me.displayName;
+    if (chatType === "private") return target.title;
+    return "";
+  };
+
+  const openForward = (msgs: Message[]) => {
+    if (msgs.length === 0) return;
+    setForwardSource(msgs);
+    setForwardOpen(true);
+  };
+
+  const doForward = (t: ForwardTarget) => {
+    const msgs = forwardSource ?? [];
+    setForwardOpen(false);
+    forward.mutate(
+      { target: t, messages: msgs, resolveName: resolveSenderName },
+      {
+        onSuccess: () => {
+          toast.success(`Переслано в «${t.title}»`);
+          setSelected(new Set());
+          setForwardSource(null);
+        },
+        onError: (e) => {
+          toast.error(
+            e instanceof ApiError && e.status === 403
+              ? "Нельзя переслать в чат с более широкой аудиторией"
+              : "Не удалось переслать сообщения",
+          );
+        },
+      },
+    );
+  };
+
+  const forwardSelected = () => openForward(messages.filter((m) => selected.has(m.id)));
+  const copySelected = () => {
+    const text = messages
+      .filter((m) => selected.has(m.id) && m.text)
+      .map((m) => m.text)
+      .join("\n\n");
+    if (text) void navigator.clipboard?.writeText(text).catch(() => {});
+    setSelected(new Set());
+  };
+  const deleteSelected = () => {
+    messages
+      .filter((m) => selected.has(m.id) && (m.senderId === me.id || me.roleLevel === 1))
+      .forEach((m) => del.mutate(m.id));
+    setSelected(new Set());
   };
 
   // Open the viewer over every image currently loaded in the conversation,
@@ -285,6 +355,10 @@ export function Conversation({ target, headerActions }: Props) {
                 onReact={handleReact}
                 onPin={handlePin}
                 onOpenImage={openImageFromBubble}
+                onForward={(msg) => openForward([msg])}
+                selectionMode={selectionMode}
+                selected={selected.has(m.id)}
+                onToggleSelect={toggleSelect}
               />
             </div>
           );
@@ -303,13 +377,38 @@ export function Conversation({ target, headerActions }: Props) {
         <div ref={bottomRef} />
       </div>
 
-      <Composer
-        chatType={chatType}
-        chatId={chatId}
-        replyTo={replyTo}
-        replyPreview={previewFor(replyTo?.id ?? null)}
-        onClearReply={() => setReplyTo(null)}
-        onSend={handleSend}
+      {selectionMode ? (
+        <div className="select-bar">
+          <button className="select-bar__cancel" onClick={() => setSelected(new Set())} title="Отменить выбор">
+            ✕
+          </button>
+          <span className="select-bar__count">Выбрано: {selected.size}</span>
+          <button className="select-bar__action" onClick={copySelected} title="Копировать">
+            <Icon.Copy size={18} />
+          </button>
+          <button className="select-bar__action" onClick={forwardSelected} title="Переслать">
+            <Icon.Forward size={18} />
+          </button>
+          <button className="select-bar__action select-bar__action--danger" onClick={deleteSelected} title="Удалить">
+            <Icon.Trash size={18} />
+          </button>
+        </div>
+      ) : (
+        <Composer
+          chatType={chatType}
+          chatId={chatId}
+          replyTo={replyTo}
+          replyPreview={previewFor(replyTo?.id ?? null)}
+          onClearReply={() => setReplyTo(null)}
+          onSend={handleSend}
+        />
+      )}
+
+      <ForwardModal
+        open={forwardOpen}
+        count={forwardSource?.length ?? 0}
+        onClose={() => setForwardOpen(false)}
+        onPick={doForward}
       />
 
       {panelOpen && (

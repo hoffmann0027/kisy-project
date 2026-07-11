@@ -218,6 +218,10 @@ type Repository interface {
 	Link(ctx context.Context, q db.DBTX, ids []uuid.UUID, messageID, uploader uuid.UUID) error
 	Get(ctx context.Context, q db.DBTX, id uuid.UUID) (Blob, error)
 	ForMessages(ctx context.Context, q db.DBTX, messageIDs []uuid.UUID) (map[uuid.UUID][]DTO, error)
+	// CopyToMessage duplicates every attachment of sourceMessageID onto
+	// newMessageID (new rows, same bytes/metadata), owned by uploader, and
+	// returns the new attachment DTOs. Used by message forwarding (stage D).
+	CopyToMessage(ctx context.Context, q db.DBTX, sourceMessageID, newMessageID, uploader uuid.UUID) ([]DTO, error)
 
 	CreateSession(ctx context.Context, q db.DBTX, s *UploadSession) error
 	GetSession(ctx context.Context, q db.DBTX, id uuid.UUID) (*UploadSession, error)
@@ -301,6 +305,35 @@ func (r *PostgresRepository) ForMessages(ctx context.Context, q db.DBTX, message
 	return out, rows.Err()
 }
 
+func (r *PostgresRepository) CopyToMessage(ctx context.Context, q db.DBTX, sourceMessageID, newMessageID, uploader uuid.UUID) ([]DTO, error) {
+	rows, err := q.Query(ctx, `
+		INSERT INTO attachments (message_id, file_name, mime_type, size_bytes, storage_path, scan_status, data, uploaded_by,
+		                         kind, duration_ms, waveform, width, height)
+		SELECT $2, file_name, mime_type, size_bytes, '', 'clean', data, $3,
+		       kind, duration_ms, waveform, width, height
+		FROM attachments WHERE message_id = $1
+		ORDER BY created_at
+		RETURNING id, file_name, mime_type, size_bytes, kind, duration_ms, waveform, width, height`,
+		sourceMessageID, newMessageID, uploader)
+	if err != nil {
+		return nil, fmt.Errorf("attachments: copy to message: %w", err)
+	}
+	defer rows.Close()
+
+	var out []DTO
+	for rows.Next() {
+		var id uuid.UUID
+		var name, mime string
+		var size int64
+		var meta Meta
+		if err := rows.Scan(&id, &name, &mime, &size, &meta.Kind, &meta.DurationMs, &meta.Waveform, &meta.Width, &meta.Height); err != nil {
+			return nil, fmt.Errorf("attachments: scan copied: %w", err)
+		}
+		out = append(out, toDTO(id, name, mime, size, meta))
+	}
+	return out, rows.Err()
+}
+
 // MessageAccess reports whether an actor may see a given message's chat.
 // Injected to avoid an attachments→messages import cycle.
 type MessageAccess func(ctx context.Context, messageID, actorID uuid.UUID, actorLevel int) bool
@@ -360,6 +393,13 @@ func (s *Service) store(ctx context.Context, fileName string, raw []byte, upload
 // Link attaches uploaded files to a message (best-effort ownership-checked).
 func (s *Service) Link(ctx context.Context, q db.DBTX, ids []uuid.UUID, messageID, uploader uuid.UUID) error {
 	return s.repo.Link(ctx, q, ids, messageID, uploader)
+}
+
+// CopyToMessage duplicates a source message's attachments onto a new message
+// (message forwarding). Access to the source is the caller's responsibility —
+// the forwarding service checks it before calling.
+func (s *Service) CopyToMessage(ctx context.Context, sourceMessageID, newMessageID, uploader uuid.UUID) ([]DTO, error) {
+	return s.repo.CopyToMessage(ctx, s.pool, sourceMessageID, newMessageID, uploader)
 }
 
 // ForMessages returns attachment DTOs grouped by message id, for enrichment.

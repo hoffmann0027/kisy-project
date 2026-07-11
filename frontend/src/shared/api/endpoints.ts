@@ -69,6 +69,9 @@ export interface SendMessageBody {
   alg?: number;
   epoch?: number;
   contentKind?: number;
+  /** Forwarded-from attribution for a client-side (E2EE) forward. */
+  forwardedFromSenderId?: string;
+  forwardedFromSenderName?: string;
 }
 
 export interface E2EEDeviceDTO {
@@ -193,6 +196,14 @@ export const messagesApi = {
   },
   send: (chatType: ChatType, chatId: string, body: SendMessageBody) =>
     apiClient.post<{ message: Message }>("/messages", { chatType, chatId, ...body }),
+  // Server-side forward of plaintext messages into a target chat. E2EE
+  // messages are forwarded client-side via send() with forwardedFrom* set.
+  forward: (sourceMessageIds: string[], targetChatType: ChatType, targetChatId: string) =>
+    apiClient.post<{ messages: Message[] }>("/messages/forward", {
+      sourceMessageIds,
+      targetChatType,
+      targetChatId,
+    }),
   edit: (messageId: string, text: string) =>
     apiClient.patch<{ message: Message }>(`/messages/${messageId}`, { text }),
   remove: (messageId: string) => apiClient.del<{ deleted: boolean }>(`/messages/${messageId}`),

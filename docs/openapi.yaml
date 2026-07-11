@@ -800,6 +800,8 @@ paths:
                 alg: { type: integer, description: E2EE scheme version; required with ciphertext. }
                 epoch: { type: integer, format: int64 }
                 contentKind: { type: integer, description: 1 text, 2 attachment, 3 system. }
+                forwardedFromSenderId: { type: string, format: uuid, description: Client-side (E2EE) forward attribution — original author id snapshot. }
+                forwardedFromSenderName: { type: string, description: Client-side (E2EE) forward attribution — original author name snapshot. }
       responses:
         '201':
           description: Message created
@@ -838,6 +840,56 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /messages/forward:
+    post:
+      tags: [messages]
+      summary: Forward plaintext messages into a target chat
+      description: >
+        Copies the actor's accessible PLAINTEXT messages into the target,
+        newest-first order preserved, each stamped with a forwarded-from
+        author snapshot (never the source chat). Rules: the actor must be
+        able to read every source and post to the target (a masked 404
+        otherwise, so inaccessible sources are never revealed); the target's
+        audience must not be broader than any source's (403 — content never
+        moves up the clearance hierarchy). E2EE source messages are rejected
+        (409) — the server cannot read them, so the client decrypts and
+        re-sends them via POST /messages with forwardedFrom* set. Each forward
+        is audited.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceMessageIds, targetChatType, targetChatId]
+              properties:
+                sourceMessageIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items: { type: string, format: uuid }
+                targetChatType: { type: string, enum: [private, group] }
+                targetChatId: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Forwarded messages created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          messages:
+                            type: array
+                            items: { $ref: '#/components/schemas/Message' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ValidationError' }
 
   /messages/pinned:
     get:
@@ -2366,6 +2418,12 @@ components:
         alg: { type: [integer, 'null'], description: E2EE scheme version (1 = MLS X25519/ChaCha20-Poly1305/Ed25519). }
         epoch: { type: [integer, 'null'], format: int64, description: MLS epoch the message was sent in. }
         contentKind: { type: [integer, 'null'], description: 1 text, 2 attachment, 3 system — without revealing content. }
+        forwardedFrom:
+          type: [object, 'null']
+          description: Original-author snapshot for a forwarded message (never the source chat).
+          properties:
+            senderId: { type: string, format: uuid }
+            senderName: { type: string }
     MessagePage:
       type: object
       properties:

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
 
+	"kisy-backend/internal/access"
 	"kisy-backend/internal/admin"
 	"kisy-backend/internal/attachments"
 	"kisy-backend/internal/audit"
@@ -283,6 +284,48 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 			return out, nil
 		},
 	)
+	// Forwarding (stage D): clearance breadth per chat + sender-name snapshot
+	// + attachment copier. Breadth = weakest level that can access the chat:
+	// group min_role_level; private chat = the weaker of its participants.
+	messagesSvc.SetForwarding(
+		messages.ClearanceResolver{
+			Private: func(ctx context.Context, chatID uuid.UUID) (int, error) {
+				ids, err := chatsSvc.ParticipantIDs(ctx, chatID)
+				if err != nil {
+					return 0, err
+				}
+				breadth := access.CEOLevel
+				for _, id := range ids {
+					if lvl, ok := userLevel(ctx, id); ok && lvl > breadth {
+						breadth = lvl
+					}
+				}
+				return breadth, nil
+			},
+			Group: func(ctx context.Context, groupID uuid.UUID) (int, error) {
+				return groupsSvc.ClearanceLevel(ctx, groupID)
+			},
+		},
+		func(ctx context.Context, userID uuid.UUID) (string, bool) {
+			u, err := usersRepo.GetByID(ctx, pool, userID)
+			if err != nil {
+				return "", false
+			}
+			return u.DisplayName, true
+		},
+		func(ctx context.Context, sourceMessageID, newMessageID, uploader uuid.UUID) ([]any, error) {
+			dtos, err := attachmentsSvc.CopyToMessage(ctx, sourceMessageID, newMessageID, uploader)
+			if err != nil {
+				return nil, err
+			}
+			out := make([]any, len(dtos))
+			for i := range dtos {
+				out[i] = dtos[i]
+			}
+			return out, nil
+		},
+	)
+
 	attachmentsHandler := attachments.NewHandler(attachmentsSvc, func(r *http.Request) (attachments.Actor, bool) {
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {

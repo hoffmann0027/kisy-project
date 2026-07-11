@@ -336,3 +336,27 @@ carry messageId/senderId for jumping to the original. Access is the same
 chat authorizer as the message list: non-members get a masked 404, deleted
 messages are excluded. Addressing is by query parameters, consistent with
 GET /messages (the /chats/{chatID} path wildcard owns that segment).
+
+## Message Forwarding (stage D)
+
+`POST /messages/forward { sourceMessageIds[], targetChatType, targetChatId }`
+copies the actor's accessible PLAINTEXT messages into a target chat, order
+preserved, each stamped with a forwarded-from author snapshot (id + display
+name at forward time — never the source chat/message, so no cross-clearance
+leak). Denormalized columns forwarded_from_message_id (audit only, not
+exposed), forwarded_from_sender_id/name back the "Переслано от …" bubble.
+
+Hierarchy rules (docs/spec/06, 07): the actor must be able to read every
+source and post to the target (else masked 404 — inaccessible sources are
+never revealed); the target's audience breadth must be ≤ every source's
+(target min-clearance-level not weaker than the source), so content never
+moves "up" to a broader audience (403). Each forward is audited
+(message.forwarded).
+
+E2EE: the server can't read ciphertext, so it rejects encrypted sources with
+409; the client decrypts locally and re-sends via POST /messages with
+forwardedFromSenderId/Name set (re-encrypting for an E2EE private target, or
+sending the decrypted text when forwarding out to a non-E2EE target — an
+explicit user action). Server-enforced hierarchy applies to the plaintext
+path; for client-side E2EE forwards the server always enforces target access
+but cannot police the source it cannot see.

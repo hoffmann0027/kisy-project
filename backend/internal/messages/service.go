@@ -38,6 +38,22 @@ type Authorizer struct {
 	Group   func(ctx context.Context, groupID uuid.UUID, actorID uuid.UUID, actorLevel int) error
 }
 
+// ClearanceResolver returns a chat's audience breadth: the weakest clearance
+// level (largest number, 1..10) that can access it. For a group that is its
+// min_role_level; for a private chat, the weaker of the two participants'
+// levels. Injected by the router; used only by forwarding to forbid moving
+// content to a broader audience than its source (docs/spec/06-security.md,
+// 07-business-logic.md). Returns the module's not-found error for hidden or
+// missing chats so existence never leaks.
+type ClearanceResolver struct {
+	Private func(ctx context.Context, chatID uuid.UUID) (int, error)
+	Group   func(ctx context.Context, groupID uuid.UUID) (int, error)
+}
+
+// SenderNamer returns a user's current display name for the forward
+// attribution snapshot. Injected to avoid a messages→users import cycle.
+type SenderNamer func(ctx context.Context, userID uuid.UUID) (string, bool)
+
 // Publisher fans a persisted event out to connected clients. It is
 // satisfied by the websocket hub and injected to avoid a messages→ws
 // import cycle; a nil Publisher disables real-time delivery.
@@ -83,6 +99,9 @@ type Service struct {
 	repo       Repository
 	audit      audit.Recorder
 	authz      Authorizer
+	clearance  ClearanceResolver
+	senderName SenderNamer
+	attachCopy AttachmentCopier
 	pub        Publisher
 	reactions  ReactionLoader
 	notifier   Notifier
@@ -117,6 +136,20 @@ func (s *Service) SetAttachments(link AttachmentLinker, load AttachmentLoader) {
 	s.attachLink = link
 	s.attachLoad = load
 }
+
+// SetForwarding wires the collaborators forwarding needs: the clearance
+// resolver (hierarchy rule), the sender namer (attribution snapshot) and the
+// attachment copier (carry a plaintext message's files into the forward).
+func (s *Service) SetForwarding(c ClearanceResolver, namer SenderNamer, copier AttachmentCopier) {
+	s.clearance = c
+	s.senderName = namer
+	s.attachCopy = copier
+}
+
+// AttachmentCopier duplicates a source message's attachments onto a new
+// message id, returning the new attachment DTOs. Injected to avoid a
+// messages→attachments import cycle; nil disables attachment forwarding.
+type AttachmentCopier func(ctx context.Context, sourceMessageID, newMessageID, uploader uuid.UUID) ([]any, error)
 
 // ResolveAccessible returns the chat coordinates of a message if the actor
 // may access its chat, otherwise ErrNotFound. Used by the reactions module
@@ -161,6 +194,13 @@ type SendInput struct {
 	Alg         *int16
 	Epoch       *int64
 	ContentKind *int16
+
+	// Forwarded-from attribution (stage D). Set by the client when
+	// re-sending a decrypted E2EE message as a forward: the server cannot
+	// read ciphertext, so it stamps the snapshot the client provides. For
+	// plaintext forwards use Forward instead (server-enforced hierarchy).
+	ForwardedFromSenderID   *uuid.UUID
+	ForwardedFromSenderName *string
 }
 
 // Send validates access, persists the message and publishes it, returning the
@@ -200,14 +240,16 @@ func (s *Service) Send(ctx context.Context, in SendInput, actor ActorMeta) (DTO,
 	}
 
 	m := &Message{
-		ChatType:    in.ChatType,
-		ChatID:      in.ChatID,
-		SenderID:    actor.UserID,
-		ReplyTo:     in.ReplyTo,
-		Ciphertext:  in.Ciphertext,
-		Alg:         in.Alg,
-		Epoch:       in.Epoch,
-		ContentKind: in.ContentKind,
+		ChatType:                in.ChatType,
+		ChatID:                  in.ChatID,
+		SenderID:                actor.UserID,
+		ReplyTo:                 in.ReplyTo,
+		Ciphertext:              in.Ciphertext,
+		Alg:                     in.Alg,
+		Epoch:                   in.Epoch,
+		ContentKind:             in.ContentKind,
+		ForwardedFromSenderID:   in.ForwardedFromSenderID,
+		ForwardedFromSenderName: in.ForwardedFromSenderName,
 	}
 	if text != "" {
 		m.Text = &text
@@ -239,6 +281,148 @@ func (s *Service) Send(ctx context.Context, in SendInput, actor ActorMeta) (DTO,
 		s.indexer.IndexMessage(ctx, m.ID, text)
 	}
 	return dto, nil
+}
+
+// clearanceBreadth returns a chat's audience breadth (weakest level that can
+// access it), or an error the caller maps to not-found.
+func (s *Service) clearanceBreadth(ctx context.Context, chatType string, chatID uuid.UUID) (int, error) {
+	switch chatType {
+	case ChatPrivate:
+		return s.clearance.Private(ctx, chatID)
+	case ChatGroup:
+		return s.clearance.Group(ctx, chatID)
+	default:
+		return 0, ErrBadChatType
+	}
+}
+
+// ForwardInput is validated by the handler.
+type ForwardInput struct {
+	SourceMessageIDs []uuid.UUID
+	TargetChatType   string
+	TargetChatID     uuid.UUID
+}
+
+// Forward copies plaintext messages the actor can access into a target chat,
+// stamping each with a forwarded-from attribution snapshot. Rules
+// (docs/spec/06-security.md, 07-business-logic.md):
+//   - the actor must be able to read every source and post to the target
+//     (otherwise the whole call is rejected without revealing which failed);
+//   - the target's audience must not be broader than any source's — content
+//     never moves "up" the clearance hierarchy;
+//   - E2EE source messages cannot be forwarded here (the server can't read
+//     them); the client decrypts and re-sends them via Send with a
+//     forwarded-from marker.
+//
+// Order is preserved. Each forward is audited.
+func (s *Service) Forward(ctx context.Context, in ForwardInput, actor ActorMeta) ([]DTO, error) {
+	if len(in.SourceMessageIDs) == 0 {
+		return nil, ErrEmptyContent
+	}
+	// The actor must be able to post to the target, and we need its breadth.
+	if err := s.authorize(ctx, in.TargetChatType, in.TargetChatID, actor); err != nil {
+		return nil, err
+	}
+	targetBreadth, err := s.clearanceBreadth(ctx, in.TargetChatType, in.TargetChatID)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+
+	// Load and validate every source up-front so a mid-batch failure never
+	// leaves a partial forward.
+	type prepared struct {
+		src        *Message
+		senderName string
+	}
+	items := make([]prepared, 0, len(in.SourceMessageIDs))
+	for _, id := range in.SourceMessageIDs {
+		src, err := s.repo.GetByID(ctx, s.pool, id)
+		if err != nil {
+			return nil, ErrNotFound
+		}
+		// Reading the source requires access to its chat; a masked not-found
+		// keeps inaccessible sources from being probed.
+		if err := s.authorize(ctx, src.ChatType, src.ChatID, actor); err != nil {
+			return nil, ErrNotFound
+		}
+		if src.IsDeleted {
+			return nil, ErrNotFound
+		}
+		if len(src.Ciphertext) > 0 {
+			return nil, ErrForwardEncrypted
+		}
+		srcBreadth, err := s.clearanceBreadth(ctx, src.ChatType, src.ChatID)
+		if err != nil {
+			return nil, ErrNotFound
+		}
+		// Weaker clearance = larger number = broader audience. Forbid a
+		// target broader than the source.
+		if targetBreadth > srcBreadth {
+			return nil, ErrForwardBroadens
+		}
+		name := ""
+		if s.senderName != nil {
+			if n, ok := s.senderName(ctx, src.SenderID); ok {
+				name = n
+			}
+		}
+		items = append(items, prepared{src: src, senderName: name})
+	}
+
+	out := make([]DTO, 0, len(items))
+	for _, it := range items {
+		src := it.src
+		senderID := src.SenderID
+		senderName := it.senderName
+		m := &Message{
+			ChatType:                in.TargetChatType,
+			ChatID:                  in.TargetChatID,
+			SenderID:                actor.UserID,
+			Text:                    src.Text,
+			ContentKind:             src.ContentKind,
+			ForwardedFromMessageID:  &src.ID,
+			ForwardedFromSenderID:   &senderID,
+			ForwardedFromSenderName: &senderName,
+		}
+		if err := s.repo.Create(ctx, s.pool, m); err != nil {
+			return nil, err
+		}
+
+		dto := m.ToDTO()
+		// Carry the source's attachments onto the forwarded message.
+		if s.attachCopy != nil {
+			if atts, err := s.attachCopy(ctx, src.ID, m.ID, actor.UserID); err == nil && len(atts) > 0 {
+				dto.Attachments = atts
+			}
+		}
+		if s.audit != nil {
+			actorID := actor.UserID
+			_ = s.audit.Record(ctx, s.pool, audit.Event{
+				ActorID:    &actorID,
+				Action:     audit.ActionMessageForwarded,
+				TargetType: "message",
+				TargetID:   &m.ID,
+				IPHash:     actor.IPHash,
+				RequestID:  actor.RequestID,
+				Metadata: map[string]any{
+					"sourceMessageId": src.ID.String(),
+					"targetChatType":  in.TargetChatType,
+					"targetChatId":    in.TargetChatID.String(),
+				},
+			})
+		}
+		if s.pub != nil {
+			s.pub.PublishMessageCreated(m.ChatType, m.ChatID, dto)
+		}
+		if s.notifier != nil {
+			s.notifier.OnMessage(ctx, dto)
+		}
+		if s.indexer != nil && m.Text != nil && *m.Text != "" {
+			s.indexer.IndexMessage(ctx, m.ID, *m.Text)
+		}
+		out = append(out, dto)
+	}
+	return out, nil
 }
 
 // List returns a page of messages for a chat the actor may access.
