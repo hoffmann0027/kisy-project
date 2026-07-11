@@ -398,6 +398,121 @@
 .composer__chip-x:hover {
   color: #ff6b6b;
 }
+/* --- voice messages (stage B) --- */
+.voice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+  padding: 4px 2px;
+}
+.voice__play {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  background: var(--color-accent, #4c8dff);
+  color: #fff;
+  transition: transform 0.15s ease;
+}
+.voice__play:active {
+  transform: scale(0.92);
+}
+.voice--mine .voice__play {
+  background: rgba(255, 255, 255, 0.25);
+}
+.voice__wave {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 30px;
+  cursor: pointer;
+}
+.voice__bar {
+  flex: 1;
+  min-width: 2px;
+  border-radius: 1px;
+  background: var(--color-border);
+  transition: background 0.15s ease;
+}
+.voice--mine .voice__bar {
+  background: rgba(255, 255, 255, 0.35);
+}
+.voice__bar--played {
+  background: var(--color-accent, #4c8dff);
+}
+.voice--mine .voice__bar--played {
+  background: #fff;
+}
+.voice__meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.voice__time {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.voice--mine .voice__time {
+  color: rgba(255, 255, 255, 0.8);
+}
+.voice__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-accent, #4c8dff);
+}
+.voice__rate {
+  flex-shrink: 0;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+.voice--mine .voice__rate {
+  border-color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* Recording bar (replaces the composer row while recording). */
+.composer--recording {
+  gap: 10px;
+}
+.composer__rec-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ff5b5b;
+  animation: rec-pulse 1.2s ease-in-out infinite;
+}
+@keyframes rec-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+.composer__rec-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.composer__rec-hint {
+  flex: 1;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Compact file-type badge for non-image attachments (e.g. PDF, DOCX). */
 .composer__chip-type {
   flex-shrink: 0;

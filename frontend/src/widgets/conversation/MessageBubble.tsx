@@ -2,6 +2,7 @@ import { memo, useState } from "react";
 import { cn } from "@shared/lib/cn";
 import { formatTime } from "@shared/lib/format";
 import { Icon } from "@shared/ui/icons";
+import { VoiceBubble } from "@features/voice-message/VoiceBubble";
 import type { Message } from "@shared/api/types";
 
 // Delivery state of one of the current user's own messages, rendered as
@@ -122,7 +123,9 @@ export const MessageBubble = memo(function MessageBubble({
         {message.attachments.length > 0 && (
           <div className="bubble__attachments">
             {message.attachments.map((a) =>
-              a.isImage ? (
+              a.kind === "voice" ? (
+                <VoiceBubble key={a.id} attachment={a} mine={mine} />
+              ) : a.isImage ? (
                 <a key={a.id} href={a.url} target="_blank" rel="noreferrer" className="bubble__att-img">
                   <img src={a.url} alt={a.fileName} loading="lazy" />
                 </a>

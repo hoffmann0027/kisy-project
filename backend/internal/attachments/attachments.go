@@ -45,6 +45,25 @@ const (
 // MaxWaveformBytes mirrors the DB CHECK on the waveform envelope.
 const MaxWaveformBytes = 1024
 
+// MaxVoiceDurationMs bounds a voice note (10 minutes).
+const MaxVoiceDurationMs = 10 * 60 * 1000
+
+// voiceMimes are the sniffed content types accepted for voice notes —
+// containers MediaRecorder actually produces. Audio-only WebM shares the
+// container magic with video, so Go's sniffer reports video/webm; same for
+// MP4 (Safari).
+var voiceMimes = map[string]bool{
+	"video/webm":      true,
+	"audio/webm":      true,
+	"application/ogg": true,
+	"audio/ogg":       true,
+	"video/mp4":       true,
+	"audio/mp4":       true,
+	"audio/mpeg":      true,
+	"audio/wave":      true,
+	"audio/wav":       true,
+}
+
 // Limits is the upload policy injected from config (never hardcoded):
 // leadership levels (1..LeadershipMaxLevel) get the larger ceiling.
 type Limits struct {
@@ -113,6 +132,17 @@ func (m Meta) normalize(sniffedMime string) (Meta, error) {
 	}
 	if (m.Width != nil || m.Height != nil) && m.Kind != KindImage && m.Kind != KindVideo {
 		return Meta{}, ErrBadMeta
+	}
+	// A voice note must actually be audio (stage B): the sniffed container
+	// must be one MediaRecorder produces, and the duration is mandatory and
+	// bounded — clients rely on both for the player UI.
+	if m.Kind == KindVoice {
+		if !voiceMimes[sniffedMime] {
+			return Meta{}, ErrBadMeta
+		}
+		if m.DurationMs == nil || *m.DurationMs == 0 || *m.DurationMs > MaxVoiceDurationMs {
+			return Meta{}, ErrBadMeta
+		}
 	}
 	return m, nil
 }

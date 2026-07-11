@@ -197,6 +197,7 @@ function metaHeaders(meta?: AttachmentMeta): Record<string, string> {
   if (!meta) return {};
   const h: Record<string, string> = {};
   if (meta.kind) h["X-Attachment-Kind"] = meta.kind;
+  if (meta.waveform) h["X-Attachment-Waveform"] = meta.waveform;
   if (meta.durationMs !== undefined) h["X-Attachment-Duration-Ms"] = String(meta.durationMs);
   if (meta.width !== undefined) h["X-Attachment-Width"] = String(meta.width);
   if (meta.height !== undefined) h["X-Attachment-Height"] = String(meta.height);

@@ -973,8 +973,11 @@ paths:
         (see GET /attachments/limit); larger files use the chunked flow
         (init → chunk → complete). Optional media metadata travels in
         X-Attachment-Kind / X-Attachment-Duration-Ms / X-Attachment-Width /
-        X-Attachment-Height headers. Content is inspected server-side (MIME
-        sniffing; executables rejected) before the file becomes servable.
+        X-Attachment-Height / X-Attachment-Waveform (base64) headers.
+        Content is inspected server-side (MIME sniffing; executables
+        rejected) before the file becomes servable. Voice notes
+        (kind=voice) additionally require an audio container (webm/ogg/mp4
+        family) and a duration between 1 ms and 10 minutes.
         Link the returned id to a message via the message's attachmentIds.
       requestBody:
         required: true

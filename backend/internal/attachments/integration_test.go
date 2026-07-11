@@ -179,8 +179,10 @@ func TestSingleShotLimitsAndMeta(t *testing.T) {
 		t.Fatalf("leadership single-shot: %v", err)
 	}
 
-	// Voice meta round-trips through storage and message enrichment.
-	dto, err := svc.Upload(ctx, "note.webm", pattern(2048), uploader, staffLevel, attachments.Meta{
+	// Voice meta round-trips through storage and message enrichment. The
+	// bytes carry the EBML/WebM magic so the sniffer sees a real container.
+	webm := append([]byte{0x1a, 0x45, 0xdf, 0xa3}, pattern(2044)...)
+	dto, err := svc.Upload(ctx, "note.webm", webm, uploader, staffLevel, attachments.Meta{
 		Kind: attachments.KindVoice, DurationMs: i32(4200), Waveform: []byte{9, 8, 7},
 	})
 	if err != nil {

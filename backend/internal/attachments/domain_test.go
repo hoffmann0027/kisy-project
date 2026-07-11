@@ -37,9 +37,21 @@ func TestMetaNormalize(t *testing.T) {
 		t.Fatalf("file inference: %+v %v", m, err)
 	}
 
-	// Voice with duration and waveform is valid.
-	if _, err := (Meta{Kind: KindVoice, DurationMs: i32(3000), Waveform: []byte{1, 2, 3}}).normalize("audio/webm"); err != nil {
+	// Voice with duration and waveform is valid (webm sniffs as video/webm).
+	if _, err := (Meta{Kind: KindVoice, DurationMs: i32(3000), Waveform: []byte{1, 2, 3}}).normalize("video/webm"); err != nil {
 		t.Fatalf("voice meta: %v", err)
+	}
+
+	// Voice cross-checks (stage B): non-audio container, missing duration,
+	// absurd duration.
+	if _, err := (Meta{Kind: KindVoice, DurationMs: i32(3000)}).normalize("application/pdf"); !errors.Is(err, ErrBadMeta) {
+		t.Fatalf("voice with pdf bytes: want ErrBadMeta, got %v", err)
+	}
+	if _, err := (Meta{Kind: KindVoice}).normalize("video/webm"); !errors.Is(err, ErrBadMeta) {
+		t.Fatalf("voice without duration: want ErrBadMeta, got %v", err)
+	}
+	if _, err := (Meta{Kind: KindVoice, DurationMs: i32(MaxVoiceDurationMs + 1)}).normalize("video/webm"); !errors.Is(err, ErrBadMeta) {
+		t.Fatalf("voice too long: want ErrBadMeta, got %v", err)
 	}
 
 	// Cross-check violations.

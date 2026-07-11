@@ -1,6 +1,7 @@
 package attachments
 
 import (
+	"encoding/base64"
 	"errors"
 	"io"
 	"net/http"
@@ -47,6 +48,13 @@ func (h *Handler) Routes(r chi.Router) {
 func metaFromHeaders(r *http.Request) (Meta, bool) {
 	var meta Meta
 	meta.Kind = r.Header.Get("X-Attachment-Kind")
+	if v := r.Header.Get("X-Attachment-Waveform"); v != "" {
+		wf, err := base64.StdEncoding.DecodeString(v)
+		if err != nil {
+			return Meta{}, false
+		}
+		meta.Waveform = wf
+	}
 	if v := r.Header.Get("X-Attachment-Duration-Ms"); v != "" {
 		n, err := strconv.ParseInt(v, 10, 32)
 		if err != nil {

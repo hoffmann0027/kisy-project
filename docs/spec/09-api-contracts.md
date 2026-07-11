@@ -311,3 +311,16 @@ executable rejection) before a file becomes servable:
   transactionally). `GET /attachments/{id}/upload-status` lists stored chunk
   indexes so interrupted clients resume instead of restarting. Sessions
   expire after UPLOAD_SESSION_TTL and are reaped hourly.
+
+## Voice Messages (stage B)
+
+A voice note is an Attachment with kind=voice, durationMs (mandatory,
+1 ms – 10 min) and an optional waveform peak envelope, carried by an
+attachment-only message. The server validates that the sniffed container is
+one MediaRecorder produces (webm/ogg/mp4 family) and never trusts
+client-declared MIME. The single-shot upload passes the waveform via the
+X-Attachment-Waveform header (base64); the chunked init passes it in JSON.
+No new endpoints or WS events — the existing message pipeline delivers voice
+notes in both plaintext and E2EE chats. Attachment content encryption for
+E2EE chats is a separate cross-cutting stage (docs/e2ee-design.md, этап 6)
+covering all attachment kinds, voice included.

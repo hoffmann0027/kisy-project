@@ -4,6 +4,8 @@ import { IconButton, toast } from "@shared/ui";
 import type { Attachment, Message } from "@shared/api/types";
 import { fileTypeLabel, formatBytes, uploadFile } from "@entities/attachment/upload";
 import { useUploadLimit } from "@entities/attachment/queries";
+import { useVoiceRecorder } from "@features/voice-message/recorder";
+import { formatDuration, waveformToBase64 } from "@features/voice-message/waveform";
 import { wsClient } from "@shared/ws/client";
 import { useDraftStore } from "@shared/store/drafts";
 
@@ -31,7 +33,9 @@ export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply
   const [text, setText] = useState(() => useDraftStore.getState().drafts[chatId] ?? "");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
+  const [sendingVoice, setSendingVoice] = useState(false);
   const { data: limit } = useUploadLimit();
+  const recorder = useVoiceRecorder();
   const fileRef = useRef<HTMLInputElement>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const typingSent = useRef(false);
@@ -109,6 +113,38 @@ export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply
     wsClient.send({ type: "typing.stop", data: { chatType, chatId } });
   };
 
+  // Stop recording, upload the note as a voice attachment (kind/duration/
+  // waveform metadata, stage A schema) and send it as an attachment-only
+  // message. Cancelled/too-short recordings resolve to null and are dropped.
+  const sendVoice = async () => {
+    const note = await recorder.stop();
+    if (!note) return;
+    setSendingVoice(true);
+    try {
+      const ext = note.blob.type.includes("mp4") ? "m4a" : "webm";
+      const file = new File([note.blob], `voice-${Date.now()}.${ext}`, { type: note.blob.type });
+      const attachment = await uploadFile(file, {
+        meta: {
+          kind: "voice",
+          durationMs: note.durationMs,
+          waveform: note.waveform.length > 0 ? waveformToBase64(note.waveform) : undefined,
+        },
+      });
+      onSend("", replyTo?.id, [attachment]);
+      onClearReply();
+    } catch {
+      toast.error("Не удалось отправить голосовое сообщение");
+    } finally {
+      setSendingVoice(false);
+    }
+  };
+
+  const startRecording = async () => {
+    if (!(await recorder.start())) {
+      toast.error("Нет доступа к микрофону");
+    }
+  };
+
   return (
     <>
       {replyTo && (
@@ -161,53 +197,86 @@ export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply
           ))}
         </div>
       )}
-      <div
-        className="composer"
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault();
-          if (e.dataTransfer.files.length) void uploadFiles(e.dataTransfer.files);
-        }}
-      >
-        <input
-          ref={fileRef}
-          type="file"
-          multiple
-          style={{ display: "none" }}
-          onChange={(e) => {
-            if (e.target.files?.length) void uploadFiles(e.target.files);
-            e.target.value = "";
+      {recorder.state !== "idle" || sendingVoice ? (
+        // Recording bar replaces the whole composer row (TG/WA style):
+        // pulsing dot + timer on the left, cancel and send on the right.
+        <div className="composer composer--recording">
+          <span className="composer__rec-dot" />
+          <span className="composer__rec-time">{formatDuration(recorder.elapsedMs)}</span>
+          <span className="composer__rec-hint">
+            {sendingVoice ? "Отправка…" : "Идёт запись голосового сообщения"}
+          </span>
+          <IconButton label="Отменить запись" onClick={recorder.cancel}>
+            <Icon.Trash size={20} />
+          </IconButton>
+          <button
+            className="composer__send"
+            onClick={() => void sendVoice()}
+            disabled={recorder.state !== "recording" || sendingVoice}
+            aria-label="Отправить голосовое сообщение"
+          >
+            <Icon.Send size={20} />
+          </button>
+        </div>
+      ) : (
+        <div
+          className="composer"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (e.dataTransfer.files.length) void uploadFiles(e.dataTransfer.files);
           }}
-        />
-        <IconButton label="Прикрепить файл" onClick={() => fileRef.current?.click()}>
-          <Icon.Paperclip size={20} />
-        </IconButton>
-        <textarea
-          ref={areaRef}
-          className="composer__input"
-          placeholder="Написать сообщение…"
-          rows={1}
-          value={text}
-          onChange={(e) => {
-            updateText(e.target.value);
-            signalTyping();
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              submit();
-            }
-          }}
-        />
-        <button
-          className="composer__send"
-          onClick={submit}
-          disabled={!text.trim() && attachments.length === 0}
-          aria-label="Отправить"
         >
-          <Icon.Send size={20} />
-        </button>
-      </div>
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            style={{ display: "none" }}
+            onChange={(e) => {
+              if (e.target.files?.length) void uploadFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          <IconButton label="Прикрепить файл" onClick={() => fileRef.current?.click()}>
+            <Icon.Paperclip size={20} />
+          </IconButton>
+          <textarea
+            ref={areaRef}
+            className="composer__input"
+            placeholder="Написать сообщение…"
+            rows={1}
+            value={text}
+            onChange={(e) => {
+              updateText(e.target.value);
+              signalTyping();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+          />
+          {!text.trim() && attachments.length === 0 ? (
+            // Empty composer: the send button becomes a microphone (as in WA).
+            <button
+              className="composer__send composer__send--mic"
+              onClick={() => void startRecording()}
+              aria-label="Записать голосовое сообщение"
+              title="Голосовое сообщение"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="9" y="3" width="6" height="11" rx="3" />
+                <path d="M5 11a7 7 0 0 0 14 0M12 18v3" strokeLinecap="round" />
+              </svg>
+            </button>
+          ) : (
+            <button className="composer__send" onClick={submit} aria-label="Отправить">
+              <Icon.Send size={20} />
+            </button>
+          )}
+        </div>
+      )}
     </>
   );
 }
