@@ -180,6 +180,44 @@ export const notifPrefsApi = {
     apiClient.put<{ settings: NotificationSettings }>("/settings/notifications", s),
 };
 
+// Chat folders + archive (UPD3 stage H). Both are personal metadata over
+// chat references; the server never lets a folder reveal an inaccessible
+// chat (masked 404 on add/archive).
+export interface ChatFolderItem {
+  chatType: ChatType;
+  chatId: string;
+}
+
+export interface ChatFolder {
+  id: string;
+  name: string;
+  position: number;
+  items: ChatFolderItem[];
+}
+
+export interface ArchivedChat {
+  chatType: ChatType;
+  chatId: string;
+  archivedAt: string;
+}
+
+export const chatFoldersApi = {
+  list: () => apiClient.get<{ folders: ChatFolder[] }>("/folders"),
+  create: (name: string) => apiClient.post<{ folder: ChatFolder }>("/folders", { name }),
+  rename: (id: string, name: string) => apiClient.patch<{ ok: boolean }>(`/folders/${id}`, { name }),
+  remove: (id: string) => apiClient.del<{ ok: boolean }>(`/folders/${id}`),
+  reorder: (folderIds: string[]) => apiClient.put<{ ok: boolean }>("/folders/order", { folderIds }),
+  addItem: (id: string, chatType: ChatType, chatId: string) =>
+    apiClient.post<{ ok: boolean }>(`/folders/${id}/items`, { chatType, chatId }),
+  removeItem: (id: string, chatType: ChatType, chatId: string) =>
+    apiClient.del<{ ok: boolean }>(`/folders/${id}/items`, { chatType, chatId }),
+  archive: (chatType: ChatType, chatId: string) =>
+    apiClient.put<{ archived: boolean }>(`/chats/${chatType}/${chatId}/archive`, {}),
+  unarchive: (chatType: ChatType, chatId: string) =>
+    apiClient.del<{ archived: boolean }>(`/chats/${chatType}/${chatId}/archive`),
+  listArchived: () => apiClient.get<{ archived: ArchivedChat[] }>("/settings/archived"),
+};
+
 export interface LinkPreview {
   url: string;
   title: string;

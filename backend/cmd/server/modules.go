@@ -22,6 +22,7 @@ import (
 	"kisy-backend/internal/boards"
 	"kisy-backend/internal/bootstrap"
 	"kisy-backend/internal/calls"
+	"kisy-backend/internal/chatfolders"
 	"kisy-backend/internal/chatmedia"
 	"kisy-backend/internal/chats"
 	"kisy-backend/internal/conditions"
@@ -65,6 +66,7 @@ type modules struct {
 	reactionsHandler     *reactions.Handler
 	readstateHandler     *readstate.Handler
 	favoritesHandler     *favorites.Handler
+	chatfoldersHandler   *chatfolders.Handler
 	feedbackHandler      *feedback.Handler
 	notesHandler         *notes.Handler
 	conditionsHandler    *conditions.Handler
@@ -426,6 +428,16 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		return favorites.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
 	})
 
+	// --- chat folders + archive (UPD3 stage H) ---
+	chatfoldersSvc := chatfolders.NewService(pool, chatfolders.NewPostgresRepository(), chatfolders.ChatAuthorizer(chatAuthorizer))
+	chatfoldersHandler := chatfolders.NewHandler(chatfoldersSvc, func(r *http.Request) (chatfolders.Actor, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return chatfolders.Actor{}, false
+		}
+		return chatfolders.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
+	})
+
 	// --- full-text message search ---
 	searchSvc := search.NewService(pool, log)
 	messagesSvc.SetIndexer(searchSvc)
@@ -659,6 +671,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		reactionsHandler:     reactionsHandler,
 		readstateHandler:     readstateHandler,
 		favoritesHandler:     favoritesHandler,
+		chatfoldersHandler:   chatfoldersHandler,
 		feedbackHandler:      feedbackHandler,
 		notesHandler:         notesHandler,
 		conditionsHandler:    conditionsHandler,

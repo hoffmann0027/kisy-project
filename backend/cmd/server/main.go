@@ -195,10 +195,18 @@ func newRouter(d routerDeps) http.Handler {
 				m.chatmediaHandler.Routes(r)
 				// Per-chat mute (stage G).
 				m.notifprefsHandler.ChatRoutes(r)
+				// Per-chat archive (UPD3 stage H).
+				m.chatfoldersHandler.ChatRoutes(r)
 			})
 
 			r.Route("/settings", func(r chi.Router) {
 				m.notifprefsHandler.SettingsRoutes(r)
+				m.chatfoldersHandler.SettingsRoutes(r)
+			})
+
+			// Personal chat folders (UPD3 stage H).
+			r.Route("/folders", func(r chi.Router) {
+				m.chatfoldersHandler.FolderRoutes(r)
 			})
 
 			r.Route("/favorites", func(r chi.Router) {

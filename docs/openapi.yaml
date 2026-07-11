@@ -37,6 +37,8 @@ tags:
     description: Polls (CEO-created; public votes with voter avatars; results audited on close)
   - name: calls
     description: 1:1 WebRTC audio calls — ICE config and call journal (live signaling runs over the WebSocket gateway)
+  - name: folders
+    description: Personal chat folders and archive (organizational metadata over chat references; never grants or reveals access)
   - name: admin
     description: CEO administration (users, roles, credentials, audit)
   - name: websocket
@@ -1411,6 +1413,206 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /folders:
+    get:
+      tags: [folders]
+      summary: The actor's chat folders with their items (UPD3 stage H)
+      description: >
+        Folders are personal organizational metadata. Filtering of the chat
+        list by folder happens client-side against the access-filtered
+        /chats and /groups responses, so a folder item referencing a chat
+        the user can no longer access simply never renders. GET /chats is
+        intentionally unchanged.
+      responses:
+        '200':
+          description: Folders ordered by position
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          folders:
+                            type: array
+                            items: { $ref: '#/components/schemas/ChatFolder' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [folders]
+      summary: Create a folder (max 50 per user)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 64 }
+      responses:
+        '201':
+          description: Created folder
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          folder: { $ref: '#/components/schemas/ChatFolder' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /folders/order:
+    put:
+      tags: [folders]
+      summary: Reorder folders
+      description: folderIds must list every folder of the actor exactly once.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [folderIds]
+              properties:
+                folderIds:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        '200': { description: Reordered }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /folders/{folderID}:
+    patch:
+      tags: [folders]
+      summary: Rename a folder
+      parameters:
+        - { name: folderID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 64 }
+      responses:
+        '200': { description: Renamed }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [folders]
+      summary: Delete a folder (its items are dropped; chats are untouched)
+      parameters:
+        - { name: folderID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /folders/{folderID}/items:
+    post:
+      tags: [folders]
+      summary: Add a chat to a folder
+      description: >
+        Chat access is verified so folders never accumulate references the
+        user cannot see; an inaccessible chat yields a masked 404 (its
+        existence is never confirmed). Adding is idempotent.
+      parameters:
+        - { name: folderID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [chatType, chatId]
+              properties:
+                chatType: { type: string, enum: [private, group] }
+                chatId: { type: string, format: uuid }
+      responses:
+        '200': { description: Added }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [folders]
+      summary: Remove a chat from a folder (no access check — forgetting is always allowed)
+      parameters:
+        - { name: folderID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [chatType, chatId]
+              properties:
+                chatType: { type: string, enum: [private, group] }
+                chatId: { type: string, format: uuid }
+      responses:
+        '200': { description: Removed }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /chats/{chatType}/{chatID}/archive:
+    put:
+      tags: [folders]
+      summary: Archive a chat for the actor (UPD3 stage H)
+      description: >
+        Personal, like mute — only the actor's own list is affected. The
+        chat stays fully functional; the client hides it from the main list
+        and shows it in the Archive section. Inaccessible chats yield a
+        masked 404. Idempotent.
+      parameters:
+        - { name: chatType, in: path, required: true, schema: { type: string, enum: [private, group] } }
+        - { name: chatID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Archived }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [folders]
+      summary: Unarchive a chat
+      parameters:
+        - { name: chatType, in: path, required: true, schema: { type: string, enum: [private, group] } }
+        - { name: chatID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Unarchived }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /settings/archived:
+    get:
+      tags: [folders]
+      summary: The actor's archived chats (for the chat list)
+      responses:
+        '200':
+          description: Archived chat references, newest first
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          archived:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                chatType: { type: string, enum: [private, group] }
+                                chatId: { type: string, format: uuid }
+                                archivedAt: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /push/vapid-public-key:
     get:
       tags: [notifications]
@@ -2606,6 +2808,19 @@ components:
           items: { $ref: '#/components/schemas/Message' }
         nextCursor: { type: string }
         hasMore: { type: boolean }
+    ChatFolder:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, maxLength: 64 }
+        position: { type: integer }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              chatType: { type: string, enum: [private, group] }
+              chatId: { type: string, format: uuid }
     NotificationSettings:
       type: object
       properties:

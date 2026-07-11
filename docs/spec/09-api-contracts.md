@@ -396,3 +396,28 @@ recipient's groupMode. @mentions still raise the in-app notification (bell)
 unless muted. Message content stays out of push payloads (content-less, as
 before); the preview flag is reserved for a future opt-in text preview.
 Tables: chat_mutes, notification_settings (migration 000032).
+
+## Chat Folders & Archive (UPD3 stage H)
+
+Personal organizational metadata over chat references — never grants,
+reveals, or widens access.
+
+Folders: `GET /folders` (the actor's folders with items, ordered by
+position), `POST /folders {name}` (max 50, name ≤ 64 chars),
+`PATCH /folders/{id} {name}`, `DELETE /folders/{id}`,
+`PUT /folders/order {folderIds}` (must list every folder exactly once),
+`POST/DELETE /folders/{id}/items {chatType, chatId}`. Adding an item
+verifies chat access; an inaccessible chat yields a masked 404 (its
+existence is never confirmed). Removing never needs access — forgetting a
+chat is always allowed.
+
+Archive: `PUT/DELETE /chats/{chatType}/{chatID}/archive` (personal, like
+mute; idempotent; masked 404 for inaccessible chats),
+`GET /settings/archived` lists the actor's archived chat references.
+
+Contract decision: `GET /chats` and `GET /groups` are intentionally
+unchanged (additive contracts). Folder filtering and archive hiding happen
+client-side against those access-filtered lists, so a folder item pointing
+at a chat the user can no longer see simply never renders — a folder can
+never leak a hidden chat. Tables: chat_folders, chat_folder_items,
+chat_archives (migration 000033).
