@@ -8,6 +8,7 @@ import { chatKeys } from "@entities/chat/queries";
 import { groupKeys } from "@entities/group/queries";
 import { notificationKeys } from "@entities/notification/queries";
 import { messageKeys } from "@entities/message/queries";
+import { scheduledKey } from "@entities/message/scheduled";
 import { usePresenceStore } from "@shared/store/presence";
 import { useTypingStore } from "@shared/store/typing";
 import { useReadReceiptStore } from "@shared/store/readReceipts";
@@ -211,6 +212,12 @@ async function handleMessageCreated(
       // insert; the ack's resolvePending supplies the readable message.
       return;
     }
+  }
+
+  // A scheduled message just went out — refresh the sender's scheduled list
+  // (its row flipped from pending to sent).
+  if (msg.scheduledId && msg.senderId === meId) {
+    qc.invalidateQueries({ queryKey: scheduledKey });
   }
 
   // Insert into the open conversation's cache if present.

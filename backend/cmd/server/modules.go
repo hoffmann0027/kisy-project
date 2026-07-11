@@ -37,11 +37,13 @@ import (
 	"kisy-backend/internal/notes"
 	"kisy-backend/internal/notifications"
 	"kisy-backend/internal/notifprefs"
+	"kisy-backend/internal/platform/db"
 	"kisy-backend/internal/platform/ratelimit"
 	"kisy-backend/internal/push"
 	"kisy-backend/internal/rating"
 	"kisy-backend/internal/reactions"
 	"kisy-backend/internal/readstate"
+	"kisy-backend/internal/scheduled"
 	"kisy-backend/internal/search"
 	"kisy-backend/internal/users"
 	"kisy-backend/internal/voting"
@@ -67,6 +69,7 @@ type modules struct {
 	readstateHandler     *readstate.Handler
 	favoritesHandler     *favorites.Handler
 	chatfoldersHandler   *chatfolders.Handler
+	scheduledHandler     *scheduled.Handler
 	feedbackHandler      *feedback.Handler
 	notesHandler         *notes.Handler
 	conditionsHandler    *conditions.Handler
@@ -274,8 +277,8 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		return err == nil
 	})
 	messagesSvc.SetAttachments(
-		func(ctx context.Context, ids []uuid.UUID, messageID, uploader uuid.UUID) error {
-			return attachmentsSvc.Link(ctx, pool, ids, messageID, uploader)
+		func(ctx context.Context, q db.DBTX, ids []uuid.UUID, messageID, uploader uuid.UUID) error {
+			return attachmentsSvc.Link(ctx, q, ids, messageID, uploader)
 		},
 		func(ctx context.Context, messageIDs []uuid.UUID) (map[uuid.UUID][]any, error) {
 			byMsg, err := attachmentsSvc.ForMessages(ctx, messageIDs)
@@ -426,6 +429,31 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 			return favorites.Actor{}, false
 		}
 		return favorites.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
+	})
+
+	// --- scheduled messages (UPD3 stage I) ---
+	scheduledSvc := scheduled.NewService(pool, scheduled.NewPostgresRepository(),
+		scheduled.ChatAuthorizer(chatAuthorizer),
+		func(ctx context.Context, id uuid.UUID) (int, bool, error) {
+			u, err := usersRepo.GetByID(ctx, pool, id)
+			if err != nil {
+				return 0, false, err
+			}
+			return u.RoleID, u.IsActive, nil
+		},
+		attachmentsSvc.OwnedUnlinked,
+		messagesSvc,
+	)
+	// The worker replays due snapshots through the standard send pipeline;
+	// 5s tick keeps delivery near-punctual at negligible DB cost (partial
+	// index on pending rows).
+	scheduledSvc.StartWorker(ctx, 5*time.Second, log)
+	scheduledHandler := scheduled.NewHandler(scheduledSvc, func(r *http.Request) (scheduled.Actor, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return scheduled.Actor{}, false
+		}
+		return scheduled.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
 	})
 
 	// --- chat folders + archive (UPD3 stage H) ---
@@ -672,6 +700,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		readstateHandler:     readstateHandler,
 		favoritesHandler:     favoritesHandler,
 		chatfoldersHandler:   chatfoldersHandler,
+		scheduledHandler:     scheduledHandler,
 		feedbackHandler:      feedbackHandler,
 		notesHandler:         notesHandler,
 		conditionsHandler:    conditionsHandler,

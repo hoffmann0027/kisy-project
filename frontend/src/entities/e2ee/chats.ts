@@ -80,6 +80,33 @@ export async function cachedPlaintext(s: E2EESession, messageId: string): Promis
   return raw ? utf8dec.decode(raw) : null;
 }
 
+// Scheduled sending (stage I): the client encrypts at scheduling time, so
+// the plaintext is cached under the scheduled id until the real message
+// exists — MLS senders consume their keys at encryption time and cannot
+// decrypt their own ciphertext later.
+
+export async function cacheScheduledPlaintext(s: E2EESession, scheduledId: string, text: string): Promise<void> {
+  await s.store.put(`sched/${scheduledId}`, utf8(text));
+}
+
+export async function cachedScheduledPlaintext(s: E2EESession, scheduledId: string): Promise<string | null> {
+  const raw = await s.store.get(`sched/${scheduledId}`);
+  return raw ? utf8dec.decode(raw) : null;
+}
+
+export async function dropScheduledPlaintext(s: E2EESession, scheduledId: string): Promise<void> {
+  await s.store.remove(`sched/${scheduledId}`);
+}
+
+/** Re-key a scheduled plaintext onto the delivered message id. */
+async function adoptScheduledPlaintext(s: E2EESession, scheduledId: string, messageId: string): Promise<string | null> {
+  const text = await cachedScheduledPlaintext(s, scheduledId);
+  if (text === null) return null;
+  await cachePlaintext(s, messageId, text);
+  await dropScheduledPlaintext(s, scheduledId);
+  return text;
+}
+
 // --- welcomes: join chats other devices invited us into ---
 
 /**
@@ -282,6 +309,14 @@ export async function hydrateMessage(s: E2EESession, msg: Message): Promise<Mess
 
   const cached = await cachedPlaintext(s, msg.id);
   if (cached !== null) return { ...msg, text: cached, encrypted: true };
+
+  // A message born from the scheduler: its plaintext was cached under the
+  // scheduled id at scheduling time (the sender cannot decrypt its own
+  // ciphertext) — adopt it onto the real message id.
+  if (msg.scheduledId) {
+    const adopted = await adoptScheduledPlaintext(s, msg.scheduledId, msg.id);
+    if (adopted !== null) return { ...msg, text: adopted, encrypted: true };
+  }
 
   if (msg.chatType === "private") {
     // A fresh ciphertext we have not seen: try the live decryption path.

@@ -39,6 +39,8 @@ tags:
     description: 1:1 WebRTC audio calls — ICE config and call journal (live signaling runs over the WebSocket gateway)
   - name: folders
     description: Personal chat folders and archive (organizational metadata over chat references; never grants or reveals access)
+  - name: scheduled
+    description: Delayed message sending — frozen send-body snapshots replayed by the worker at sendAt (E2EE chats encrypt at scheduling time, docs/security.md "path A")
   - name: admin
     description: CEO administration (users, roles, credentials, audit)
   - name: websocket
@@ -486,8 +488,6 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
-
-  /groups/{groupID}/members:
     get:
       tags: [groups]
       summary: List a group's members (visible to members)
@@ -1412,6 +1412,124 @@ paths:
                           settings: { $ref: '#/components/schemas/NotificationSettings' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /messages/schedule:
+    post:
+      tags: [scheduled]
+      summary: Schedule a message for later sending (UPD3 stage I)
+      description: >
+        Freezes a send-body snapshot the worker replays through the standard
+        send pipeline at sendAt (5s..1y from now; at most 100 pending per
+        user). Access is checked now AND again at send time — losing access
+        in between cancels the row. For E2EE private chats the client
+        encrypts at scheduling time and submits ciphertext; the server never
+        reads it. An inaccessible chat yields a masked 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [chatType, chatId, sendAt]
+              properties:
+                chatType: { type: string, enum: [private, group] }
+                chatId: { type: string, format: uuid }
+                text: { type: string, maxLength: 8000 }
+                ciphertext: { type: string, description: Base64 MLS ciphertext — mutually exclusive with text. }
+                alg: { type: integer, description: E2EE scheme version (required with ciphertext). }
+                epoch: { type: integer, format: int64 }
+                contentKind: { type: integer }
+                replyTo: { type: [string, 'null'], format: uuid }
+                attachmentIds:
+                  type: array
+                  items: { type: string, format: uuid }
+                  description: The actor's own unlinked uploads; re-verified at send time.
+                sendAt: { type: string, format: date-time }
+      responses:
+        '201':
+          description: Scheduled message snapshot
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          scheduled: { $ref: '#/components/schemas/ScheduledMessage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /messages/scheduled:
+    get:
+      tags: [scheduled]
+      summary: The actor's scheduled messages (pending first, then recent history)
+      responses:
+        '200':
+          description: Scheduled messages
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          scheduled:
+                            type: array
+                            items: { $ref: '#/components/schemas/ScheduledMessage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /messages/scheduled/{id}:
+    patch:
+      tags: [scheduled]
+      summary: Edit a pending scheduled message (content and/or send time)
+      description: >
+        Only the sender, only while pending. Providing text or ciphertext
+        replaces the content snapshot as a whole (E2EE clients re-encrypt
+        client-side and submit fresh ciphertext). A row already sent or
+        canceled yields a masked 404.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text: { type: string, maxLength: 8000 }
+                ciphertext: { type: string }
+                alg: { type: integer }
+                epoch: { type: integer, format: int64 }
+                contentKind: { type: integer }
+                sendAt: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Updated snapshot
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          scheduled: { $ref: '#/components/schemas/ScheduledMessage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [scheduled]
+      summary: Cancel a pending scheduled message (removes the snapshot, including ciphertext)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Canceled and removed }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /folders:
     get:
@@ -2800,6 +2918,13 @@ components:
           properties:
             senderId: { type: string, format: uuid }
             senderName: { type: string }
+        scheduledId:
+          type: [string, 'null']
+          format: uuid
+          description: >
+            Scheduled origin (stage I) — present only on messages sent by the
+            scheduler; lets the sender's client re-key its locally cached
+            E2EE plaintext onto the delivered message id.
     MessagePage:
       type: object
       properties:
@@ -2808,6 +2933,25 @@ components:
           items: { $ref: '#/components/schemas/Message' }
         nextCursor: { type: string }
         hasMore: { type: boolean }
+    ScheduledMessage:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        chatType: { type: string, enum: [private, group] }
+        chatId: { type: string, format: uuid }
+        text: { type: [string, 'null'] }
+        ciphertext: { type: [string, 'null'], description: Base64 MLS ciphertext (E2EE snapshots). }
+        alg: { type: [integer, 'null'] }
+        epoch: { type: [integer, 'null'], format: int64 }
+        contentKind: { type: [integer, 'null'] }
+        replyTo: { type: [string, 'null'], format: uuid }
+        attachmentIds:
+          type: array
+          items: { type: string, format: uuid }
+        sendAt: { type: string, format: date-time }
+        status: { type: string, enum: [pending, sent, canceled] }
+        sentMessageId: { type: [string, 'null'], format: uuid, description: The message the worker created (set once sent). }
+        createdAt: { type: string, format: date-time }
     ChatFolder:
       type: object
       properties:

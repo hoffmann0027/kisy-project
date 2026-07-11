@@ -24,6 +24,7 @@ import type {
   Poll,
   RatingAnalytics,
   RatingBoard,
+  ScheduledMessage,
   SearchResult,
   UploadLimit,
   UploadSession,
@@ -73,6 +74,27 @@ export interface SendMessageBody {
   forwardedFromSenderId?: string;
   forwardedFromSenderName?: string;
 }
+
+// Scheduled sending (UPD3 stage I): a frozen SendMessageBody snapshot the
+// server replays at sendAt. For E2EE chats the client encrypts at
+// scheduling time — the server stores only ciphertext ("path A").
+export interface ScheduleMessageBody extends SendMessageBody {
+  chatType: ChatType;
+  chatId: string;
+  /** ISO time to send at (5s..1y from now). */
+  sendAt: string;
+}
+
+export const scheduledApi = {
+  schedule: (body: ScheduleMessageBody) =>
+    apiClient.post<{ scheduled: ScheduledMessage }>("/messages/schedule", body),
+  list: () => apiClient.get<{ scheduled: ScheduledMessage[] }>("/messages/scheduled"),
+  update: (
+    id: string,
+    patch: { text?: string; ciphertext?: string; alg?: number; epoch?: number; contentKind?: number; sendAt?: string },
+  ) => apiClient.patch<{ scheduled: ScheduledMessage }>(`/messages/scheduled/${id}`, patch),
+  cancel: (id: string) => apiClient.del<{ canceled: boolean }>(`/messages/scheduled/${id}`),
+};
 
 export interface E2EEDeviceDTO {
   id: string;

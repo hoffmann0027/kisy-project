@@ -18,6 +18,7 @@ import (
 	"kisy-backend/internal/chatmedia"
 	"kisy-backend/internal/chats"
 	"kisy-backend/internal/messages"
+	"kisy-backend/internal/platform/db"
 	"kisy-backend/internal/platform/testdb"
 )
 
@@ -85,8 +86,8 @@ func setup(t *testing.T) harness {
 		ChunkBytes: 64 << 10, SessionTTL: time.Hour,
 	})
 	msgs.SetAttachments(
-		func(ctx context.Context, ids []uuid.UUID, messageID, uploader uuid.UUID) error {
-			return atts.Link(ctx, pool, ids, messageID, uploader)
+		func(ctx context.Context, q db.DBTX, ids []uuid.UUID, messageID, uploader uuid.UUID) error {
+			return atts.Link(ctx, q, ids, messageID, uploader)
 		},
 		nil,
 	)

@@ -22,6 +22,9 @@ import {
   useReaction,
   useSendMessage,
 } from "@entities/message/queries";
+import { pendingForChat, useScheduledMessages, useScheduleMessage } from "@entities/message/scheduled";
+import { ScheduledPanel } from "@features/scheduled/ScheduledPanel";
+import { e2eeSession } from "@entities/e2ee";
 import { messagesApi } from "@shared/api/endpoints";
 import { ApiError } from "@shared/api/envelope";
 import { useAuthStore } from "@shared/store/auth";
@@ -65,6 +68,10 @@ export function Conversation({ target, headerActions }: Props) {
   const { data: pinned } = usePinnedMessages(chatType, chatId);
   const react = useReaction();
   const cache = useMessageCacheWriter();
+  const schedule = useScheduleMessage(chatType, chatId, target.peerUserId);
+  const { scheduled } = useScheduledMessages();
+  const pendingScheduled = useMemo(() => pendingForChat(scheduled, chatType, chatId), [scheduled, chatType, chatId]);
+  const [scheduledOpen, setScheduledOpen] = useState(false);
 
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -145,6 +152,19 @@ export function Conversation({ target, headerActions }: Props) {
           cache.patch(chatType, chatId, tempId, (m) => ({ ...m, pending: false, failed: true }));
           toast.error("Не удалось отправить сообщение");
         },
+      },
+    );
+  };
+
+  const handleSchedule = (text: string, sendAt: Date, replyToId?: string, attachments?: Attachment[]) => {
+    schedule.mutate(
+      { text, sendAt, replyTo: replyToId, attachmentIds: attachments?.map((a) => a.id) },
+      {
+        onSuccess: () =>
+          toast.success(
+            `Сообщение будет отправлено ${sendAt.toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}`,
+          ),
+        onError: () => toast.error("Не удалось запланировать сообщение"),
       },
     );
   };
@@ -424,15 +444,27 @@ export function Conversation({ target, headerActions }: Props) {
           </button>
         </div>
       ) : (
-        <Composer
-          chatType={chatType}
-          chatId={chatId}
-          replyTo={replyTo}
-          replyPreview={previewFor(replyTo?.id ?? null)}
-          onClearReply={() => setReplyTo(null)}
-          onSend={handleSend}
-        />
+        <>
+          {pendingScheduled.length > 0 && (
+            <button className="conv__scheduled-bar" onClick={() => setScheduledOpen(true)}>
+              <Icon.Calendar size={15} />
+              Запланированные сообщения: {pendingScheduled.length}
+            </button>
+          )}
+          <Composer
+            chatType={chatType}
+            chatId={chatId}
+            replyTo={replyTo}
+            replyPreview={previewFor(replyTo?.id ?? null)}
+            onClearReply={() => setReplyTo(null)}
+            onSend={handleSend}
+            onSchedule={handleSchedule}
+            scheduleE2EEWarning={chatType === "private" && !!e2eeSession()}
+          />
+        </>
       )}
+
+      <ScheduledPanel open={scheduledOpen} items={pendingScheduled} onClose={() => setScheduledOpen(false)} />
 
       <ForwardModal
         open={forwardOpen}

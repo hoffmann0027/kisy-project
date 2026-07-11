@@ -64,6 +64,11 @@ type Message struct {
 	ForwardedFromMessageID  *uuid.UUID
 	ForwardedFromSenderID   *uuid.UUID
 	ForwardedFromSenderName *string
+
+	// Scheduled sending (stage I): the scheduled_messages row this message
+	// was born from. Metadata only — it lets the sender's client re-key its
+	// locally cached E2EE plaintext (sched/<scheduledId> → msg/<messageId>).
+	ScheduledMessageID *uuid.UUID
 }
 
 // ReactionSummary aggregates one emoji on a message: how many users chose
@@ -108,6 +113,10 @@ type DTO struct {
 	// Forwarding attribution: who originally wrote this, as a snapshot. The
 	// source chat/message is never exposed, so no cross-clearance leak.
 	ForwardedFrom *ForwardedFrom `json:"forwardedFrom,omitempty"`
+
+	// Scheduled origin (stage I) — present only on messages sent by the
+	// scheduler, so the sender's client can restore its plaintext cache.
+	ScheduledID *uuid.UUID `json:"scheduledId,omitempty"`
 }
 
 // ForwardedFrom is the "Переслано от …" attribution shown on a forwarded
@@ -139,6 +148,7 @@ func (m *Message) ToDTO() DTO {
 		dto.Alg = m.Alg
 		dto.Epoch = m.Epoch
 		dto.ContentKind = m.ContentKind
+		dto.ScheduledID = m.ScheduledMessageID
 		if m.ForwardedFromSenderID != nil {
 			name := ""
 			if m.ForwardedFromSenderName != nil {

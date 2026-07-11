@@ -421,3 +421,29 @@ client-side against those access-filtered lists, so a folder item pointing
 at a chat the user can no longer see simply never renders — a folder can
 never leak a hidden chat. Tables: chat_folders, chat_folder_items,
 chat_archives (migration 000033).
+
+## Scheduled Messages (UPD3 stage I)
+
+`POST /messages/schedule` freezes a send-body snapshot (same shape as
+`POST /messages` plus `sendAt`, 5s..1y ahead, ≤100 pending per user);
+`GET /messages/scheduled` lists the actor's rows (pending first);
+`PATCH /messages/scheduled/{id}` edits content and/or `sendAt` while
+pending; `DELETE` cancels and removes the snapshot entirely.
+
+The worker replays due snapshots through the standard send pipeline
+(`messages.SendTx`): the message insert and the row's `pending → sent`
+flip share one transaction (`FOR UPDATE SKIP LOCKED`), so a crash or
+concurrent replica can never double-send. Access is checked at scheduling
+AND re-checked at send time with the sender's current role level; lost
+access or a deactivated account cancels the row (content wiped) instead of
+sending. Attachments are re-verified at send time: vanished files are
+dropped, and a snapshot with nothing left is canceled. Push on delivery is
+content-less and passes the stage-G mute/group-mode gate as usual.
+
+E2EE ("path A", docs/security.md): the client encrypts at scheduling time
+and submits ciphertext; the server stores and replays it without ever
+reading it. The delivered message carries an additive `scheduledId` field
+so the sender's client re-keys its locally cached plaintext
+(`sched/<scheduledId>` → `msg/<messageId>`); the UI warns that key
+rotation before `sendAt` can make the message undecryptable. Tables:
+scheduled_messages + `messages.scheduled_message_id` (migration 000034).

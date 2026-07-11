@@ -11,6 +11,7 @@ import (
 
 	"kisy-backend/internal/access"
 	"kisy-backend/internal/audit"
+	"kisy-backend/internal/platform/db"
 	"kisy-backend/pkg/pagination"
 )
 
@@ -82,8 +83,10 @@ type GroupReadLoader func(ctx context.Context, chatID uuid.UUID) (reads map[uuid
 
 // AttachmentLinker binds already-uploaded files to a message; AttachmentLoader
 // returns attachment DTOs (as any) per message id. Both injected to avoid a
-// messages→attachments import cycle; nil disables attachments.
-type AttachmentLinker func(ctx context.Context, ids []uuid.UUID, messageID, uploader uuid.UUID) error
+// messages→attachments import cycle; nil disables attachments. The linker
+// takes the caller's DBTX so linking commits atomically with the message
+// (plain sends pass the pool; the scheduled worker passes its transaction).
+type AttachmentLinker func(ctx context.Context, q db.DBTX, ids []uuid.UUID, messageID, uploader uuid.UUID) error
 type AttachmentLoader func(ctx context.Context, messageIDs []uuid.UUID) (map[uuid.UUID][]any, error)
 
 // Indexer keeps the full-text search index in sync with the message
@@ -201,30 +204,50 @@ type SendInput struct {
 	// plaintext forwards use Forward instead (server-enforced hierarchy).
 	ForwardedFromSenderID   *uuid.UUID
 	ForwardedFromSenderName *string
+
+	// Scheduled origin (stage I). Set only by the scheduled-send worker —
+	// never accepted from the HTTP handler.
+	ScheduledMessageID *uuid.UUID
 }
 
 // Send validates access, persists the message and publishes it, returning the
 // enriched DTO (including any attachments).
 func (s *Service) Send(ctx context.Context, in SendInput, actor ActorMeta) (DTO, error) {
+	_, deliver, err := s.SendTx(ctx, s.pool, in, actor)
+	if err != nil {
+		return DTO{}, err
+	}
+	return deliver(ctx), nil
+}
+
+// SendTx is Send for callers that must persist the message atomically with
+// their own state: it validates access and inserts the message using q (a
+// pool or the caller's transaction) and returns the bare DTO plus a deliver
+// callback. The caller runs deliver AFTER its transaction commits — it
+// enriches the DTO with attachments and fans out the side effects
+// (real-time publish, notifications, search indexing). The scheduled-send
+// worker (stage I) uses this to flip pending→sent and insert the message in
+// one transaction, so a crash can never double-send.
+func (s *Service) SendTx(ctx context.Context, q db.DBTX, in SendInput, actor ActorMeta) (DTO, func(context.Context) DTO, error) {
 	text := strings.TrimSpace(in.Text)
 	// A message carries text, ciphertext or at least one attachment — and
 	// never both plaintext and ciphertext (E2EE chats send only the latter).
 	if text != "" && len(in.Ciphertext) > 0 {
-		return DTO{}, ErrEmptyContent
+		return DTO{}, nil, ErrEmptyContent
 	}
 	if text == "" && len(in.Ciphertext) == 0 && len(in.AttachmentIDs) == 0 {
-		return DTO{}, ErrEmptyContent
+		return DTO{}, nil, ErrEmptyContent
 	}
 	// An encrypted body is size-capped and must declare its scheme version.
 	if len(in.Ciphertext) > MaxCiphertextBytes || (len(in.Ciphertext) > 0 && in.Alg == nil) {
-		return DTO{}, ErrEmptyContent
+		return DTO{}, nil, ErrEmptyContent
 	}
 	if len(text) > MaxTextLength {
 		text = text[:MaxTextLength]
 	}
 
 	if err := s.authorize(ctx, in.ChatType, in.ChatID, actor); err != nil {
-		return DTO{}, err
+		return DTO{}, nil, err
 	}
 
 	// A reply target must belong to the same chat, otherwise it could leak
@@ -232,10 +255,10 @@ func (s *Service) Send(ctx context.Context, in SendInput, actor ActorMeta) (DTO,
 	if in.ReplyTo != nil {
 		parent, err := s.repo.GetByID(ctx, s.pool, *in.ReplyTo)
 		if err != nil {
-			return DTO{}, ErrNotFound
+			return DTO{}, nil, ErrNotFound
 		}
 		if parent.ChatType != in.ChatType || parent.ChatID != in.ChatID {
-			return DTO{}, ErrForbidden
+			return DTO{}, nil, ErrForbidden
 		}
 	}
 
@@ -250,37 +273,42 @@ func (s *Service) Send(ctx context.Context, in SendInput, actor ActorMeta) (DTO,
 		ContentKind:             in.ContentKind,
 		ForwardedFromSenderID:   in.ForwardedFromSenderID,
 		ForwardedFromSenderName: in.ForwardedFromSenderName,
+		ScheduledMessageID:      in.ScheduledMessageID,
 	}
 	if text != "" {
 		m.Text = &text
 	}
-	if err := s.repo.Create(ctx, s.pool, m); err != nil {
-		return DTO{}, err
+	if err := s.repo.Create(ctx, q, m); err != nil {
+		return DTO{}, nil, err
 	}
 
-	// Bind any uploaded attachments to this message (ownership-checked).
+	// Bind any uploaded attachments to this message (ownership-checked),
+	// inside the same q so the link commits with the message.
 	if s.attachLink != nil && len(in.AttachmentIDs) > 0 {
-		if err := s.attachLink(ctx, in.AttachmentIDs, m.ID, actor.UserID); err != nil {
-			return DTO{}, err
+		if err := s.attachLink(ctx, q, in.AttachmentIDs, m.ID, actor.UserID); err != nil {
+			return DTO{}, nil, err
 		}
 	}
 
 	dto := m.ToDTO()
-	if s.attachLoad != nil && len(in.AttachmentIDs) > 0 {
-		if byMsg, err := s.attachLoad(ctx, []uuid.UUID{m.ID}); err == nil {
-			dto.Attachments = byMsg[m.ID]
+	deliver := func(ctx context.Context) DTO {
+		if s.attachLoad != nil && len(in.AttachmentIDs) > 0 {
+			if byMsg, err := s.attachLoad(ctx, []uuid.UUID{m.ID}); err == nil {
+				dto.Attachments = byMsg[m.ID]
+			}
 		}
+		if s.pub != nil {
+			s.pub.PublishMessageCreated(m.ChatType, m.ChatID, dto)
+		}
+		if s.notifier != nil {
+			s.notifier.OnMessage(ctx, dto)
+		}
+		if s.indexer != nil && text != "" {
+			s.indexer.IndexMessage(ctx, m.ID, text)
+		}
+		return dto
 	}
-	if s.pub != nil {
-		s.pub.PublishMessageCreated(m.ChatType, m.ChatID, dto)
-	}
-	if s.notifier != nil {
-		s.notifier.OnMessage(ctx, dto)
-	}
-	if s.indexer != nil && text != "" {
-		s.indexer.IndexMessage(ctx, m.ID, text)
-	}
-	return dto, nil
+	return dto, deliver, nil
 }
 
 // clearanceBreadth returns a chat's audience breadth (weakest level that can

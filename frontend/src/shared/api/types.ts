@@ -154,6 +154,28 @@ export interface Message {
   /** Forwarding attribution: the original author snapshot (never the source
    * chat), shown as "Переслано от …". */
   forwardedFrom?: { senderId: string; senderName: string } | null;
+
+  /** Scheduled origin (stage I): id of the scheduled_messages row this
+   * message was born from — lets the sender restore its plaintext cache. */
+  scheduledId?: string | null;
+}
+
+/** A scheduled (delayed-send) message — a frozen send-body snapshot. */
+export interface ScheduledMessage {
+  id: string;
+  chatType: ChatType;
+  chatId: string;
+  text: string | null;
+  ciphertext?: string | null;
+  alg?: number | null;
+  epoch?: number | null;
+  contentKind?: number | null;
+  replyTo: string | null;
+  attachmentIds: string[];
+  sendAt: string;
+  status: "pending" | "sent" | "canceled";
+  sentMessageId?: string | null;
+  createdAt: string;
 }
 
 export interface MessagePage {

@@ -395,6 +395,43 @@ func (s *Service) Link(ctx context.Context, q db.DBTX, ids []uuid.UUID, messageI
 	return s.repo.Link(ctx, q, ids, messageID, uploader)
 }
 
+// OwnedUnlinked filters ids down to attachments that still exist, belong to
+// the uploader and are not linked to a message yet — i.e. exactly the set a
+// Link call would bind. The scheduled-send worker (stage I) uses it to drop
+// attachments that disappeared between scheduling and send time.
+func (s *Service) OwnedUnlinked(ctx context.Context, ids []uuid.UUID, uploader uuid.UUID) ([]uuid.UUID, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT id FROM attachments
+		WHERE id = ANY($1) AND message_id IS NULL AND uploaded_by = $2`,
+		ids, uploader)
+	if err != nil {
+		return nil, fmt.Errorf("attachments: owned unlinked: %w", err)
+	}
+	defer rows.Close()
+	present := make(map[uuid.UUID]struct{}, len(ids))
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("attachments: scan owned: %w", err)
+		}
+		present[id] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// Preserve the caller's order.
+	out := make([]uuid.UUID, 0, len(present))
+	for _, id := range ids {
+		if _, ok := present[id]; ok {
+			out = append(out, id)
+		}
+	}
+	return out, nil
+}
+
 // CopyToMessage duplicates a source message's attachments onto a new message
 // (message forwarding). Access to the source is the caller's responsibility —
 // the forwarding service checks it before calling.

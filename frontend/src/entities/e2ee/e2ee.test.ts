@@ -120,6 +120,8 @@ import type { E2EESession } from "./session";
 import { topUpKeyPackages } from "./session";
 import {
   cachePlaintext,
+  cacheScheduledPlaintext,
+  cachedScheduledPlaintext,
   encryptForChat,
   hydrateMessage,
   processChatHandshake,
@@ -240,6 +242,31 @@ describe("E2EE private chat orchestration", () => {
     const got2 = await hydrateMessage(bob, messageDTO("h2", chatId, "user-alice", second!.ciphertext));
     expect(got1.text).toBe("первое");
     expect(got2.text).toBe("второе");
+  });
+
+  it("adopts a scheduled plaintext onto the delivered message id (stage I)", async () => {
+    const alice = await makeSession("user-alice");
+    const bob = await makeSession("user-bob");
+    await publishPool(bob, 2);
+    const chatId = "chat-sched";
+
+    // Scheduling: alice encrypts now, the plaintext is cached under the
+    // scheduled id (she cannot decrypt her own ciphertext later).
+    const enc = await encryptForChat(alice, chatId, "user-bob", "отложенное");
+    expect(enc).not.toBeNull();
+    await cacheScheduledPlaintext(alice, "sched-1", "отложенное");
+
+    // Delivery: the worker's message arrives with scheduledId set — the
+    // cached plaintext is re-keyed onto the real message id.
+    const delivered = { ...messageDTO("m-real", chatId, "user-alice", enc!.ciphertext), scheduledId: "sched-1" };
+    const view = await hydrateMessage(alice, delivered);
+    expect(view.text).toBe("отложенное");
+    expect(view.encrypted).toBe(true);
+
+    // The sched entry is gone; the msg entry answers future hydrations.
+    expect(await cachedScheduledPlaintext(alice, "sched-1")).toBeNull();
+    const again = await hydrateMessage(alice, delivered);
+    expect(again.text).toBe("отложенное");
   });
 
   it("marks history from before the device joined as undecryptable", async () => {
