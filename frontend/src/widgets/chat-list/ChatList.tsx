@@ -8,6 +8,7 @@ import { roleLabel, type Chat, type Group } from "@shared/api/types";
 import { useChats } from "@entities/chat/queries";
 import { useGroups } from "@entities/group/queries";
 import { useMessageSearch } from "@entities/message/search";
+import { isMuted, useMutes } from "@entities/notif-prefs/queries";
 import { usePresenceStore } from "@shared/store/presence";
 
 interface Props {
@@ -25,6 +26,7 @@ export function ChatList({ activeId, onSelect, onSelectGroup, onNewChat, onNewGr
   const online = usePresenceStore((s) => s.online);
   const navigate = useNavigate();
   const { data: messageHits } = useMessageSearch(query);
+  const { mutedSet } = useMutes();
 
   const openHit = (chatType: string, chatId: string) =>
     navigate(chatType === "group" ? `/group/${chatId}` : `/chat/${chatId}`);
@@ -87,6 +89,11 @@ export function ChatList({ activeId, onSelect, onSelectGroup, onNewChat, onNewGr
             <div className="chat-item__body">
               <div className="chat-item__row">
                 <span className="chat-item__name">{group.name}</span>
+                {isMuted(mutedSet, "group", group.id) && (
+                  <span className="chat-item__muted" title="Уведомления отключены">
+                    <Icon.BellOff size={14} />
+                  </span>
+                )}
               </div>
               <div className="chat-item__preview">Группа · от {roleLabel(group.minRoleLevel)} и выше</div>
             </div>
@@ -116,11 +123,18 @@ export function ChatList({ activeId, onSelect, onSelectGroup, onNewChat, onNewGr
                 </div>
                 <div className="chat-item__preview">@{chat.otherUser?.username ?? "—"}</div>
               </div>
-              {chat.unreadCount > 0 && (
-                <div className="chat-item__meta">
-                  <Badge>{chat.unreadCount > 99 ? "99+" : chat.unreadCount}</Badge>
-                </div>
-              )}
+              <div className="chat-item__meta">
+                {isMuted(mutedSet, "private", chat.id) && (
+                  <span className="chat-item__muted" title="Уведомления отключены">
+                    <Icon.BellOff size={14} />
+                  </span>
+                )}
+                {chat.unreadCount > 0 && (
+                  <Badge muted={isMuted(mutedSet, "private", chat.id)}>
+                    {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
+                  </Badge>
+                )}
+              </div>
             </button>
           );
         })}

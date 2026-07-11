@@ -8,6 +8,7 @@ import { Icon } from "@shared/ui/icons";
 import { MediaViewer, type MediaViewerItem } from "@shared/ui/MediaViewer";
 import { ChatPanel } from "./ChatPanel";
 import { ForwardModal, type ForwardTarget } from "@features/forward/ForwardModal";
+import { MuteMenu } from "@features/notif-prefs/MuteMenu";
 import type { Attachment, ChatMediaItem, ChatType, Message } from "@shared/api/types";
 import {
   flattenMessages,
@@ -314,6 +315,7 @@ export function Conversation({ target, headerActions }: Props) {
             <Icon.Phone size={20} />
           </button>
         )}
+        <MuteMenu chatType={chatType} chatId={chatId} />
         <button
           className={cn("conv__panel-toggle", panelOpen && "conv__panel-toggle--active")}
           title="Медиа, файлы и ссылки"

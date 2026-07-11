@@ -135,6 +135,23 @@ type Pusher interface {
 	Notify(ctx context.Context, userID uuid.UUID, title, body, url string)
 }
 
+// Preferences gates notifications by the recipient's mute state and group
+// notification mode (stage G). Injected to avoid a notifications→notifprefs
+// import cycle; nil means "notify everyone" (pre-stage-G behavior).
+type Preferences interface {
+	// MutedUsers returns which of userIDs have the chat muted right now.
+	MutedUsers(ctx context.Context, chatType string, chatID uuid.UUID, userIDs []uuid.UUID) (map[uuid.UUID]struct{}, error)
+	// SettingsFor batch-loads each user's settings (sound/preview/groupMode).
+	SettingsFor(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID]NotifSettings, error)
+}
+
+// NotifSettings mirrors the fields the pipeline needs from a user's prefs.
+type NotifSettings struct {
+	Sound     bool
+	Preview   bool
+	GroupMode string // "all" | "mentions_only" | "none"
+}
+
 type Service struct {
 	pool       *pgxpool.Pool
 	repo       Repository
@@ -143,10 +160,14 @@ type Service struct {
 	mentions   MentionSink
 	ws         WSPublisher
 	pusher     Pusher
+	prefs      Preferences
 }
 
 // SetPusher wires Web Push delivery for new notifications.
 func (s *Service) SetPusher(p Pusher) { s.pusher = p }
+
+// SetPreferences wires the mute/notification-mode gate.
+func (s *Service) SetPreferences(p Preferences) { s.prefs = p }
 
 func NewService(pool *pgxpool.Pool, repo Repository, recipients RecipientResolver, usernames UsernameResolver, mentions MentionSink, wsPub WSPublisher) *Service {
 	return &Service{pool: pool, repo: repo, recipients: recipients, usernames: usernames, mentions: mentions, ws: wsPub}

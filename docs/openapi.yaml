@@ -1300,6 +1300,117 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /chats/{chatType}/{chatID}/mute:
+    put:
+      tags: [notifications]
+      summary: Mute a chat's notifications (stage G)
+      description: >
+        Suppresses push and notification.created for this chat for the actor.
+        untilSeconds sets a duration from now; omit or 0 to mute forever. The
+        chat's unread counter is still tracked (shown greyed in the UI).
+      parameters:
+        - { name: chatType, in: path, required: true, schema: { type: string, enum: [private, group] } }
+        - { name: chatID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                untilSeconds: { type: integer, description: Duration from now in seconds; 0/absent = forever. }
+      responses:
+        '200':
+          description: Muted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          muted: { type: boolean }
+                          mutedUntil: { type: [string, 'null'], format: date-time }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      tags: [notifications]
+      summary: Unmute a chat
+      parameters:
+        - { name: chatType, in: path, required: true, schema: { type: string, enum: [private, group] } }
+        - { name: chatID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Unmuted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /settings/mutes:
+    get:
+      tags: [notifications]
+      summary: The actor's active chat mutes (for the chat list)
+      responses:
+        '200':
+          description: Active mutes
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          mutes:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                chatType: { type: string, enum: [private, group] }
+                                chatId: { type: string, format: uuid }
+                                mutedUntil: { type: [string, 'null'], format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /settings/notifications:
+    get:
+      tags: [notifications]
+      summary: The actor's notification settings
+      responses:
+        '200':
+          description: Settings
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          settings: { $ref: '#/components/schemas/NotificationSettings' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      tags: [notifications]
+      summary: Update the actor's notification settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NotificationSettings' }
+      responses:
+        '200':
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          settings: { $ref: '#/components/schemas/NotificationSettings' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /push/vapid-public-key:
     get:
       tags: [notifications]
@@ -2495,6 +2606,15 @@ components:
           items: { $ref: '#/components/schemas/Message' }
         nextCursor: { type: string }
         hasMore: { type: boolean }
+    NotificationSettings:
+      type: object
+      properties:
+        sound: { type: boolean }
+        preview: { type: boolean, description: Show message text preview in notifications. }
+        groupMode:
+          type: string
+          enum: [all, mentions_only, none]
+          description: How group chats notify — every message, only @mentions, or never. Private chats always notify unless muted.
     ReactionSummary:
       type: object
       properties:

@@ -193,6 +193,12 @@ func newRouter(d routerDeps) http.Handler {
 				m.chatsHandler.Routes(r)
 				// Context-panel tabs: shared media/files/links of a chat.
 				m.chatmediaHandler.Routes(r)
+				// Per-chat mute (stage G).
+				m.notifprefsHandler.ChatRoutes(r)
+			})
+
+			r.Route("/settings", func(r chi.Router) {
+				m.notifprefsHandler.SettingsRoutes(r)
 			})
 
 			r.Route("/favorites", func(r chi.Router) {

@@ -151,6 +151,35 @@ export const chatMediaApi = {
   },
 };
 
+export type GroupNotifyMode = "all" | "mentions_only" | "none";
+
+export interface NotificationSettings {
+  sound: boolean;
+  preview: boolean;
+  groupMode: GroupNotifyMode;
+}
+
+export interface ChatMute {
+  chatType: ChatType;
+  chatId: string;
+  mutedUntil: string | null;
+}
+
+// Mute + notification settings (stage G).
+export const notifPrefsApi = {
+  mute: (chatType: ChatType, chatId: string, untilSeconds?: number) =>
+    apiClient.put<{ muted: boolean; mutedUntil: string | null }>(
+      `/chats/${chatType}/${chatId}/mute`,
+      untilSeconds ? { untilSeconds } : {},
+    ),
+  unmute: (chatType: ChatType, chatId: string) =>
+    apiClient.del<{ muted: boolean }>(`/chats/${chatType}/${chatId}/mute`),
+  listMutes: () => apiClient.get<{ mutes: ChatMute[] }>("/settings/mutes"),
+  getSettings: () => apiClient.get<{ settings: NotificationSettings }>("/settings/notifications"),
+  updateSettings: (s: NotificationSettings) =>
+    apiClient.put<{ settings: NotificationSettings }>("/settings/notifications", s),
+};
+
 export interface LinkPreview {
   url: string;
   title: string;

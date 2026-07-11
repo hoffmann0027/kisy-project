@@ -380,3 +380,19 @@ the preview image through the same guard so it loads same-origin under strict
 CSP. In E2EE chats the server never sees message URLs, so the client requests
 a preview only on an explicit user action; plaintext chats fetch
 automatically.
+
+## Mute & Notification Settings (stage G)
+
+Per-user notification preferences. `PUT/DELETE /chats/{type}/{id}/mute`
+mutes/unmutes a chat (untilSeconds = duration from now, 0/absent = forever);
+`GET /settings/mutes` lists active mutes for the chat list.
+`GET/PUT /settings/notifications` reads/updates settings: sound, preview
+(text preview in notifications) and groupMode (all | mentions_only | none).
+
+The notifications pipeline (internal/notifications.OnMessage) gates delivery
+per recipient: a muted chat sends no push (the unread counter is still kept,
+shown greyed); otherwise private chats always notify, and groups follow the
+recipient's groupMode. @mentions still raise the in-app notification (bell)
+unless muted. Message content stays out of push payloads (content-less, as
+before); the preview flag is reserved for a future opt-in text preview.
+Tables: chat_mutes, notification_settings (migration 000032).

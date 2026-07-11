@@ -4,6 +4,8 @@ import { roleLabel } from "@shared/api/types";
 import { authApi, usersApi } from "@shared/api/endpoints";
 import { useAuthStore } from "@shared/store/auth";
 import { disablePush, enablePush, pushEnabled, pushSupported } from "@shared/lib/push";
+import { useNotificationSettings, useUpdateNotificationSettings } from "@entities/notif-prefs/queries";
+import type { GroupNotifyMode } from "@shared/api/endpoints";
 import { AvatarCropper } from "./AvatarCropper";
 
 interface Props {
@@ -151,9 +153,56 @@ export function ProfileModal({ open, onClose }: Props) {
         </div>
       )}
 
+      <NotificationSettingsSection />
+
       <Button variant="danger" block onClick={() => void logout()}>
         Выйти из аккаунта
       </Button>
     </Modal>
+  );
+}
+
+const GROUP_MODE_LABELS: Record<GroupNotifyMode, string> = {
+  all: "Все сообщения",
+  mentions_only: "Только упоминания",
+  none: "Отключены",
+};
+
+function NotificationSettingsSection() {
+  const { data: settings } = useNotificationSettings();
+  const update = useUpdateNotificationSettings();
+  if (!settings) return null;
+
+  const set = (patch: Partial<typeof settings>) =>
+    update.mutate({ ...settings, ...patch }, { onError: () => toast.error("Не удалось сохранить настройки") });
+
+  return (
+    <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ fontWeight: 600, fontSize: 15 }}>Уведомления</div>
+
+      <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <span style={{ fontSize: 14 }}>Звук</span>
+        <input type="checkbox" checked={settings.sound} onChange={(e) => set({ sound: e.target.checked })} />
+      </label>
+      <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <span style={{ fontSize: 14 }}>Показывать превью текста</span>
+        <input type="checkbox" checked={settings.preview} onChange={(e) => set({ preview: e.target.checked })} />
+      </label>
+      <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <span style={{ fontSize: 14 }}>Уведомления в группах</span>
+        <select
+          className="ui-input"
+          style={{ width: "auto" }}
+          value={settings.groupMode}
+          onChange={(e) => set({ groupMode: e.target.value as GroupNotifyMode })}
+        >
+          {(Object.keys(GROUP_MODE_LABELS) as GroupNotifyMode[]).map((m) => (
+            <option key={m} value={m}>
+              {GROUP_MODE_LABELS[m]}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
   );
 }
