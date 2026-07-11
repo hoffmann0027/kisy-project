@@ -191,6 +191,8 @@ func newRouter(d routerDeps) http.Handler {
 
 			r.Route("/chats", func(r chi.Router) {
 				m.chatsHandler.Routes(r)
+				// Context-panel tabs: shared media/files/links of a chat.
+				m.chatmediaHandler.Routes(r)
 			})
 
 			r.Route("/favorites", func(r chi.Router) {

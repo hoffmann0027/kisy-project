@@ -21,6 +21,7 @@ import (
 	"kisy-backend/internal/boards"
 	"kisy-backend/internal/bootstrap"
 	"kisy-backend/internal/calls"
+	"kisy-backend/internal/chatmedia"
 	"kisy-backend/internal/chats"
 	"kisy-backend/internal/conditions"
 	"kisy-backend/internal/config"
@@ -52,6 +53,7 @@ type modules struct {
 	usersHandler         *users.Handler
 	invitesHandler       *invitations.Handler
 	chatsHandler         *chats.Handler
+	chatmediaHandler     *chatmedia.Handler
 	groupsHandler        *groups.Handler
 	avatarsHandler       *avatars.Handler
 	messagesHandler      *messages.Handler
@@ -213,6 +215,38 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		}
 		m := authHandler.ClientMeta(r)
 		return messages.ActorMeta{UserID: claims.UserID, RoleLevel: claims.RoleLevel, SessionID: claims.SessionID, IPHash: m.IPHash, RequestID: m.RequestID}, true
+	})
+
+	// --- chat media aggregation (context panel tabs: media/files/links) ---
+	chatmediaSvc := chatmedia.NewService(pool, chatmedia.NewPostgresRepository(), chatmedia.Authorizer{
+		Private: func(ctx context.Context, chatID, actorID uuid.UUID) error {
+			ok, err := chatsSvc.IsParticipant(ctx, chatID, actorID)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return chatmedia.ErrNotFound
+			}
+			return nil
+		},
+		Group: func(ctx context.Context, groupID, actorID uuid.UUID, actorLevel int) error {
+			err := groupsSvc.EnsureMember(ctx, groupID, groups.ActorMeta{UserID: actorID, RoleLevel: actorLevel})
+			switch {
+			case errors.Is(err, groups.ErrNotFound):
+				return chatmedia.ErrNotFound
+			case errors.Is(err, groups.ErrNotMember):
+				return chatmedia.ErrForbidden
+			default:
+				return err
+			}
+		},
+	})
+	chatmediaHandler := chatmedia.NewHandler(chatmediaSvc, func(r *http.Request) (chatmedia.Actor, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return chatmedia.Actor{}, false
+		}
+		return chatmedia.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
 	})
 
 	// --- attachments (files/images stored in the DB) ---
@@ -555,6 +589,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		usersHandler:         usersHandler,
 		invitesHandler:       invitesHandler,
 		chatsHandler:         chatsHandler,
+		chatmediaHandler:     chatmediaHandler,
 		groupsHandler:        groupsHandler,
 		avatarsHandler:       avatarsHandler,
 		messagesHandler:      messagesHandler,

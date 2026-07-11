@@ -3,7 +3,7 @@ import { cn } from "@shared/lib/cn";
 import { formatTime } from "@shared/lib/format";
 import { Icon } from "@shared/ui/icons";
 import { VoiceBubble } from "@features/voice-message/VoiceBubble";
-import type { Message } from "@shared/api/types";
+import type { Attachment, Message } from "@shared/api/types";
 
 // Delivery state of one of the current user's own messages, rendered as
 // ticks: pending (clock) → sent (✓✓) → read (✓✓ blue). Undefined for
@@ -22,6 +22,8 @@ interface Props {
   onDelete: (m: Message) => void;
   onReact: (m: Message, emoji: string) => void;
   onPin: (m: Message, pin: boolean) => void;
+  /** Opens the media viewer instead of a new tab (stage C). */
+  onOpenImage: (attachment: Attachment) => void;
 }
 
 const QUICK_EMOJI = ["👍", "❤️", "😂", "🔥", "👏"];
@@ -65,6 +67,7 @@ export const MessageBubble = memo(function MessageBubble({
   onDelete,
   onReact,
   onPin,
+  onOpenImage,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.text ?? "");
@@ -126,9 +129,9 @@ export const MessageBubble = memo(function MessageBubble({
               a.kind === "voice" ? (
                 <VoiceBubble key={a.id} attachment={a} mine={mine} />
               ) : a.isImage ? (
-                <a key={a.id} href={a.url} target="_blank" rel="noreferrer" className="bubble__att-img">
+                <button key={a.id} className="bubble__att-img" onClick={() => onOpenImage(a)} title={a.fileName}>
                   <img src={a.url} alt={a.fileName} loading="lazy" />
-                </a>
+                </button>
               ) : (
                 <a key={a.id} href={a.url} target="_blank" rel="noreferrer" className="bubble__att-file" download={a.fileName}>
                   <Icon.Paperclip size={16} />

@@ -964,6 +964,53 @@ paths:
                                 createdAt: { type: string, format: date-time }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /chats/media:
+    get:
+      tags: [messages]
+      summary: Aggregated shared content of a chat (context panel tabs)
+      description: >
+        Returns the chat's media (image/video attachments), files (plain file
+        attachments) or links (URLs extracted from plaintext message bodies),
+        newest first with cursor pagination. Access is checked with the same
+        chat authorizer as the message list, so clearance rules hold and the
+        existence of inaccessible chats never leaks (404). E2EE message
+        bodies are ciphertext to the server, so they contribute nothing to
+        the links tab by design. Query-parameter addressing follows the
+        GET /messages convention.
+      parameters:
+        - { name: chatType, in: query, required: true, schema: { type: string, enum: [private, group] } }
+        - { name: chatId, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: kind, in: query, required: true, schema: { type: string, enum: [media, files, links] } }
+        - { name: cursor, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        '200':
+          description: One page of items (media/files return attachment items; links return URL items)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                attachment: { $ref: '#/components/schemas/Attachment' }
+                                url: { type: string, description: Links tab only. }
+                                messageId: { type: string, format: uuid }
+                                senderId: { type: string, format: uuid }
+                                createdAt: { type: string, format: date-time }
+                          nextCursor: { type: string }
+                          hasMore: { type: boolean }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /attachments:
     post:
       tags: [messages]

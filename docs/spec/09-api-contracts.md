@@ -324,3 +324,15 @@ No new endpoints or WS events — the existing message pipeline delivers voice
 notes in both plaintext and E2EE chats. Attachment content encryption for
 E2EE chats is a separate cross-cutting stage (docs/e2ee-design.md, этап 6)
 covering all attachment kinds, voice included.
+
+## Chat Media Aggregation (stage C)
+
+`GET /chats/media?chatType=&chatId=&kind=media|files|links&cursor=&limit=`
+serves the context panel tabs: media (image/video attachments), files
+(plain file attachments; voice notes belong to neither tab), links (URLs
+extracted server-side from plaintext message bodies only — E2EE ciphertext
+is never scanned). Newest-first, (created_at, id) cursor pagination, items
+carry messageId/senderId for jumping to the original. Access is the same
+chat authorizer as the message list: non-members get a masked 404, deleted
+messages are excluded. Addressing is by query parameters, consistent with
+GET /messages (the /chats/{chatID} path wildcard owns that segment).

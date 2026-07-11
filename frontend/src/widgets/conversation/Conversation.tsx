@@ -5,7 +5,9 @@ import { useCallControls } from "@features/call/CallProvider";
 import { formatDay } from "@shared/lib/format";
 import { Avatar, Button, Spinner, toast } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
-import type { Attachment, ChatType, Message } from "@shared/api/types";
+import { MediaViewer, type MediaViewerItem } from "@shared/ui/MediaViewer";
+import { ChatPanel } from "./ChatPanel";
+import type { Attachment, ChatMediaItem, ChatType, Message } from "@shared/api/types";
 import {
   flattenMessages,
   useDeleteMessage,
@@ -60,6 +62,8 @@ export function Conversation({ target, headerActions }: Props) {
   const cache = useMessageCacheWriter();
 
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [viewer, setViewer] = useState<{ items: MediaViewerItem[]; index: number } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const messages = useMemo(() => flattenMessages(data?.pages), [data]);
@@ -147,6 +151,32 @@ export function Conversation({ target, headerActions }: Props) {
     react.mutate({ messageId: m.id, emoji, remove: !!existing?.reacted });
   };
 
+  // Open the viewer over every image currently loaded in the conversation,
+  // oldest first, positioned at the clicked one. The context panel supplies
+  // its own (server-aggregated) item list instead.
+  const openImageFromBubble = (a: Attachment) => {
+    const images: MediaViewerItem[] = messages
+      .flatMap((m) => m.attachments)
+      .filter((x) => x.isImage)
+      .map((x) => ({ id: x.id, url: x.url, fileName: x.fileName }));
+    const index = Math.max(
+      0,
+      images.findIndex((x) => x.id === a.id),
+    );
+    setViewer({ items: images.length > 0 ? images : [{ id: a.id, url: a.url, fileName: a.fileName }], index });
+  };
+
+  const openMediaFromPanel = (items: ChatMediaItem[], index: number) => {
+    setViewer({
+      items: items.map((it) => ({
+        id: it.attachment.id,
+        url: it.attachment.url,
+        fileName: it.attachment.fileName,
+      })),
+      index,
+    });
+  };
+
   const previewFor = (id: string | null): string | undefined => {
     if (!id) return undefined;
     const parent = messages.find((m) => m.id === id);
@@ -188,6 +218,17 @@ export function Conversation({ target, headerActions }: Props) {
             <Icon.Phone size={20} />
           </button>
         )}
+        <button
+          className={cn("conv__panel-toggle", panelOpen && "conv__panel-toggle--active")}
+          title="Медиа, файлы и ссылки"
+          onClick={() => setPanelOpen((v) => !v)}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <path d="m21 15-5-5L5 21" />
+          </svg>
+        </button>
         {headerActions}
       </header>
 
@@ -243,6 +284,7 @@ export function Conversation({ target, headerActions }: Props) {
                 onDelete={handleDelete}
                 onReact={handleReact}
                 onPin={handlePin}
+                onOpenImage={openImageFromBubble}
               />
             </div>
           );
@@ -269,6 +311,23 @@ export function Conversation({ target, headerActions }: Props) {
         onClearReply={() => setReplyTo(null)}
         onSend={handleSend}
       />
+
+      {panelOpen && (
+        <ChatPanel
+          chatType={chatType}
+          chatId={chatId}
+          onClose={() => setPanelOpen(false)}
+          onOpenMedia={openMediaFromPanel}
+        />
+      )}
+      {viewer && (
+        <MediaViewer
+          items={viewer.items}
+          index={viewer.index}
+          onClose={() => setViewer(null)}
+          onIndexChange={(index) => setViewer((v) => (v ? { ...v, index } : v))}
+        />
+      )}
     </section>
   );
 }

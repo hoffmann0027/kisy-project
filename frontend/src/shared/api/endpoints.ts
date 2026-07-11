@@ -11,6 +11,8 @@ import type {
   FeedbackItem,
   FeedbackPage,
   CallLogItem,
+  ChatLinkPage,
+  ChatMediaPage,
   Group,
   IceConfig,
   Invitation,
@@ -130,6 +132,20 @@ export const e2eeApi = {
     apiClient.get<{ welcomes: E2EEGroupMessageDTO[] }>(`/e2ee/welcomes?deviceId=${deviceId}`),
   ackWelcome: (welcomeId: string, deviceId: string) =>
     apiClient.post<{ acked: boolean }>(`/e2ee/welcomes/${welcomeId}/ack?deviceId=${deviceId}`),
+};
+
+// Aggregated shared content of one chat (context panel tabs, stage C).
+export const chatMediaApi = {
+  list: (chatType: ChatType, chatId: string, kind: "media" | "files", cursor?: string, limit = 40) => {
+    const params = new URLSearchParams({ chatType, chatId, kind, limit: String(limit) });
+    if (cursor) params.set("cursor", cursor);
+    return apiClient.get<ChatMediaPage>(`/chats/media?${params.toString()}`);
+  },
+  links: (chatType: ChatType, chatId: string, cursor?: string, limit = 40) => {
+    const params = new URLSearchParams({ chatType, chatId, kind: "links", limit: String(limit) });
+    if (cursor) params.set("cursor", cursor);
+    return apiClient.get<ChatLinkPage>(`/chats/media?${params.toString()}`);
+  },
 };
 
 export const chatsApi = {

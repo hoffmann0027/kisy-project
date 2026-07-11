@@ -190,6 +190,7 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  position: relative; /* anchors the context panel (stage C) */
   background:
     radial-gradient(800px 500px at 70% 0%, rgba(10, 132, 255, 0.05), transparent 60%);
 }
@@ -337,6 +338,13 @@
   flex-direction: column;
   gap: 6px;
   margin: 4px 0;
+}
+.bubble__att-img {
+  /* Was a link opening a new tab; now a button opening the media viewer. */
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: zoom-in;
 }
 .bubble__att-img img {
   max-width: 280px;
@@ -1017,3 +1025,261 @@
   .bubble { max-width: 86%; }
   .chatlist__header { padding: var(--space-3) var(--space-4); }
 }
+
+/* --- context panel: Медиа / Файлы / Ссылки (stage C) --- */
+.conv__panel-toggle {
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+}
+.conv__panel-toggle:hover,
+.conv__panel-toggle--active {
+  color: var(--color-text);
+  background: var(--color-surface-glass);
+}
+.cpanel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(320px, 85%);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface, #14161c);
+  border-left: 1px solid var(--color-border);
+  backdrop-filter: blur(14px);
+  z-index: 20;
+  animation: cpanel-in 0.18s ease;
+}
+@keyframes cpanel-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.cpanel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+.cpanel__title {
+  font-weight: 600;
+}
+.cpanel__close {
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+}
+.cpanel__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-border);
+}
+.cpanel__tab {
+  flex: 1;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+}
+.cpanel__tab--active {
+  background: var(--color-surface-glass);
+  color: var(--color-text);
+}
+.cpanel__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+.cpanel__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+.cpanel__tile {
+  border: none;
+  padding: 0;
+  background: var(--color-surface-glass);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  aspect-ratio: 1;
+  cursor: zoom-in;
+}
+.cpanel__tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.cpanel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cpanel__file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-glass);
+  color: inherit;
+  text-decoration: none;
+}
+.cpanel__file-type {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  padding: 3px 5px;
+}
+.cpanel__file-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cpanel__file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.cpanel__file-size {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+.cpanel__link {
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-glass);
+  color: var(--color-accent, #4c8dff);
+  font-size: 13px;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cpanel__empty {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  text-align: center;
+  padding: 28px 8px;
+}
+.cpanel__hint {
+  margin-top: 6px;
+  font-size: 11px;
+  opacity: 0.8;
+}
+.cpanel__more {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0;
+}
+.cpanel__skeleton {
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(90deg, var(--color-surface-glass) 25%, rgba(255, 255, 255, 0.06) 50%, var(--color-surface-glass) 75%);
+  background-size: 200% 100%;
+  animation: cpanel-shimmer 1.1s linear infinite;
+}
+.cpanel__skeleton--tile {
+  height: auto;
+  aspect-ratio: 1;
+}
+@keyframes cpanel-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+/* --- media viewer lightbox (stage C) --- */
+.mviewer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(8, 10, 14, 0.92);
+  display: grid;
+  place-items: center;
+  outline: none;
+}
+.mviewer__bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: linear-gradient(rgba(0, 0, 0, 0.55), transparent);
+  color: #fff;
+}
+.mviewer__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+.mviewer__count {
+  font-size: 12px;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+.mviewer__btn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  cursor: pointer;
+}
+.mviewer__btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+.mviewer__img {
+  max-width: 92vw;
+  max-height: 86vh;
+  border-radius: var(--radius-md);
+  cursor: zoom-in;
+  transition: transform 0.2s ease;
+}
+.mviewer__img--zoomed {
+  transform: scale(2);
+  cursor: zoom-out;
+}
+.mviewer__nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 1;
+}
+.mviewer__nav:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+.mviewer__nav--prev { left: 18px; }
+.mviewer__nav--next { right: 18px; }

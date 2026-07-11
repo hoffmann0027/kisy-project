@@ -84,6 +84,35 @@ export interface UploadLimit {
   chunkBytes: number;
 }
 
+/** One entry of the chat context panel's Media/Files tabs. */
+export interface ChatMediaItem {
+  attachment: Attachment;
+  messageId: string;
+  senderId: string;
+  createdAt: string;
+}
+
+export interface ChatMediaPage {
+  items: ChatMediaItem[];
+  nextCursor?: string;
+  hasMore: boolean;
+}
+
+/** One entry of the Links tab (plaintext messages only — E2EE bodies are
+ * unreadable to the server by design). */
+export interface ChatLinkItem {
+  url: string;
+  messageId: string;
+  senderId: string;
+  createdAt: string;
+}
+
+export interface ChatLinkPage {
+  items: ChatLinkItem[];
+  nextCursor?: string;
+  hasMore: boolean;
+}
+
 export interface Message {
   id: string;
   chatId: string;
