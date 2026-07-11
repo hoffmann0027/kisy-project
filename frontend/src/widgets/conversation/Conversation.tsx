@@ -68,6 +68,8 @@ export function Conversation({ target, headerActions }: Props) {
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [viewer, setViewer] = useState<{ items: MediaViewerItem[]; index: number } | null>(null);
+  // Reply jump (stage F): the message briefly highlighted after a jump.
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   // Multi-select + forwarding (stage D).
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [forwardOpen, setForwardOpen] = useState(false);
@@ -247,6 +249,30 @@ export function Conversation({ target, headerActions }: Props) {
     });
   };
 
+  // Jump to a replied-to message: scroll it into view and flash a highlight.
+  // If it is not loaded yet (older than the current window), page backwards a
+  // few times until it appears, then retry.
+  const jumpToMessage = (id: string | null) => {
+    if (!id) return;
+    let attempts = 0;
+    const tryScroll = () => {
+      const el = document.getElementById(`msg-${id}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        setHighlightId(id);
+        window.setTimeout(() => setHighlightId((cur) => (cur === id ? null : cur)), 1600);
+        return;
+      }
+      if (attempts < 8 && hasNextPage) {
+        attempts++;
+        void fetchNextPage().then(() => window.setTimeout(tryScroll, 120));
+      } else {
+        toast.info("Исходное сообщение недоступно");
+      }
+    };
+    tryScroll();
+  };
+
   const previewFor = (id: string | null): string | undefined => {
     if (!id) return undefined;
     const parent = messages.find((m) => m.id === id);
@@ -340,7 +366,7 @@ export function Conversation({ target, headerActions }: Props) {
           const showDay = day !== lastDay;
           lastDay = day;
           return (
-            <div key={m.id}>
+            <div key={m.id} id={`msg-${m.id}`} className={cn(highlightId === m.id && "msg-row--highlight")}>
               {showDay && <div className="conv__day">{day}</div>}
               <MessageBubble
                 message={m}
@@ -349,6 +375,8 @@ export function Conversation({ target, headerActions }: Props) {
                 canEdit={m.senderId === me.id && !m.pending && !m.failed && !m.encrypted}
                 status={statusFor(m)}
                 replyPreview={previewFor(m.replyTo)}
+                replyTargetId={m.replyTo}
+                onJumpToReply={jumpToMessage}
                 onReply={setReplyTo}
                 onEdit={handleEdit}
                 onDelete={handleDelete}

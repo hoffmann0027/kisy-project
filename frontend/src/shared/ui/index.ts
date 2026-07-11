@@ -8,3 +8,4 @@ export { Spinner } from "./Spinner";
 export { Modal } from "./Modal";
 export { ToastHost } from "./ToastHost";
 export { toast, useToastStore } from "./toast";
+export { EmojiPicker, pushRecentEmoji } from "./EmojiPicker";

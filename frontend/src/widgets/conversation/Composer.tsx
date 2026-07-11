@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@shared/ui/icons";
-import { IconButton, toast } from "@shared/ui";
+import { EmojiPicker, IconButton, toast } from "@shared/ui";
 import type { Attachment, Message } from "@shared/api/types";
 import { fileTypeLabel, formatBytes, uploadFile } from "@entities/attachment/upload";
 import { useUploadLimit } from "@entities/attachment/queries";
@@ -34,6 +34,7 @@ export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [sendingVoice, setSendingVoice] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const { data: limit } = useUploadLimit();
   const recorder = useVoiceRecorder();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -164,6 +165,20 @@ export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply
     });
   };
 
+  const insertEmoji = (char: string) => {
+    const el = areaRef.current;
+    const start = el ? el.selectionStart : text.length;
+    const end = el ? el.selectionEnd : text.length;
+    const next = text.slice(0, start) + char + text.slice(end);
+    updateText(next);
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.focus();
+      const pos = start + char.length;
+      el.setSelectionRange(pos, pos);
+    });
+  };
+
   const onFormatKey = (e: React.KeyboardEvent) => {
     if (!(e.ctrlKey || e.metaKey)) return false;
     const k = e.key.toLowerCase();
@@ -279,6 +294,22 @@ export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply
             <button className="composer__fmt" title="Код (Ctrl+E)" onClick={() => wrapSelection("`")}>
               {"</>"}
             </button>
+            <div className="composer__emoji-wrap">
+              <button
+                className="composer__fmt composer__emoji-toggle"
+                title="Эмодзи"
+                onClick={() => setEmojiOpen((v) => !v)}
+              >
+                <Icon.Smile size={18} />
+              </button>
+              {emojiOpen && (
+                <EmojiPicker
+                  ignoreSelector=".composer__emoji-toggle"
+                  onPick={insertEmoji}
+                  onClose={() => setEmojiOpen(false)}
+                />
+              )}
+            </div>
           </div>
           <textarea
             ref={areaRef}

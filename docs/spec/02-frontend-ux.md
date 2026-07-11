@@ -140,3 +140,13 @@ interaction, responsive behavior and API interaction for this screen.
 Describe every UI element, validation rule, loading state, empty state,
 error state, permissions, transitions, accessibility behavior, keyboard
 interaction, responsive behavior and API interaction for this screen.
+
+## Emoji picker & reply jump (stage F)
+
+The emoji picker (shared/ui/EmojiPicker) offers categorized emojis, keyword
+search (RU/EN) and a "recent" row persisted in localStorage. It opens from
+the composer (insert at the caret) and from a message's reaction menu (react
+with any emoji, beyond the 5 quick ones). Clicking a message's reply badge
+jumps to the original: it scrolls into view and flashes a highlight; if the
+original is older than the loaded window, earlier pages are fetched until it
+appears. Both are client-only — no API changes.

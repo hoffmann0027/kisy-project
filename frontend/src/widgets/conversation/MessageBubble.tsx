@@ -2,6 +2,7 @@ import { memo, useState } from "react";
 import { cn } from "@shared/lib/cn";
 import { formatTime } from "@shared/lib/format";
 import { Icon } from "@shared/ui/icons";
+import { EmojiPicker } from "@shared/ui";
 import { VoiceBubble } from "@features/voice-message/VoiceBubble";
 import { renderRichText, firstUrl } from "@shared/lib/richText";
 import { LinkPreviewCard } from "./LinkPreviewCard";
@@ -19,6 +20,9 @@ interface Props {
   canEdit: boolean;
   status?: DeliveryStatus;
   replyPreview?: string;
+  /** Message id this one replies to (stage F: jump to original on click). */
+  replyTargetId?: string | null;
+  onJumpToReply?: (id: string | null) => void;
   onReply: (m: Message) => void;
   onEdit: (m: Message, text: string) => void;
   onDelete: (m: Message) => void;
@@ -54,6 +58,8 @@ export const MessageBubble = memo(function MessageBubble({
   canEdit,
   status,
   replyPreview,
+  replyTargetId,
+  onJumpToReply,
   onReply,
   onEdit,
   onDelete,
@@ -66,6 +72,7 @@ export const MessageBubble = memo(function MessageBubble({
   onToggleSelect,
 }: Props) {
   const [editing, setEditing] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const [draft, setDraft] = useState(message.text ?? "");
   const previewUrl = message.text ? firstUrl(message.text) : null;
 
@@ -117,6 +124,25 @@ export const MessageBubble = memo(function MessageBubble({
               {e}
             </button>
           ))}
+          <div className="bubble__emoji-wrap">
+            <button
+              className="bubble__action bubble__emoji-more"
+              onClick={() => setEmojiOpen((v) => !v)}
+              title="Больше эмодзи"
+            >
+              <Icon.Plus size={15} />
+            </button>
+            {emojiOpen && (
+              <EmojiPicker
+                ignoreSelector=".bubble__emoji-more"
+                onPick={(char) => {
+                  onReact(message, char);
+                  setEmojiOpen(false);
+                }}
+                onClose={() => setEmojiOpen(false)}
+              />
+            )}
+          </div>
           <button className="bubble__action" onClick={() => onReply(message)} title="Ответить">
             <Icon.Reply size={15} />
           </button>
@@ -148,7 +174,15 @@ export const MessageBubble = memo(function MessageBubble({
           <div className="bubble__forwarded">Переслано от {message.forwardedFrom.senderName || "пользователя"}</div>
         )}
 
-        {replyPreview && <div className="bubble__reply">{replyPreview}</div>}
+        {replyPreview && (
+          <button
+            className="bubble__reply bubble__reply--btn"
+            onClick={() => onJumpToReply?.(replyTargetId ?? null)}
+            title="Перейти к сообщению"
+          >
+            {replyPreview}
+          </button>
+        )}
 
         {message.attachments.length > 0 && (
           <div className="bubble__attachments">
