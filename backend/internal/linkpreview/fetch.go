@@ -27,10 +27,13 @@ var (
 )
 
 const (
-	fetchTimeout   = 6 * time.Second
-	maxRedirects   = 3
-	maxHTMLBytes   = 512 << 10 // parse at most 512 KiB of HTML
-	maxImageBytes  = 5 << 20   // proxy at most 5 MiB of image
+	fetchTimeout = 6 * time.Second
+	maxRedirects = 3
+	// Real-world pages put OG meta tags far into a script-heavy <head>
+	// (YouTube's og:title sits ~640 KiB in), so the cap must be generous;
+	// memory stays bounded by the LimitReader and the 30/min rate limit.
+	maxHTMLBytes  = 2 << 20 // parse at most 2 MiB of HTML
+	maxImageBytes = 5 << 20 // proxy at most 5 MiB of image
 	userAgent      = "KISY-LinkPreview/1.0 (+https://kisy.local)"
 	acceptLanguage = "en,ru;q=0.8"
 )
