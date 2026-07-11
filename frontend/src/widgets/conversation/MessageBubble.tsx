@@ -3,6 +3,8 @@ import { cn } from "@shared/lib/cn";
 import { formatTime } from "@shared/lib/format";
 import { Icon } from "@shared/ui/icons";
 import { VoiceBubble } from "@features/voice-message/VoiceBubble";
+import { renderRichText, firstUrl } from "@shared/lib/richText";
+import { LinkPreviewCard } from "./LinkPreviewCard";
 import type { Attachment, Message } from "@shared/api/types";
 
 // Delivery state of one of the current user's own messages, rendered as
@@ -33,22 +35,6 @@ interface Props {
 }
 
 const QUICK_EMOJI = ["👍", "❤️", "😂", "🔥", "👏"];
-
-const MENTION_SPLIT = /(@[A-Za-z0-9_]{3,32})/g;
-const MENTION_ONE = /^@[A-Za-z0-9_]{3,32}$/;
-
-// renderText highlights @mentions inside a message body.
-function renderText(text: string) {
-  return text.split(MENTION_SPLIT).map((part, i) =>
-    MENTION_ONE.test(part) ? (
-      <span key={i} className="mention">
-        {part}
-      </span>
-    ) : (
-      part
-    ),
-  );
-}
 
 function StatusTick({ status }: { status: DeliveryStatus }) {
   if (status === "pending") return <span className="tick tick--pending" title="Отправляется">🕓</span>;
@@ -81,6 +67,7 @@ export const MessageBubble = memo(function MessageBubble({
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.text ?? "");
+  const previewUrl = message.text ? firstUrl(message.text) : null;
 
   const startEdit = () => {
     setDraft(message.text ?? "");
@@ -115,7 +102,7 @@ export const MessageBubble = memo(function MessageBubble({
           {message.forwardedFrom && (
             <div className="bubble__forwarded">Переслано от {message.forwardedFrom.senderName || "пользователя"}</div>
           )}
-          <span>{message.text ? renderText(message.text) : message.undecryptable ? "🔒 Зашифрованное сообщение" : ""}</span>
+          <span>{message.text ? renderRichText(message.text) : message.undecryptable ? "🔒 Зашифрованное сообщение" : ""}</span>
         </div>
       </div>
     );
@@ -212,7 +199,10 @@ export const MessageBubble = memo(function MessageBubble({
             🔒 Зашифрованное сообщение
           </span>
         ) : (
-          <span>{message.text ? renderText(message.text) : null}</span>
+          <span>{message.text ? renderRichText(message.text) : null}</span>
+        )}
+        {message.text && previewUrl && (
+          <LinkPreviewCard url={previewUrl} autoFetch={!message.encrypted} />
         )}
         <span className="bubble__meta">
           {message.editedAt && <span className="bubble__edited">изменено</span>}

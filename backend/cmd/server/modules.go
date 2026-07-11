@@ -31,6 +31,7 @@ import (
 	"kisy-backend/internal/feedback"
 	"kisy-backend/internal/groups"
 	"kisy-backend/internal/invitations"
+	"kisy-backend/internal/linkpreview"
 	"kisy-backend/internal/messages"
 	"kisy-backend/internal/notes"
 	"kisy-backend/internal/notifications"
@@ -55,6 +56,7 @@ type modules struct {
 	invitesHandler       *invitations.Handler
 	chatsHandler         *chats.Handler
 	chatmediaHandler     *chatmedia.Handler
+	linkPreviewHandler   *linkpreview.Handler
 	groupsHandler        *groups.Handler
 	avatarsHandler       *avatars.Handler
 	messagesHandler      *messages.Handler
@@ -217,6 +219,9 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		m := authHandler.ClientMeta(r)
 		return messages.ActorMeta{UserID: claims.UserID, RoleLevel: claims.RoleLevel, SessionID: claims.SessionID, IPHash: m.IPHash, RequestID: m.RequestID}, true
 	})
+
+	// --- link previews (SSRF-guarded outbound fetch + Redis cache) ---
+	linkPreviewHandler := linkpreview.NewHandler(linkpreview.NewService(rdb, log))
 
 	// --- chat media aggregation (context panel tabs: media/files/links) ---
 	chatmediaSvc := chatmedia.NewService(pool, chatmedia.NewPostgresRepository(), chatmedia.Authorizer{
@@ -633,6 +638,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		invitesHandler:       invitesHandler,
 		chatsHandler:         chatsHandler,
 		chatmediaHandler:     chatmediaHandler,
+		linkPreviewHandler:   linkPreviewHandler,
 		groupsHandler:        groupsHandler,
 		avatarsHandler:       avatarsHandler,
 		messagesHandler:      messagesHandler,

@@ -1016,6 +1016,69 @@ paths:
                                 createdAt: { type: string, format: date-time }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /link-preview:
+    post:
+      tags: [messages]
+      summary: Fetch OpenGraph metadata for a URL (SSRF-guarded)
+      description: >
+        The server fetches the URL on the user's behalf and returns
+        title/description/imageUrl/siteName. SSRF-critical: only http/https;
+        the resolved IP is re-checked right before dialing, so private,
+        loopback, link-local (incl. 169.254.169.254 cloud metadata), CGNAT
+        and unspecified addresses are refused — defeating DNS rebinding too.
+        Body size and timeout are capped; redirects are re-validated per hop;
+        results are cached in Redis (failures negatively). In E2EE chats the
+        server never sees the URL, so the client calls this only on explicit
+        user action.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string, format: uri }
+      responses:
+        '200':
+          description: Preview metadata
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          preview:
+                            type: object
+                            properties:
+                              url: { type: string }
+                              title: { type: string }
+                              description: { type: string }
+                              imageUrl: { type: string }
+                              siteName: { type: string }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /link-preview/image:
+    get:
+      tags: [messages]
+      summary: Proxy a preview image through the SSRF guard (same-origin)
+      description: >
+        Re-fetches a preview image URL through the same guard and streams the
+        bytes, so the browser loads it same-origin under strict CSP
+        (img-src 'self'). Only image/* responses are served.
+      parameters:
+        - { name: url, in: query, required: true, schema: { type: string, format: uri } }
+      responses:
+        '200': { description: Image bytes, content: { image/*: { schema: { type: string, format: binary } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /chats/media:
     get:
       tags: [messages]

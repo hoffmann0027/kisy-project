@@ -360,3 +360,23 @@ sending the decrypted text when forwarding out to a non-E2EE target — an
 explicit user action). Server-enforced hierarchy applies to the plaintext
 path; for client-side E2EE forwards the server always enforces target access
 but cannot police the source it cannot see.
+
+## Text Formatting & Link Previews (stage E)
+
+Message bodies support a markdown subset — **bold**, _italic_, ~~strike~~,
+`inline code`, ```fenced code```, autolinks and @mentions. Rendered by
+tokenizing into React nodes (shared/lib/richText), never via
+dangerouslySetInnerHTML, so there is no HTML-injection surface; the stored
+text is the raw source.
+
+`POST /link-preview { url }` fetches OpenGraph metadata server-side. SSRF is
+the core threat (docs/spec/06): scheme allowlist (http/https only); the
+resolved IP is validated in the dialer Control hook right before connect, so
+private/loopback/link-local (incl. 169.254.169.254)/CGNAT/unspecified are
+refused and DNS-rebinding is defeated; redirects re-validated per hop, body
+size and timeout capped; rate-limited (30/min); results cached in Redis
+(failures negatively, shorter TTL). `GET /link-preview/image?url=` proxies
+the preview image through the same guard so it loads same-origin under strict
+CSP. In E2EE chats the server never sees message URLs, so the client requests
+a preview only on an explicit user action; plaintext chats fetch
+automatically.

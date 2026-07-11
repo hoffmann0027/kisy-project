@@ -145,6 +145,35 @@ export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply
     }
   };
 
+  // Wrap the current selection with a markdown marker (bold/italic/code),
+  // toggling it off if already wrapped. Keeps focus and selection sensible.
+  const wrapSelection = (marker: string) => {
+    const el = areaRef.current;
+    if (!el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const before = text.slice(0, start);
+    const sel = text.slice(start, end);
+    const after = text.slice(end);
+    const wrapped = before + marker + sel + marker + after;
+    updateText(wrapped);
+    // Restore selection inside the markers on the next tick.
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + marker.length, end + marker.length);
+    });
+  };
+
+  const onFormatKey = (e: React.KeyboardEvent) => {
+    if (!(e.ctrlKey || e.metaKey)) return false;
+    const k = e.key.toLowerCase();
+    const marker = k === "b" ? "**" : k === "i" ? "_" : k === "e" ? "`" : null;
+    if (!marker) return false;
+    e.preventDefault();
+    wrapSelection(marker);
+    return true;
+  };
+
   return (
     <>
       {replyTo && (
@@ -240,6 +269,17 @@ export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply
           <IconButton label="Прикрепить файл" onClick={() => fileRef.current?.click()}>
             <Icon.Paperclip size={20} />
           </IconButton>
+          <div className="composer__format" role="toolbar" aria-label="Форматирование">
+            <button className="composer__fmt" title="Жирный (Ctrl+B)" onClick={() => wrapSelection("**")}>
+              <b>B</b>
+            </button>
+            <button className="composer__fmt" title="Курсив (Ctrl+I)" onClick={() => wrapSelection("_")}>
+              <i>I</i>
+            </button>
+            <button className="composer__fmt" title="Код (Ctrl+E)" onClick={() => wrapSelection("`")}>
+              {"</>"}
+            </button>
+          </div>
           <textarea
             ref={areaRef}
             className="composer__input"
@@ -251,6 +291,7 @@ export function Composer({ chatType, chatId, replyTo, replyPreview, onClearReply
               signalTyping();
             }}
             onKeyDown={(e) => {
+              if (onFormatKey(e)) return;
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 submit();

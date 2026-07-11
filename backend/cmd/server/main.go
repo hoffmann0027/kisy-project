@@ -233,6 +233,13 @@ func newRouter(d routerDeps) http.Handler {
 				m.searchHandler.Routes(r)
 			})
 
+			r.Group(func(r chi.Router) {
+				// Server-side outbound fetch: rate-limit to blunt SSRF probing
+				// and abuse of the preview fetcher.
+				r.Use(m.limiter.Limit("link-preview", 30, time.Minute))
+				m.linkPreviewHandler.Routes(r)
+			})
+
 			r.Route("/e2ee", func(r chi.Router) {
 				// Key directory + MLS handshake mailbox. Uploads are
 				// rate-limited: key material churn is low-frequency.

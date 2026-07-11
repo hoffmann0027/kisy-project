@@ -151,6 +151,21 @@ export const chatMediaApi = {
   },
 };
 
+export interface LinkPreview {
+  url: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  siteName: string;
+}
+
+// Link previews (stage E): the server fetches OpenGraph metadata behind an
+// SSRF guard; the image is proxied same-origin so strict CSP holds.
+export const linkPreviewApi = {
+  fetch: (url: string) => apiClient.post<{ preview: LinkPreview }>("/link-preview", { url }),
+  imageProxyUrl: (imageUrl: string) => `/api/v1/link-preview/image?url=${encodeURIComponent(imageUrl)}`,
+};
+
 export const chatsApi = {
   list: () => apiClient.get<{ chats: Chat[] }>("/chats"),
   open: (userId: string) => apiClient.post<{ chat: Chat }>("/chats", { userId }),
