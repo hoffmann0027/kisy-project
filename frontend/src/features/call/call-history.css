@@ -17,7 +17,7 @@
   border-radius: var(--radius-md);
 }
 .callhist__item:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--hover);
 }
 .callhist__body {
   flex: 1;
