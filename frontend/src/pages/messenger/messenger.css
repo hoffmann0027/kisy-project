@@ -1962,6 +1962,61 @@
   font-size: 13px;
 }
 
+/* --- threads (UPD3 stage K) --- */
+.bubble__thread {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  border: none;
+  background: rgba(10, 132, 255, 0.12);
+  color: var(--color-accent, #7aa2ff);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: var(--radius-round);
+  cursor: pointer;
+}
+.bubble__thread:hover {
+  background: rgba(10, 132, 255, 0.2);
+}
+.bubble__thread-time {
+  color: var(--color-text-tertiary);
+  font-weight: 500;
+}
+
+.thread-panel {
+  width: min(400px, 92%);
+  display: flex;
+  flex-direction: column;
+}
+.thread-panel__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.thread-panel__root {
+  padding-bottom: var(--space-2);
+}
+.thread-panel__divider {
+  font-size: 12px;
+  font-weight: 640;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-tertiary);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-2);
+}
+/* Bubbles inside the narrow panel take full width for readability. */
+.thread-panel .bubble {
+  max-width: 100%;
+}
+
 /* --- disappearing messages (UPD3 stage J) --- */
 .disappear-toggle--active {
   color: var(--color-accent, #7aa2ff);

@@ -74,6 +74,8 @@ export interface SendMessageBody {
   /** Forwarded-from attribution for a client-side (E2EE) forward. */
   forwardedFromSenderId?: string;
   forwardedFromSenderName?: string;
+  /** Thread reply (stage K, groups only): the root message id. */
+  threadRootId?: string;
 }
 
 // Disappearing messages (UPD3 stage J): a chat-wide default timer for new
@@ -329,6 +331,12 @@ export const messagesApi = {
     apiClient.put<{ message: Message }>(`/messages/${messageId}/expiry`, { ttlSeconds }),
   listPinned: (chatType: ChatType, chatId: string) =>
     apiClient.get<{ pinned: Message[] }>(`/messages/pinned?chatType=${chatType}&chatId=${chatId}`),
+  // Thread page (stage K): replies of one root, newest-first with cursor.
+  listThread: (rootId: string, cursor?: string, limit = 50) => {
+    const params = new URLSearchParams({ rootId, limit: String(limit) });
+    if (cursor) params.set("cursor", cursor);
+    return apiClient.get<MessagePage>(`/messages/thread?${params.toString()}`);
+  },
   addReaction: (messageId: string, emoji: string) =>
     apiClient.post<{ ok: boolean }>(`/messages/${messageId}/reactions`, { emoji }),
   removeReaction: (messageId: string, emoji: string) =>

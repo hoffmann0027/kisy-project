@@ -74,6 +74,14 @@ type Message struct {
 	// message. Metadata only (like reply_to) — in E2EE chats the server sees
 	// the timer but never the content.
 	ExpiresAt *time.Time
+
+	// Threads (stage K, groups only). A reply carries its root's id and is
+	// excluded from the main feed; the root carries denormalized reply
+	// stats. Metadata like reply_to — stays in the clear under future group
+	// E2EE (stage 5), revealing structure but never content.
+	ThreadRootID      *uuid.UUID
+	ThreadReplyCount  int
+	ThreadLastReplyAt *time.Time
 }
 
 // ReactionSummary aggregates one emoji on a message: how many users chose
@@ -125,6 +133,11 @@ type DTO struct {
 
 	// Disappearing (stage J): when this message self-destructs.
 	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+
+	// Threads (stage K): set on replies / on roots respectively.
+	ThreadRootID      *uuid.UUID `json:"threadRootId,omitempty"`
+	ThreadReplyCount  int        `json:"threadReplyCount,omitempty"`
+	ThreadLastReplyAt *time.Time `json:"threadLastReplyAt,omitempty"`
 }
 
 // ForwardedFrom is the "Переслано от …" attribution shown on a forwarded
@@ -149,6 +162,11 @@ func (m *Message) ToDTO() DTO {
 		DeletedAt:   m.DeletedAt,
 		EditedAt:    m.EditedAt,
 		PinnedAt:    m.PinnedAt,
+		// Thread coordinates survive deletion: a tombstoned reply must stay
+		// in its thread, and a tombstoned root keeps its plaque.
+		ThreadRootID:      m.ThreadRootID,
+		ThreadReplyCount:  m.ThreadReplyCount,
+		ThreadLastReplyAt: m.ThreadLastReplyAt,
 	}
 	if !m.IsDeleted {
 		dto.Text = m.Text

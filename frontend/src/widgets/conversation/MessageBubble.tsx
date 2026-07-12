@@ -38,6 +38,8 @@ interface Props {
   onToggleSelect?: (m: Message) => void;
   /** Per-message disappearing timer (stage J, own messages only). */
   onSetExpiry?: (m: Message, ttlSeconds: number | null) => void;
+  /** Threads (stage K, group main feed only): open the discussion panel. */
+  onOpenThread?: (m: Message) => void;
 }
 
 const QUICK_EMOJI = ["👍", "❤️", "😂", "🔥", "👏"];
@@ -91,6 +93,7 @@ export const MessageBubble = memo(function MessageBubble({
   selected,
   onToggleSelect,
   onSetExpiry,
+  onOpenThread,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -168,6 +171,11 @@ export const MessageBubble = memo(function MessageBubble({
           <button className="bubble__action" onClick={() => onReply(message)} title="Ответить">
             <Icon.Reply size={15} />
           </button>
+          {onOpenThread && !message.threadRootId && (
+            <button className="bubble__action" onClick={() => onOpenThread(message)} title="Обсудить в треде">
+              <Icon.Chat size={15} />
+            </button>
+          )}
           {!message.undecryptable && (
             <button className="bubble__action" onClick={() => onForward(message)} title="Переслать">
               <Icon.Forward size={15} />
@@ -328,6 +336,14 @@ export const MessageBubble = memo(function MessageBubble({
               </button>
             ))}
           </div>
+        )}
+
+        {onOpenThread && (message.threadReplyCount ?? 0) > 0 && (
+          <button className="bubble__thread" onClick={() => onOpenThread(message)}>
+            <Icon.Chat size={13} />
+            {message.threadReplyCount === 1 ? "1 ответ" : `Ответы: ${message.threadReplyCount}`}
+            {message.threadLastReplyAt && <span className="bubble__thread-time">· {formatTime(message.threadLastReplyAt)}</span>}
+          </button>
         )}
       </div>
     </div>

@@ -222,6 +222,11 @@ type SendInput struct {
 	// self-destruction, counted from creation. Overrides the chat's default
 	// TTL for this one message.
 	TTLSeconds *int64
+
+	// Thread reply (stage K, groups only): the root message this reply
+	// belongs to. The root must live in the same chat and not be a reply
+	// itself (threads never nest).
+	ThreadRootID *uuid.UUID
 }
 
 // Send validates access, persists the message and publishes it, returning the
@@ -276,6 +281,25 @@ func (s *Service) SendTx(ctx context.Context, q db.DBTX, in SendInput, actor Act
 		}
 	}
 
+	// A thread reply (stage K): groups only; the root must be a live
+	// message of the SAME chat and not itself a reply (no nesting). Foreign
+	// roots surface as not-found so ids never leak across chats.
+	if in.ThreadRootID != nil {
+		if in.ChatType != ChatGroup {
+			return DTO{}, nil, ErrForbidden
+		}
+		root, err := s.repo.GetByID(ctx, s.pool, *in.ThreadRootID)
+		if err != nil {
+			return DTO{}, nil, ErrNotFound
+		}
+		if root.ChatType != in.ChatType || root.ChatID != in.ChatID {
+			return DTO{}, nil, ErrNotFound
+		}
+		if root.IsDeleted || root.ThreadRootID != nil {
+			return DTO{}, nil, ErrForbidden
+		}
+	}
+
 	m := &Message{
 		ChatType:                in.ChatType,
 		ChatID:                  in.ChatID,
@@ -288,6 +312,7 @@ func (s *Service) SendTx(ctx context.Context, q db.DBTX, in SendInput, actor Act
 		ForwardedFromSenderID:   in.ForwardedFromSenderID,
 		ForwardedFromSenderName: in.ForwardedFromSenderName,
 		ScheduledMessageID:      in.ScheduledMessageID,
+		ThreadRootID:            in.ThreadRootID,
 	}
 	if text != "" {
 		m.Text = &text
@@ -533,46 +558,8 @@ func (s *Service) List(ctx context.Context, chatType string, chatID uuid.UUID, c
 		page.Items = append(page.Items, rows[i].ToDTO())
 	}
 
-	// Enrich live messages with reaction summaries in one batched query.
-	if s.reactions != nil && len(page.Items) > 0 {
-		ids := make([]uuid.UUID, 0, len(page.Items))
-		for i := range page.Items {
-			if !page.Items[i].IsDeleted {
-				ids = append(ids, page.Items[i].ID)
-			}
-		}
-		if len(ids) > 0 {
-			byMessage, err := s.reactions(ctx, ids, actor.UserID)
-			if err != nil {
-				return nil, err
-			}
-			for i := range page.Items {
-				if r, ok := byMessage[page.Items[i].ID]; ok {
-					page.Items[i].Reactions = r
-				}
-			}
-		}
-	}
-
-	// Attach files: enrich live messages with their attachment DTOs.
-	if s.attachLoad != nil && len(page.Items) > 0 {
-		ids := make([]uuid.UUID, 0, len(page.Items))
-		for i := range page.Items {
-			if !page.Items[i].IsDeleted {
-				ids = append(ids, page.Items[i].ID)
-			}
-		}
-		if len(ids) > 0 {
-			byMsg, err := s.attachLoad(ctx, ids)
-			if err != nil {
-				return nil, err
-			}
-			for i := range page.Items {
-				if a, ok := byMsg[page.Items[i].ID]; ok {
-					page.Items[i].Attachments = a
-				}
-			}
-		}
+	if err := s.enrich(ctx, page.Items, actor.UserID); err != nil {
+		return nil, err
 	}
 
 	// Group "read by N of M": for the actor's own group messages, count how
@@ -682,6 +669,92 @@ func (s *Service) SetPinned(ctx context.Context, messageID uuid.UUID, pin bool, 
 		s.pub.PublishMessageUpdated(updated.ChatType, updated.ChatID, dto)
 	}
 	return &dto, nil
+}
+
+// enrich decorates live messages with reaction summaries and attachment
+// DTOs in batched queries (shared by the main feed and thread pages).
+func (s *Service) enrich(ctx context.Context, items []DTO, viewerID uuid.UUID) error {
+	if len(items) == 0 {
+		return nil
+	}
+	ids := make([]uuid.UUID, 0, len(items))
+	for i := range items {
+		if !items[i].IsDeleted {
+			ids = append(ids, items[i].ID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	if s.reactions != nil {
+		byMessage, err := s.reactions(ctx, ids, viewerID)
+		if err != nil {
+			return err
+		}
+		for i := range items {
+			if r, ok := byMessage[items[i].ID]; ok {
+				items[i].Reactions = r
+			}
+		}
+	}
+	if s.attachLoad != nil {
+		byMsg, err := s.attachLoad(ctx, ids)
+		if err != nil {
+			return err
+		}
+		for i := range items {
+			if a, ok := byMsg[items[i].ID]; ok {
+				items[i].Attachments = a
+			}
+		}
+	}
+	return nil
+}
+
+// ListThread returns a page of one thread's replies (stage K). Access is
+// the root chat's access — exactly the same check as the main feed, so a
+// thread can never leak across clearance boundaries.
+func (s *Service) ListThread(ctx context.Context, rootID uuid.UUID, cursor string, limit int, actor ActorMeta) (*pagination.Page[DTO], error) {
+	root, err := s.repo.GetByID(ctx, s.pool, rootID)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+	if err := s.authorize(ctx, root.ChatType, root.ChatID, actor); err != nil {
+		return nil, ErrNotFound
+	}
+	if root.ThreadRootID != nil {
+		// Replies have no threads of their own.
+		return nil, ErrNotFound
+	}
+
+	cur, present, err := pagination.Decode(cursor)
+	if err != nil {
+		return nil, err
+	}
+	var curPtr *pagination.Cursor
+	if present {
+		curPtr = &cur
+	}
+	limit = pagination.NormalizeLimit(limit)
+	rows, err := s.repo.ListThreadPage(ctx, s.pool, rootID, curPtr, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	page := &pagination.Page[DTO]{Items: make([]DTO, 0, limit)}
+	if len(rows) > limit {
+		last := rows[limit-1]
+		page.NextCursor = pagination.Encode(pagination.Cursor{CreatedAt: last.CreatedAt, ID: last.ID})
+		page.HasMore = true
+		rows = rows[:limit]
+	}
+	for i := range rows {
+		page.Items = append(page.Items, rows[i].ToDTO())
+	}
+	if err := s.enrich(ctx, page.Items, actor.UserID); err != nil {
+		return nil, err
+	}
+	return page, nil
 }
 
 // SetExpiry sets or clears a disappearing timer on the actor's OWN message

@@ -26,6 +26,7 @@ import {
 } from "@entities/message/queries";
 import { pendingForChat, useScheduledMessages, useScheduleMessage } from "@entities/message/scheduled";
 import { ScheduledPanel } from "@features/scheduled/ScheduledPanel";
+import { ThreadPanel } from "@features/threads/ThreadPanel";
 import { e2eeSession } from "@entities/e2ee";
 import { messagesApi } from "@shared/api/endpoints";
 import { ApiError } from "@shared/api/envelope";
@@ -75,6 +76,8 @@ export function Conversation({ target, headerActions }: Props) {
   const { scheduled } = useScheduledMessages();
   const pendingScheduled = useMemo(() => pendingForChat(scheduled, chatType, chatId), [scheduled, chatType, chatId]);
   const [scheduledOpen, setScheduledOpen] = useState(false);
+  // Threads (stage K, groups): the root whose discussion panel is open.
+  const [threadRoot, setThreadRoot] = useState<Message | null>(null);
 
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -89,6 +92,13 @@ export function Conversation({ target, headerActions }: Props) {
   const selectionMode = selected.size > 0;
 
   const messages = useMemo(() => flattenMessages(data?.pages), [data]);
+  // The open thread's root, kept live: WS counter patches land in the main
+  // list cache, so prefer that copy over the snapshot taken on open.
+  const liveThreadRoot = useMemo(
+    () => (threadRoot ? (messages.find((m) => m.id === threadRoot.id) ?? threadRoot) : null),
+    [threadRoot, messages],
+  );
+  useEffect(() => setThreadRoot(null), [chatId]);
   const typers = Array.from(typingByChat[chatId] ?? []).filter((id) => id !== me.id);
 
   // Read receipts: seed the counterpart's read position from the chat DTO,
@@ -423,6 +433,7 @@ export function Conversation({ target, headerActions }: Props) {
                 selected={selected.has(m.id)}
                 onToggleSelect={toggleSelect}
                 onSetExpiry={handleSetExpiry}
+                onOpenThread={chatType === "group" ? setThreadRoot : undefined}
               />
             </div>
           );
@@ -493,6 +504,16 @@ export function Conversation({ target, headerActions }: Props) {
           chatId={chatId}
           onClose={() => setPanelOpen(false)}
           onOpenMedia={openMediaFromPanel}
+        />
+      )}
+      {liveThreadRoot && (
+        <ThreadPanel
+          root={liveThreadRoot}
+          onClose={() => setThreadRoot(null)}
+          onReact={handleReact}
+          onDelete={handleDelete}
+          onEdit={handleEdit}
+          onOpenImage={openImageFromBubble}
         />
       )}
       {viewer && (

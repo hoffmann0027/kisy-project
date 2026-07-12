@@ -120,9 +120,11 @@ import type { E2EESession } from "./session";
 import { topUpKeyPackages } from "./session";
 import {
   cachePlaintext,
+  cachedPlaintext,
   cacheScheduledPlaintext,
   cachedScheduledPlaintext,
   dropPlaintext,
+  sweepExpiredPlaintext,
   encryptForChat,
   hydrateMessage,
   processChatHandshake,
@@ -291,6 +293,28 @@ describe("E2EE private chat orchestration", () => {
     const gone = await hydrateMessage(alice, messageDTO("m-ttl", chatId, "user-alice", enc!.ciphertext));
     expect(gone.text).toBeNull();
     expect(gone.undecryptable).toBe(true);
+  });
+
+  it("self-evicts expired plaintext even without a delete event (stage J offline gap)", async () => {
+    const alice = await makeSession("user-alice");
+    const past = new Date(Date.now() - 60_000).toISOString();
+    const future = new Date(Date.now() + 60 * 60_000).toISOString();
+
+    // A message that expired while this device was offline, and one still live.
+    await cachePlaintext(alice, "expired", "исчезло пока был офлайн", past);
+    await cachePlaintext(alice, "alive", "ещё живое", future);
+
+    // Reading the expired entry enforces the timer and evicts it.
+    expect(await cachedPlaintext(alice, "expired")).toBeNull();
+    expect(await cachedPlaintext(alice, "alive")).toBe("ещё живое");
+
+    // The periodic sweep removes expired entries proactively (no read needed).
+    await cachePlaintext(alice, "expired2", "тоже истекло", past);
+    const removed = await sweepExpiredPlaintext(alice);
+    expect(removed).toBe(1);
+    expect(await cachedPlaintext(alice, "expired2")).toBeNull();
+    // Non-expiring and future entries survive the sweep.
+    expect(await cachedPlaintext(alice, "alive")).toBe("ещё живое");
   });
 
   it("marks history from before the device joined as undecryptable", async () => {

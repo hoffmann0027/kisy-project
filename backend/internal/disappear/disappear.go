@@ -156,7 +156,20 @@ func (r *PostgresRepository) DeleteMessages(ctx context.Context, q db.DBTX, ids 
 	if len(ids) == 0 {
 		return nil
 	}
-	_, err := q.Exec(ctx, `DELETE FROM messages WHERE id = ANY($1)`, ids)
+	// Expired thread replies (stage K) must not leave phantom counters on
+	// their roots. One statement: decrement, then delete.
+	_, err := q.Exec(ctx, `
+		WITH gone AS (
+			SELECT thread_root_id, COUNT(*) AS n FROM messages
+			WHERE id = ANY($1) AND thread_root_id IS NOT NULL
+			GROUP BY thread_root_id
+		), dec AS (
+			UPDATE messages r
+			SET thread_reply_count = GREATEST(r.thread_reply_count - gone.n, 0)
+			FROM gone
+			WHERE r.id = gone.thread_root_id
+		)
+		DELETE FROM messages WHERE id = ANY($1)`, ids)
 	if err != nil {
 		return fmt.Errorf("disappear: delete: %w", err)
 	}

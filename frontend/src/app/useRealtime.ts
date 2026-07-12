@@ -13,7 +13,15 @@ import { usePresenceStore } from "@shared/store/presence";
 import { useTypingStore } from "@shared/store/typing";
 import { useReadReceiptStore } from "@shared/store/readReceipts";
 import { useAuthStore } from "@shared/store/auth";
-import { dropPlaintext, e2eeSession, hydrateMessage, initE2EE, processChatHandshake, processWelcomes } from "@entities/e2ee";
+import {
+  dropPlaintext,
+  e2eeSession,
+  hydrateMessage,
+  initE2EE,
+  processChatHandshake,
+  processWelcomes,
+  sweepExpiredPlaintext,
+} from "@entities/e2ee";
 
 // useRealtime connects the WebSocket for the session and routes server events
 // into the query cache and the presence/typing stores. Mounted once by the
@@ -45,6 +53,16 @@ export function useRealtime() {
     void initE2EE(meId).then((s) => {
       if (s) return processWelcomes(s).catch(() => {});
     });
+
+    // Disappearing messages (stage J): evict any cached E2EE plaintext whose
+    // timer elapsed while this device was offline (the WS message.deleted
+    // purge only reaches connected clients). Run now and hourly.
+    const sweep = () => {
+      const s = e2eeSession();
+      if (s) void sweepExpiredPlaintext(s).catch(() => {});
+    };
+    sweep();
+    const sweepTimer = window.setInterval(sweep, 60 * 60 * 1000);
 
     wsClient.connect();
 
@@ -173,6 +191,7 @@ export function useRealtime() {
     return () => {
       unsub();
       unsubOpen();
+      window.clearInterval(sweepTimer);
       wsClient.disconnect();
     };
   }, [qc, meId]);
@@ -234,6 +253,25 @@ async function handleMessageCreated(
     qc.invalidateQueries({ queryKey: scheduledKey });
   }
 
+  // A thread reply (stage K) never enters the main feed: it lands in the
+  // open thread panel's cache, and the root's plaque counters advance.
+  if (msg.threadRootId) {
+    const rootId = msg.threadRootId;
+    qc.setQueryData(messageKeys.thread(rootId), (old: any) => {
+      if (!old) return old; // panel not open — nothing cached to update
+      const pages = old.pages as { items: Message[] }[];
+      if (pages.some((p) => p.items.some((m) => m.id === msg.id))) return old;
+      const first = { ...pages[0], items: [msg, ...pages[0].items] };
+      return { ...old, pages: [first, ...pages.slice(1)] };
+    });
+    patchMessage(qc, msg.chatType, msg.chatId, rootId, (root) => ({
+      ...root,
+      threadReplyCount: (root.threadReplyCount ?? 0) + 1,
+      threadLastReplyAt: msg.createdAt,
+    }));
+    return;
+  }
+
   // Insert into the open conversation's cache if present.
   qc.setQueryData(messageKeys.list(msg.chatType, msg.chatId), (old: any) => {
     if (!old) return old;
@@ -262,24 +300,29 @@ async function handleMessageCreated(
   }
 }
 
-// removeMessage drops a message from the cache entirely (expired
-// self-destructing messages leave no tombstone).
+// removeMessage drops a message from the caches entirely (expired
+// self-destructing messages leave no tombstone) — the main feed and any
+// open thread panel (stage K).
 function removeMessage(
   qc: ReturnType<typeof useQueryClient>,
   chatType: ChatType,
   chatId: string,
   messageId: string,
 ) {
-  qc.setQueryData(messageKeys.list(chatType, chatId), (old: any) => {
+  const drop = (old: any) => {
     if (!old) return old;
     const pages = (old.pages as { items: Message[] }[]).map((p) => ({
       ...p,
       items: p.items.filter((m) => m.id !== messageId),
     }));
     return { ...old, pages };
-  });
+  };
+  qc.setQueryData(messageKeys.list(chatType, chatId), drop);
+  qc.setQueriesData({ queryKey: ["thread"] }, drop);
 }
 
+// patchMessage rewrites one message wherever it is cached: the main feed
+// and any open thread panel (stage K).
 function patchMessage(
   qc: ReturnType<typeof useQueryClient>,
   chatType: ChatType,
@@ -287,12 +330,14 @@ function patchMessage(
   messageId: string,
   fn: (m: Message) => Message,
 ) {
-  qc.setQueryData(messageKeys.list(chatType, chatId), (old: any) => {
+  const rewrite = (old: any) => {
     if (!old) return old;
     const pages = (old.pages as { items: Message[] }[]).map((p) => ({
       ...p,
       items: p.items.map((m) => (m.id === messageId ? fn(m) : m)),
     }));
     return { ...old, pages };
-  });
+  };
+  qc.setQueryData(messageKeys.list(chatType, chatId), rewrite);
+  qc.setQueriesData({ queryKey: ["thread"] }, rewrite);
 }

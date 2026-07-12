@@ -471,3 +471,24 @@ The same purge runs for ordinary deletions. `expiresAt` is metadata (like
 it said. This is a system deletion — users still cannot hard-delete each
 other's messages. Tables: `messages.expires_at` + chat_disappear_settings
 (migration 000035).
+
+## Threads (UPD3 stage K)
+
+Group-only discussions layered as metadata over the same message stream:
+a reply carries the additive `threadRootId` field of `POST /messages`
+(the root must be a live non-reply message of the SAME group — foreign
+roots are masked 404, nesting is rejected). Replies never appear in the
+main feed (`GET /messages` filters them out); the root carries
+denormalized `threadReplyCount` / `threadLastReplyAt`, bumped atomically
+in the same statement as the reply insert. An expired (disappearing)
+reply decrements its root's counter when reaped; a hard-deleted root
+releases its replies into the main feed (`ON DELETE SET NULL`).
+
+`GET /messages/thread?rootId=&cursor=&limit=` pages one thread's replies
+with exactly the group's access check — threads can never leak across
+clearance boundaries. `message.created` events carry `threadRootId`, so
+clients route replies into the open panel and advance the root's plaque
+without touching the main feed. E2EE-forward-compatible: `threadRootId`
+is structural metadata (like `replyTo`) and stays in the clear once
+groups become MLS-encrypted; thread bodies will encrypt exactly like any
+other group message. Migration 000036.

@@ -21,6 +21,8 @@ type Repository interface {
 	// starting after the optional cursor. The extra row lets the caller
 	// detect whether more pages exist.
 	ListPage(ctx context.Context, q db.DBTX, chatType string, chatID uuid.UUID, cur *pagination.Cursor, limit int) ([]Message, error)
+	// ListThreadPage pages one thread's replies (stage K), same semantics.
+	ListThreadPage(ctx context.Context, q db.DBTX, rootID uuid.UUID, cur *pagination.Cursor, limit int) ([]Message, error)
 	SoftDelete(ctx context.Context, q db.DBTX, id uuid.UUID, at time.Time) error
 	// Update replaces a message's text and stamps edited_at, but only for the
 	// sender and only while the message is not deleted. Returns ErrNotFound
@@ -39,14 +41,15 @@ type PostgresRepository struct{}
 
 func NewPostgresRepository() *PostgresRepository { return &PostgresRepository{} }
 
-const messageColumns = `id, chat_type, chat_id, sender_id, text, reply_to, is_deleted, deleted_at, edited_at, pinned_at, pinned_by, created_at, ciphertext, alg, epoch, content_kind, forwarded_from_sender_id, forwarded_from_sender_name, scheduled_message_id, expires_at`
+const messageColumns = `id, chat_type, chat_id, sender_id, text, reply_to, is_deleted, deleted_at, edited_at, pinned_at, pinned_by, created_at, ciphertext, alg, epoch, content_kind, forwarded_from_sender_id, forwarded_from_sender_name, scheduled_message_id, expires_at, thread_root_id, thread_reply_count, thread_last_reply_at`
 
 func scanMessage(row pgx.Row) (*Message, error) {
 	var m Message
 	err := row.Scan(&m.ID, &m.ChatType, &m.ChatID, &m.SenderID, &m.Text, &m.ReplyTo,
 		&m.IsDeleted, &m.DeletedAt, &m.EditedAt, &m.PinnedAt, &m.PinnedBy, &m.CreatedAt,
 		&m.Ciphertext, &m.Alg, &m.Epoch, &m.ContentKind,
-		&m.ForwardedFromSenderID, &m.ForwardedFromSenderName, &m.ScheduledMessageID, &m.ExpiresAt)
+		&m.ForwardedFromSenderID, &m.ForwardedFromSenderName, &m.ScheduledMessageID, &m.ExpiresAt,
+		&m.ThreadRootID, &m.ThreadReplyCount, &m.ThreadLastReplyAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -57,15 +60,27 @@ func scanMessage(row pgx.Row) (*Message, error) {
 }
 
 func (r *PostgresRepository) Create(ctx context.Context, q db.DBTX, m *Message) error {
+	// One statement: the insert and the root's denormalized reply counters
+	// (stage K) land atomically even when q is the plain pool. The bump CTE
+	// matches nothing for non-thread messages.
 	err := q.QueryRow(ctx, `
-		INSERT INTO messages (chat_type, chat_id, sender_id, text, reply_to, ciphertext, alg, epoch, content_kind,
-		                      forwarded_from_message_id, forwarded_from_sender_id, forwarded_from_sender_name,
-		                      scheduled_message_id, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-		RETURNING id, is_deleted, created_at`,
+		WITH ins AS (
+			INSERT INTO messages (chat_type, chat_id, sender_id, text, reply_to, ciphertext, alg, epoch, content_kind,
+			                      forwarded_from_message_id, forwarded_from_sender_id, forwarded_from_sender_name,
+			                      scheduled_message_id, expires_at, thread_root_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			RETURNING id, is_deleted, created_at, thread_root_id
+		), bump AS (
+			UPDATE messages r
+			SET thread_reply_count = r.thread_reply_count + 1,
+			    thread_last_reply_at = ins.created_at
+			FROM ins
+			WHERE r.id = ins.thread_root_id
+		)
+		SELECT id, is_deleted, created_at FROM ins`,
 		m.ChatType, m.ChatID, m.SenderID, m.Text, m.ReplyTo, m.Ciphertext, m.Alg, m.Epoch, m.ContentKind,
 		m.ForwardedFromMessageID, m.ForwardedFromSenderID, m.ForwardedFromSenderName,
-		m.ScheduledMessageID, m.ExpiresAt,
+		m.ScheduledMessageID, m.ExpiresAt, m.ThreadRootID,
 	).Scan(&m.ID, &m.IsDeleted, &m.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("messages: create: %w", err)
@@ -82,16 +97,18 @@ func (r *PostgresRepository) ListPage(ctx context.Context, q db.DBTX, chatType s
 	// comparison walks strictly past the cursor position.
 	var rows pgx.Rows
 	var err error
+	// Thread replies (stage K) live only in their thread page, never in the
+	// main feed.
 	if cur == nil {
 		rows, err = q.Query(ctx, `
 			SELECT `+messageColumns+` FROM messages
-			WHERE chat_type = $1 AND chat_id = $2
+			WHERE chat_type = $1 AND chat_id = $2 AND thread_root_id IS NULL
 			ORDER BY created_at DESC, id DESC
 			LIMIT $3`, chatType, chatID, limit+1)
 	} else {
 		rows, err = q.Query(ctx, `
 			SELECT `+messageColumns+` FROM messages
-			WHERE chat_type = $1 AND chat_id = $2
+			WHERE chat_type = $1 AND chat_id = $2 AND thread_root_id IS NULL
 			  AND (created_at, id) < ($3, $4)
 			ORDER BY created_at DESC, id DESC
 			LIMIT $5`, chatType, chatID, cur.CreatedAt, cur.ID, limit+1)
@@ -99,18 +116,44 @@ func (r *PostgresRepository) ListPage(ctx context.Context, q db.DBTX, chatType s
 	if err != nil {
 		return nil, fmt.Errorf("messages: list page: %w", err)
 	}
-	defer rows.Close()
+	return collectMessages(rows)
+}
 
+// ListThreadPage returns up to limit+1 replies of one thread, newest first
+// (same cursor semantics as ListPage — the client renders oldest-first).
+func (r *PostgresRepository) ListThreadPage(ctx context.Context, q db.DBTX, rootID uuid.UUID, cur *pagination.Cursor, limit int) ([]Message, error) {
+	var rows pgx.Rows
+	var err error
+	if cur == nil {
+		rows, err = q.Query(ctx, `
+			SELECT `+messageColumns+` FROM messages
+			WHERE thread_root_id = $1
+			ORDER BY created_at DESC, id DESC
+			LIMIT $2`, rootID, limit+1)
+	} else {
+		rows, err = q.Query(ctx, `
+			SELECT `+messageColumns+` FROM messages
+			WHERE thread_root_id = $1
+			  AND (created_at, id) < ($2, $3)
+			ORDER BY created_at DESC, id DESC
+			LIMIT $4`, rootID, cur.CreatedAt, cur.ID, limit+1)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("messages: list thread: %w", err)
+	}
+	return collectMessages(rows)
+}
+
+// collectMessages drains a query over messageColumns into a slice.
+func collectMessages(rows pgx.Rows) ([]Message, error) {
+	defer rows.Close()
 	var out []Message
 	for rows.Next() {
-		var m Message
-		if err := rows.Scan(&m.ID, &m.ChatType, &m.ChatID, &m.SenderID, &m.Text, &m.ReplyTo,
-			&m.IsDeleted, &m.DeletedAt, &m.EditedAt, &m.PinnedAt, &m.PinnedBy, &m.CreatedAt,
-			&m.Ciphertext, &m.Alg, &m.Epoch, &m.ContentKind,
-			&m.ForwardedFromSenderID, &m.ForwardedFromSenderName, &m.ScheduledMessageID, &m.ExpiresAt); err != nil {
-			return nil, fmt.Errorf("messages: scan row: %w", err)
+		m, err := scanMessage(rows)
+		if err != nil {
+			return nil, err
 		}
-		out = append(out, m)
+		out = append(out, *m)
 	}
 	return out, rows.Err()
 }
@@ -157,20 +200,7 @@ func (r *PostgresRepository) ListPinned(ctx context.Context, q db.DBTX, chatType
 	if err != nil {
 		return nil, fmt.Errorf("messages: list pinned: %w", err)
 	}
-	defer rows.Close()
-
-	var out []Message
-	for rows.Next() {
-		var m Message
-		if err := rows.Scan(&m.ID, &m.ChatType, &m.ChatID, &m.SenderID, &m.Text, &m.ReplyTo,
-			&m.IsDeleted, &m.DeletedAt, &m.EditedAt, &m.PinnedAt, &m.PinnedBy, &m.CreatedAt,
-			&m.Ciphertext, &m.Alg, &m.Epoch, &m.ContentKind,
-			&m.ForwardedFromSenderID, &m.ForwardedFromSenderName, &m.ScheduledMessageID, &m.ExpiresAt); err != nil {
-			return nil, fmt.Errorf("messages: scan pinned: %w", err)
-		}
-		out = append(out, m)
-	}
-	return out, rows.Err()
+	return collectMessages(rows)
 }
 
 func (r *PostgresRepository) SoftDelete(ctx context.Context, q db.DBTX, id uuid.UUID, at time.Time) error {

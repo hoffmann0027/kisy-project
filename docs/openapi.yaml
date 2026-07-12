@@ -43,6 +43,8 @@ tags:
     description: Delayed message sending — frozen send-body snapshots replayed by the worker at sendAt (E2EE chats encrypt at scheduling time, docs/security.md "path A")
   - name: disappearing
     description: Disappearing messages — a chat-wide default TTL plus per-message timers; expired messages are HARD-deleted (rows, ciphertext and attachment bytes) and clients purge their local plaintext caches
+  - name: threads
+    description: Threads/discussions in group chats — metadata (threadRootId) over the same message stream; replies never appear in the main feed and access mirrors the group's
   - name: admin
     description: CEO administration (users, roles, credentials, audit)
   - name: websocket
@@ -806,6 +808,8 @@ paths:
                 contentKind: { type: integer, description: 1 text, 2 attachment, 3 system. }
                 forwardedFromSenderId: { type: string, format: uuid, description: Client-side (E2EE) forward attribution — original author id snapshot. }
                 forwardedFromSenderName: { type: string, description: Client-side (E2EE) forward attribution — original author name snapshot. }
+                ttlSeconds: { type: [integer, 'null'], description: Per-message disappearing timer (stage J); overrides the chat default. }
+                threadRootId: { type: [string, 'null'], format: uuid, description: Thread reply (stage K, groups only) — the root message id; root must be in the same chat and not a reply itself. }
       responses:
         '201':
           description: Message created
@@ -1414,6 +1418,33 @@ paths:
                           settings: { $ref: '#/components/schemas/NotificationSettings' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /messages/thread:
+    get:
+      tags: [threads]
+      summary: One thread's replies (UPD3 stage K)
+      description: >
+        Pages the replies of a root message, newest first (same cursor
+        semantics as GET /messages). Access is the root chat's access — an
+        unknown or inaccessible root is a masked 404, so thread ids never
+        leak across clearance boundaries.
+      parameters:
+        - { name: rootId, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: cursor, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 50 } }
+      responses:
+        '200':
+          description: Thread page
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/MessagePage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /messages/schedule:
     post:
@@ -3029,6 +3060,20 @@ components:
             Disappearing (stage J) — when this message self-destructs.
             Metadata only; in E2EE chats the server sees the timer, never
             the content.
+        threadRootId:
+          type: [string, 'null']
+          format: uuid
+          description: >
+            Threads (stage K) — set on replies: the root message of the
+            discussion. Metadata like replyTo; stays in the clear under
+            future group E2EE.
+        threadReplyCount:
+          type: integer
+          description: On roots — how many replies the thread holds.
+        threadLastReplyAt:
+          type: [string, 'null']
+          format: date-time
+          description: On roots — when the latest reply arrived.
     MessagePage:
       type: object
       properties:

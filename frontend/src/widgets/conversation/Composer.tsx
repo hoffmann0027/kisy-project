@@ -32,6 +32,9 @@ interface Props {
   onSchedule?: (text: string, sendAt: Date, replyTo?: string, attachments?: Attachment[]) => void;
   /** Show the E2EE epoch-drift warning in the schedule picker. */
   scheduleE2EEWarning?: boolean;
+  /** Draft-store key override (stage K: a thread composer must not share
+   * the main composer's draft). Defaults to chatId. */
+  draftKey?: string;
 }
 
 export function Composer({
@@ -43,8 +46,10 @@ export function Composer({
   onSend,
   onSchedule,
   scheduleE2EEWarning,
+  draftKey,
 }: Props) {
-  const [text, setText] = useState(() => useDraftStore.getState().drafts[chatId] ?? "");
+  const dKey = draftKey ?? chatId;
+  const [text, setText] = useState(() => useDraftStore.getState().drafts[dKey] ?? "");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [sendingVoice, setSendingVoice] = useState(false);
@@ -62,7 +67,7 @@ export function Composer({
   // On switching chats, restore that chat's saved draft (the previous chat's
   // text was persisted on every keystroke below, so nothing is lost).
   useEffect(() => {
-    setText(useDraftStore.getState().drafts[chatId] ?? "");
+    setText(useDraftStore.getState().drafts[dKey] ?? "");
     setAttachments([]);
     onClearReply();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -95,7 +100,7 @@ export function Composer({
 
   const updateText = (value: string) => {
     setText(value);
-    setDraft(chatId, value);
+    setDraft(dKey, value);
   };
 
   useEffect(() => {
@@ -123,7 +128,7 @@ export function Composer({
     onSend(trimmed, replyTo?.id, attachments.length > 0 ? attachments : undefined);
     setText("");
     setAttachments([]);
-    clearDraft(chatId);
+    clearDraft(dKey);
     onClearReply();
     typingSent.current = false;
     wsClient.send({ type: "typing.stop", data: { chatType, chatId } });
@@ -136,7 +141,7 @@ export function Composer({
     onSchedule(trimmed, sendAt, replyTo?.id, attachments.length > 0 ? attachments : undefined);
     setText("");
     setAttachments([]);
-    clearDraft(chatId);
+    clearDraft(dKey);
     onClearReply();
     typingSent.current = false;
     wsClient.send({ type: "typing.stop", data: { chatType, chatId } });

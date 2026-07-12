@@ -7,6 +7,7 @@ export {
   cacheScheduledPlaintext,
   cachedScheduledPlaintext,
   dropPlaintext,
+  sweepExpiredPlaintext,
   dropScheduledPlaintext,
   processWelcomes,
   processChatHandshake,

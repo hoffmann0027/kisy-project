@@ -28,6 +28,7 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Post("/messages", h.send)
 	r.Post("/messages/forward", h.forward)
 	r.Get("/messages", h.list)
+	r.Get("/messages/thread", h.listThread)
 	r.Get("/messages/pinned", h.listPinned)
 	r.Patch("/messages/{messageID}", h.edit)
 	r.Delete("/messages/{messageID}", h.delete)
@@ -166,6 +167,9 @@ type sendRequest struct {
 	// Per-message disappearing timer in seconds (stage J, additive);
 	// overrides the chat's default TTL for this message.
 	TTLSeconds *int64 `json:"ttlSeconds"`
+
+	// Thread reply (stage K, additive): root message id, groups only.
+	ThreadRootID *string `json:"threadRootId"`
 }
 
 // maxTTLSeconds bounds a disappearing timer (1 year).
@@ -234,6 +238,15 @@ func (h *Handler) send(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "ttlSeconds out of range")
 		return
 	}
+	var threadRootID *uuid.UUID
+	if req.ThreadRootID != nil {
+		id, err := uuid.Parse(*req.ThreadRootID)
+		if err != nil {
+			httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "threadRootId must be a valid UUID")
+			return
+		}
+		threadRootID = &id
+	}
 
 	dto, err := h.svc.Send(r.Context(), SendInput{
 		ChatType:                req.ChatType,
@@ -248,6 +261,7 @@ func (h *Handler) send(w http.ResponseWriter, r *http.Request) {
 		ForwardedFromSenderID:   fwdSenderID,
 		ForwardedFromSenderName: req.ForwardedFromSenderName,
 		TTLSeconds:              req.TTLSeconds,
+		ThreadRootID:            threadRootID,
 	}, actor)
 	if err != nil {
 		h.writeError(w, r, err)
@@ -344,6 +358,41 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	httpresponse.OK(w, r, http.StatusOK, page)
+}
+
+// listThread pages one thread's replies (stage K). Access mirrors the main
+// feed; an unknown or inaccessible root is a masked 404.
+func (h *Handler) listThread(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actor(r)
+	if !ok {
+		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
+		return
+	}
+
+	q := r.URL.Query()
+	rootID, err := uuid.Parse(q.Get("rootId"))
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "rootId must be a valid UUID")
+		return
+	}
+	limit := 0
+	if raw := q.Get("limit"); raw != "" {
+		if limit, err = strconv.Atoi(raw); err != nil {
+			httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "limit must be an integer")
+			return
+		}
+	}
+
+	page, err := h.svc.ListThread(r.Context(), rootID, q.Get("cursor"), limit, actor)
+	if errors.Is(err, pagination.ErrInvalidCursor) {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "invalid cursor")
+		return
+	}
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
 	httpresponse.OK(w, r, http.StatusOK, page)
 }
 

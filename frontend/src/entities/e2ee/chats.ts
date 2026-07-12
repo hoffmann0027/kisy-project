@@ -70,14 +70,45 @@ export function resetChatStatesForTests(): void {
 }
 
 // --- plaintext cache (messageId → decrypted text) ---
+//
+// Stored as `<expiresAtMs>\n<text>`: for disappearing messages (stage J)
+// the decrypted plaintext must not outlive its server-side row even on a
+// device that was offline when the reaper fired (the WS message.deleted
+// purge only reaches connected clients). The prefix lets sweepExpired
+// evict entries locally without any server signal — a reaped message
+// leaves no trace to reconcile against.
 
-export async function cachePlaintext(s: E2EESession, messageId: string, text: string): Promise<void> {
-  await s.store.put(`msg/${messageId}`, utf8(text));
+const NO_EXPIRY = "0";
+
+/**
+ * Cache a message's decrypted plaintext. `expiresAt` (ISO) mirrors the
+ * message's disappearing timer so the entry self-evicts locally; omit for
+ * non-expiring messages.
+ */
+export async function cachePlaintext(s: E2EESession, messageId: string, text: string, expiresAt?: string | null): Promise<void> {
+  const stamp = expiresAt ? String(new Date(expiresAt).getTime()) : NO_EXPIRY;
+  await s.store.put(`msg/${messageId}`, utf8(`${stamp}\n${text}`));
+}
+
+function decodePlaintext(raw: Uint8Array): { expiresAtMs: number; text: string } | null {
+  const decoded = utf8dec.decode(raw);
+  const nl = decoded.indexOf("\n");
+  if (nl < 0) return { expiresAtMs: 0, text: decoded }; // legacy entry (pre-stage-J format)
+  return { expiresAtMs: Number(decoded.slice(0, nl)) || 0, text: decoded.slice(nl + 1) };
 }
 
 export async function cachedPlaintext(s: E2EESession, messageId: string): Promise<string | null> {
   const raw = await s.store.get(`msg/${messageId}`);
-  return raw ? utf8dec.decode(raw) : null;
+  if (!raw) return null;
+  const entry = decodePlaintext(raw);
+  if (!entry) return null;
+  // A device offline at expiry never got message.deleted — enforce the
+  // timer on read and evict, so expired plaintext is never surfaced.
+  if (entry.expiresAtMs > 0 && entry.expiresAtMs <= Date.now()) {
+    await s.store.remove(`msg/${messageId}`);
+    return null;
+  }
+  return entry.text;
 }
 
 /**
@@ -89,6 +120,27 @@ export async function cachedPlaintext(s: E2EESession, messageId: string): Promis
  */
 export async function dropPlaintext(s: E2EESession, messageId: string): Promise<void> {
   await s.store.remove(`msg/${messageId}`);
+}
+
+/**
+ * Evict every cached plaintext whose disappearing timer has elapsed
+ * (stage J). Runs on session init and periodically, closing the gap where
+ * a device was offline when the server reaper hard-deleted the message and
+ * so never received the message.deleted purge event.
+ */
+export async function sweepExpiredPlaintext(s: E2EESession, now: number = Date.now()): Promise<number> {
+  const keys = await s.store.list("msg/");
+  let removed = 0;
+  for (const key of keys) {
+    const raw = await s.store.get(key);
+    if (!raw) continue;
+    const entry = decodePlaintext(raw);
+    if (entry && entry.expiresAtMs > 0 && entry.expiresAtMs <= now) {
+      await s.store.remove(key);
+      removed++;
+    }
+  }
+  return removed;
 }
 
 // Scheduled sending (stage I): the client encrypts at scheduling time, so
@@ -110,10 +162,15 @@ export async function dropScheduledPlaintext(s: E2EESession, scheduledId: string
 }
 
 /** Re-key a scheduled plaintext onto the delivered message id. */
-async function adoptScheduledPlaintext(s: E2EESession, scheduledId: string, messageId: string): Promise<string | null> {
+async function adoptScheduledPlaintext(
+  s: E2EESession,
+  scheduledId: string,
+  messageId: string,
+  expiresAt?: string | null,
+): Promise<string | null> {
   const text = await cachedScheduledPlaintext(s, scheduledId);
   if (text === null) return null;
-  await cachePlaintext(s, messageId, text);
+  await cachePlaintext(s, messageId, text, expiresAt);
   await dropScheduledPlaintext(s, scheduledId);
   return text;
 }
@@ -289,7 +346,13 @@ export async function encryptForChat(
  * so the result is immediately cached; returns null when undecryptable
  * (e.g. history from before this device joined).
  */
-async function decryptOnce(s: E2EESession, chatId: string, messageId: string, ciphertextB64: string): Promise<string | null> {
+async function decryptOnce(
+  s: E2EESession,
+  chatId: string,
+  messageId: string,
+  ciphertextB64: string,
+  expiresAt?: string | null,
+): Promise<string | null> {
   return withChatLock(chatId, async () => {
     const state = await loadState(s, chatId);
     if (!state) return null;
@@ -302,7 +365,7 @@ async function decryptOnce(s: E2EESession, chatId: string, messageId: string, ci
       await saveState(s, chatId, result.state);
       if (result.kind !== "message") return null;
       const text = utf8dec.decode(result.plaintext);
-      await cachePlaintext(s, messageId, text);
+      await cachePlaintext(s, messageId, text, expiresAt);
       return text;
     } catch {
       return null;
@@ -325,7 +388,7 @@ export async function hydrateMessage(s: E2EESession, msg: Message): Promise<Mess
   // scheduled id at scheduling time (the sender cannot decrypt its own
   // ciphertext) — adopt it onto the real message id.
   if (msg.scheduledId) {
-    const adopted = await adoptScheduledPlaintext(s, msg.scheduledId, msg.id);
+    const adopted = await adoptScheduledPlaintext(s, msg.scheduledId, msg.id, msg.expiresAt);
     if (adopted !== null) return { ...msg, text: adopted, encrypted: true };
   }
 
@@ -334,7 +397,7 @@ export async function hydrateMessage(s: E2EESession, msg: Message): Promise<Mess
     // Our own outgoing messages cannot be decrypted (MLS senders consume
     // their keys at encryption time) — their plaintext is cached by the
     // send path; a miss here means another of our devices sent it.
-    const text = await decryptOnce(s, msg.chatId, msg.id, msg.ciphertext);
+    const text = await decryptOnce(s, msg.chatId, msg.id, msg.ciphertext, msg.expiresAt);
     if (text !== null) return { ...msg, text, encrypted: true };
   }
   return { ...msg, text: null, encrypted: true, undecryptable: true };

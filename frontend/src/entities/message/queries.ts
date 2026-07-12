@@ -6,6 +6,7 @@ import { cachePlaintext, e2eeSession, encryptForChat, hydrateMessages } from "@e
 export const messageKeys = {
   list: (chatType: ChatType, chatId: string) => ["messages", chatType, chatId] as const,
   pinned: (chatType: ChatType, chatId: string) => ["pinned", chatType, chatId] as const,
+  thread: (rootId: string) => ["thread", rootId] as const,
 };
 
 // hydratePage swaps ciphertext for locally decrypted text (E2EE chats);
@@ -49,6 +50,19 @@ export function useMessages(chatType: ChatType, chatId: string | null) {
   });
 }
 
+// useThreadMessages loads one thread's replies (stage K), newest-first
+// pages flattened oldest-first by the caller via flattenMessages.
+export function useThreadMessages(rootId: string | null) {
+  return useInfiniteQuery({
+    queryKey: rootId ? messageKeys.thread(rootId) : ["thread", "none"],
+    enabled: !!rootId,
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) =>
+      messagesApi.listThread(rootId as string, pageParam).then(hydratePage),
+    getNextPageParam: (last: MessagePage) => (last.hasMore ? last.nextCursor : undefined),
+  });
+}
+
 // flattenMessages merges the pages (each newest-first) into a single
 // oldest-first array for rendering.
 export function flattenMessages(pages: MessagePage[] | undefined): Message[] {
@@ -66,12 +80,13 @@ export function flattenMessages(pages: MessagePage[] | undefined): Message[] {
  */
 export function useSendMessage(chatType: ChatType, chatId: string, peerUserId?: string) {
   return useMutation({
-    mutationFn: async (args: { text: string; replyTo?: string; attachmentIds?: string[] }) => {
+    mutationFn: async (args: { text: string; replyTo?: string; attachmentIds?: string[]; threadRootId?: string }) => {
       const s = e2eeSession();
       let body: SendMessageBody = {
         text: args.text,
         replyTo: args.replyTo,
         attachmentIds: args.attachmentIds,
+        threadRootId: args.threadRootId,
       };
       let sentEncrypted = false;
       if (s && chatType === "private" && peerUserId && args.text) {
@@ -84,8 +99,10 @@ export function useSendMessage(chatType: ChatType, chatId: string, peerUserId?: 
       const { message } = await messagesApi.send(chatType, chatId, body);
       if (sentEncrypted && s) {
         // Senders cannot decrypt their own MLS messages (keys are consumed
-        // at encryption time) — cache the plaintext under the real id now.
-        await cachePlaintext(s, message.id, args.text);
+        // at encryption time) — cache the plaintext under the real id now,
+        // tagged with the message's disappearing timer (stage J) so it
+        // self-evicts even if this device misses the deletion event.
+        await cachePlaintext(s, message.id, args.text, message.expiresAt);
         return { message: { ...message, text: args.text, encrypted: true } };
       }
       return { message };
@@ -150,7 +167,7 @@ export function useForwardMessages() {
               forwardedFromSenderId: senderId,
               forwardedFromSenderName: senderName,
             });
-            await cachePlaintext(s, message.id, text);
+            await cachePlaintext(s, message.id, text, message.expiresAt);
             sent = true;
           }
         }
@@ -197,6 +214,19 @@ export function useMessageCacheWriter() {
     insert(msg: Message) {
       qc.setQueryData(messageKeys.list(msg.chatType, msg.chatId), (old: any) => {
         if (!old) return old;
+        const pages = old.pages as MessagePage[];
+        if (pages.some((p) => p.items.some((m) => m.id === msg.id))) return old;
+        const first = { ...pages[0], items: [msg, ...pages[0].items] };
+        return { ...old, pages: [first, ...pages.slice(1)] };
+      });
+    },
+    // insertThread adds a reply to an open thread panel's cache (stage K),
+    // creating the cache if the panel was empty and deduping WS echoes.
+    insertThread(rootId: string, msg: Message) {
+      qc.setQueryData(messageKeys.thread(rootId), (old: any) => {
+        if (!old) {
+          return { pageParams: [undefined], pages: [{ items: [msg], hasMore: false }] };
+        }
         const pages = old.pages as MessagePage[];
         if (pages.some((p) => p.items.some((m) => m.id === msg.id))) return old;
         const first = { ...pages[0], items: [msg, ...pages[0].items] };

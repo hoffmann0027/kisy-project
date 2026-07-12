@@ -162,6 +162,11 @@ export interface Message {
   /** Disappearing (stage J): when this message self-destructs (hard-deleted
    * server-side; the client purges its local plaintext cache too). */
   expiresAt?: string | null;
+
+  /** Threads (stage K, groups): set on replies / roots respectively. */
+  threadRootId?: string | null;
+  threadReplyCount?: number;
+  threadLastReplyAt?: string | null;
 }
 
 /** A chat's disappearing-messages default (stage J). */
