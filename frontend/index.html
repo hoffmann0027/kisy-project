@@ -11,6 +11,7 @@
       try {
         var t = JSON.parse(localStorage.getItem("kisy-theme") || "null");
         var theme = (t && t.state && t.state.theme) || "glass";
+        if (["glass", "luce", "aurora"].indexOf(theme) === -1) theme = "glass";
         document.documentElement.setAttribute("data-theme", theme);
       } catch (e) {}
     </script>

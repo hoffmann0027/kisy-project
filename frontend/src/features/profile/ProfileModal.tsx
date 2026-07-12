@@ -165,31 +165,55 @@ export function ProfileModal({ open, onClose }: Props) {
   );
 }
 
-// Theme switcher (design handoff): segmented control with a preview swatch
-// per theme, wired to the persisted useThemeStore.
-const THEME_OPTIONS: { id: Theme; label: string; swatch: string }[] = [
-  { id: "glass", label: "Стекло", swatch: "linear-gradient(135deg,#d9e2fb,#e9e6fb 50%,#c9b8f0)" },
-  { id: "luce", label: "Luce", swatch: "linear-gradient(135deg,#e2e6ea,#8f949c 55%,#31404b)" },
+// Theme switcher (design handoff): a physical rotary knob ("manettino"). The
+// indicator sits at 3 o'clock and the whole knob rotates so it points exactly
+// at the active label. Clicking the knob cycles glass → luce → aurora; clicking
+// a label selects that theme directly. Angles: glass −25°, luce 0°, aurora +25°.
+const THEME_OPTIONS: { id: Theme; label: string; angle: number }[] = [
+  { id: "glass", label: "Стекло", angle: -25 },
+  { id: "luce", label: "Luce", angle: 0 },
+  { id: "aurora", label: "Аврора", angle: 25 },
 ];
+
+function GearIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+    </svg>
+  );
+}
 
 function ThemeSwitcher() {
   const theme = useThemeStore((s) => s.theme);
   const setTheme = useThemeStore((s) => s.setTheme);
+  const cycleTheme = useThemeStore((s) => s.cycleTheme);
+  const angle = THEME_OPTIONS.find((o) => o.id === theme)?.angle ?? 0;
   return (
     <div className="profile-section">
-      <div className="profile-section__label">Оформление</div>
-      <div className="theme-switch">
-        {THEME_OPTIONS.map((o) => (
-          <button
-            key={o.id}
-            className={`theme-switch__opt${theme === o.id ? " theme-switch__opt--active" : ""}`}
-            onClick={() => setTheme(o.id)}
-            type="button"
-          >
-            <span className="theme-switch__swatch" style={{ background: o.swatch }} />
-            {o.label}
-          </button>
-        ))}
+      <div className="profile-section__label">
+        <GearIcon />
+        Оформление
+      </div>
+      <div className="theme-knob">
+        <button type="button" className="theme-knob__dial" onClick={cycleTheme} aria-label="Переключить тему">
+          <span className="theme-knob__face" style={{ transform: `rotate(${angle}deg)` }}>
+            <span className="theme-knob__dimple" />
+            <span className="theme-knob__pointer" />
+          </span>
+        </button>
+        <div className="theme-knob__labels">
+          {THEME_OPTIONS.map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              className={`theme-knob__label${theme === o.id ? " theme-knob__label--active" : ""}`}
+              onClick={() => setTheme(o.id)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
