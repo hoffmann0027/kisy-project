@@ -1,38 +1,17 @@
-/* Apple-inspired dark theme tokens. Dark mode only — see docs/spec/02-frontend-ux.md. */
+/* Design system: two themes from the KISY handoff — `glass` (light) and
+   `luce` (dark). The active theme is `data-theme` on <html> (set by
+   useThemeStore / the inline bootstrap in index.html). Per-theme design
+   tokens (--ink, --acc, --key-bg, --rail-bg, --bubout-bg, …) are the source
+   of truth; the legacy `--color-*` names are aliased onto them so every
+   existing component re-skins automatically in both themes. */
+
 :root {
-  color-scheme: dark;
-
-  --color-bg: #0b0b0f;
-  --color-bg-deep: #060608;
-  --color-surface: #16161d;
-  --color-surface-2: #1c1c25;
-  --color-surface-glass: rgba(28, 28, 36, 0.62);
-  --color-surface-glass-strong: rgba(20, 20, 27, 0.86);
-  --color-border: rgba(255, 255, 255, 0.08);
-  --color-border-strong: rgba(255, 255, 255, 0.14);
-  --color-text-primary: #f5f5f7;
-  --color-text-secondary: #a1a1a6;
-  --color-text-tertiary: #6e6e77;
-  --color-accent: #0a84ff;
-  --color-accent-hover: #409cff;
-  --color-accent-soft: rgba(10, 132, 255, 0.16);
-  --color-danger: #ff453a;
-  --color-danger-soft: rgba(255, 69, 58, 0.16);
-  --color-success: #32d74b;
-  --color-warning: #ffd60a;
-
-  /* Bubble colors */
-  --color-bubble-out: linear-gradient(135deg, #0a84ff 0%, #0066d6 100%);
-  --color-bubble-in: #26262f;
-
+  /* --- theme-neutral primitives --- */
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-xl: 22px;
   --radius-round: 999px;
-
-  --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.45);
-  --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.3);
 
   --blur-glass: 22px;
 
@@ -43,11 +22,146 @@
   --space-5: 24px;
   --space-6: 32px;
 
-  --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
-    Roboto, "Helvetica Neue", sans-serif;
+  --font-family: -apple-system, system-ui, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, Menlo, monospace;
 
   --transition-fast: 150ms ease;
   --transition-medium: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  /* Press spring for the "physical key" buttons. */
+  --spring: 0.13s cubic-bezier(0.34, 1.5, 0.5, 1);
+
+  /* --- legacy alias layer: old --color-* names → design tokens. Defined
+     once here; the referenced tokens resolve per active theme. --- */
+  --color-bg: var(--bg);
+  --color-bg-deep: var(--bg-deep);
+  --color-surface: var(--overlay-bg);
+  --color-surface-2: var(--field-bg);
+  --color-surface-glass: var(--side-bg);
+  --color-surface-glass-strong: var(--overlay-bg);
+  --color-border: var(--divider);
+  --color-border-strong: var(--panel-brd);
+  --color-text-primary: var(--ink);
+  --color-text-secondary: var(--dim);
+  --color-text-tertiary: var(--dim2);
+  --color-accent: var(--acc);
+  --color-accent-hover: var(--acc-ink);
+  --color-accent-soft: var(--acc-soft);
+  /* danger/success/warning read well on both themes */
+  --color-danger: #e5484d;
+  --color-danger-soft: rgba(229, 72, 77, 0.16);
+  --color-success: #34c759;
+  --color-warning: #e0a63f;
+  --color-bubble-out: var(--bubout-bg);
+  --color-bubble-in: var(--bubin-bg);
+
+  /* elevation — softened so it reads on the light theme too */
+  --shadow-elevated: var(--elev-shadow);
+  --shadow-soft: var(--soft-shadow);
+}
+
+/* ===== Theme: glass (light, frosted) ===== */
+:root[data-theme="glass"] {
+  color-scheme: light;
+
+  --bg: #e9e6f6;
+  --bg-deep: #dfe4f7;
+  --app-underlay: linear-gradient(155deg, #d9e2fb 0%, #e9e6fb 46%, #f9edf6 100%);
+  --scroll-thumb: rgba(60, 60, 90, 0.22);
+  --elev-shadow: 0 18px 48px rgba(60, 60, 110, 0.22);
+  --soft-shadow: 0 2px 12px rgba(60, 60, 110, 0.14);
+
+  --ink: #1d1d1f;
+  --dim: #6b6b78;
+  --dim2: #8a8a94;
+  --divider: rgba(0, 0, 0, 0.06);
+  --hover: rgba(120, 120, 150, 0.12);
+
+  --acc: #5e5ce6;
+  --acc-soft: rgba(94, 92, 230, 0.12);
+  --acc-ink: #4b49c9;
+  --acc-grad: linear-gradient(180deg, #8886f4, #5451e0);
+  --acc-tab-sh: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 3px 8px rgba(94, 92, 230, 0.42), 0 1px 2px rgba(0, 0, 0, 0.14);
+  --acc-bg: linear-gradient(180deg, rgba(120, 118, 238, 0.32), rgba(84, 81, 224, 0.22));
+  --acc-sh: inset 0 2px 6px rgba(66, 64, 170, 0.45), inset 0 -1px 0 rgba(255, 255, 255, 0.5), 0 1px 1px rgba(0, 0, 0, 0.05);
+
+  --side-bg: rgba(255, 255, 255, 0.6);
+  --conv-bg: rgba(255, 255, 255, 0.46);
+  --head-bg: rgba(255, 255, 255, 0.4);
+  --field-bg: rgba(255, 255, 255, 0.68);
+  --field-brd: rgba(0, 0, 0, 0.05);
+  --panel-brd: rgba(255, 255, 255, 0.6);
+  --overlay-bg: rgba(255, 255, 255, 0.85);
+
+  --rail-bg: linear-gradient(180deg, #f1f2f6 0%, #dee1e9 48%, #cfd3dd 100%);
+  --rail-brd: rgba(255, 255, 255, 0.7);
+  --key-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(224, 227, 238, 0.5));
+  --key-sh: inset 0 1px 0 rgba(255, 255, 255, 1), 0 1px 1px rgba(70, 70, 110, 0.16), 0 2px 5px rgba(70, 70, 130, 0.13);
+  --key-ink: #5b5b6b;
+
+  --send-bg: radial-gradient(120% 120% at 32% 24%, #a6a4ff, #5451e0 58%, #413fbe);
+  --klogo-bg: radial-gradient(120% 120% at 32% 24%, #9997f7, #5451e0 62%, #413fbe);
+  --mic-bg: radial-gradient(120% 120% at 32% 24%, #ffffff, rgba(222, 225, 236, 0.9) 72%);
+  --chip-bg: rgba(255, 255, 255, 0.7);
+
+  --bubin-bg: rgba(255, 255, 255, 0.94);
+  --bubin-sh: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 3px 10px rgba(70, 70, 130, 0.1);
+  --bubout-bg: linear-gradient(160deg, #7d7bf0, #5451e0);
+  --bubout-sh: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 5px 16px rgba(94, 92, 230, 0.34), 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* ===== Theme: luce (dark, cold metal + red) ===== */
+:root[data-theme="luce"] {
+  color-scheme: dark;
+
+  --bg: #111417;
+  --bg-deep: #0a0c0e;
+  --app-underlay: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.012) 0 3px, rgba(0, 0, 0, 0.03) 3px 6px),
+    radial-gradient(140% 100% at 50% -10%, #2b2f34 0%, #15181c 55%, #0a0c0e 100%);
+  --scroll-thumb: rgba(255, 255, 255, 0.14);
+  --elev-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  --soft-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+
+  --ink: #eef1f5;
+  --dim: #a7adb6;
+  --dim2: #7b818b;
+  --divider: rgba(255, 255, 255, 0.09);
+  --hover: rgba(255, 255, 255, 0.08);
+
+  --acc: #d84332;
+  --acc-soft: rgba(216, 67, 50, 0.16);
+  --acc-ink: #f0705f;
+  --acc-grad: linear-gradient(180deg, #e0503d, #a82519);
+  --acc-tab-sh: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 3px 8px rgba(0, 0, 0, 0.45);
+  --acc-bg: linear-gradient(180deg, rgba(216, 67, 50, 0.32), rgba(150, 35, 25, 0.22));
+  --acc-sh: inset 0 2px 6px rgba(120, 25, 18, 0.5), inset 0 -1px 0 rgba(255, 255, 255, 0.14), 0 1px 1px rgba(0, 0, 0, 0.25);
+
+  --side-bg: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.022) 0 2px, rgba(0, 0, 0, 0.05) 2px 4px),
+    linear-gradient(180deg, #22262b, #161a1e);
+  --conv-bg: radial-gradient(120% 80% at 50% 0%, rgba(180, 200, 220, 0.05), transparent 55%),
+    linear-gradient(180deg, #191c20, #0f1113);
+  --head-bg: linear-gradient(180deg, #242830, #1a1d22);
+  --field-bg: linear-gradient(180deg, #262a30, #1c2025);
+  --field-brd: rgba(255, 255, 255, 0.1);
+  --panel-brd: rgba(200, 210, 220, 0.16);
+  --overlay-bg: linear-gradient(180deg, #20242a, #14171b);
+
+  --rail-bg: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.5) 0 1px, rgba(255, 255, 255, 0) 1px 3px),
+    linear-gradient(180deg, #e2e6ea, #b7bdc6);
+  --rail-brd: rgba(255, 255, 255, 0.6);
+  --key-bg: linear-gradient(180deg, #3a4048, #272c32);
+  --key-sh: inset 0 1px 0 rgba(255, 255, 255, 0.13), 0 1px 2px rgba(0, 0, 0, 0.5), 0 2px 5px rgba(0, 0, 0, 0.4);
+  --key-ink: #c3cad3;
+
+  --send-bg: radial-gradient(120% 120% at 32% 24%, #ef6a58, #c02c1c 58%, #8f1e12);
+  --klogo-bg: radial-gradient(120% 120% at 32% 24%, #eef1f5, #b7bdc6 62%, #8f949c);
+  --mic-bg: linear-gradient(180deg, #3a4048, #272c32);
+  --chip-bg: rgba(70, 78, 88, 0.85);
+
+  --bubin-bg: linear-gradient(180deg, #242a30, #191d22);
+  --bubin-sh: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 3px 10px rgba(0, 0, 0, 0.42);
+  --bubout-bg: linear-gradient(160deg, #4b5b68, #31404b);
+  --bubout-sh: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 5px 16px rgba(0, 0, 0, 0.42);
 }
 
 * {
@@ -78,10 +192,10 @@ body {
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
-  background:
-    radial-gradient(1200px 800px at 15% -10%, rgba(10, 132, 255, 0.10), transparent 60%),
-    radial-gradient(1000px 700px at 110% 10%, rgba(120, 80, 255, 0.08), transparent 55%),
-    var(--color-bg);
+  /* Per-theme underlay behind the panels; animate on theme switch. */
+  background: var(--app-underlay);
+  background-attachment: fixed;
+  transition: background 0.35s ease;
   color: var(--color-text-primary);
   font-family: var(--font-family);
   -webkit-font-smoothing: antialiased;
@@ -97,18 +211,18 @@ textarea {
 /* Scrollbars */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+  scrollbar-color: var(--scroll-thumb) transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--scroll-thumb);
   border-radius: var(--radius-round);
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.24);
+  filter: brightness(1.3);
 }
 
 .glass-surface {
