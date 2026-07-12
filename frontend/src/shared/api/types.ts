@@ -158,6 +158,17 @@ export interface Message {
   /** Scheduled origin (stage I): id of the scheduled_messages row this
    * message was born from — lets the sender restore its plaintext cache. */
   scheduledId?: string | null;
+
+  /** Disappearing (stage J): when this message self-destructs (hard-deleted
+   * server-side; the client purges its local plaintext cache too). */
+  expiresAt?: string | null;
+}
+
+/** A chat's disappearing-messages default (stage J). */
+export interface DisappearSetting {
+  ttlSeconds: number | null;
+  setBy?: string | null;
+  updatedAt?: string | null;
 }
 
 /** A scheduled (delayed-send) message — a frozen send-body snapshot. */

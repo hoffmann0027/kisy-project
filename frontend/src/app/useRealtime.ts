@@ -13,7 +13,7 @@ import { usePresenceStore } from "@shared/store/presence";
 import { useTypingStore } from "@shared/store/typing";
 import { useReadReceiptStore } from "@shared/store/readReceipts";
 import { useAuthStore } from "@shared/store/auth";
-import { e2eeSession, hydrateMessage, initE2EE, processChatHandshake, processWelcomes } from "@entities/e2ee";
+import { dropPlaintext, e2eeSession, hydrateMessage, initE2EE, processChatHandshake, processWelcomes } from "@entities/e2ee";
 
 // useRealtime connects the WebSocket for the session and routes server events
 // into the query cache and the presence/typing stores. Mounted once by the
@@ -104,13 +104,27 @@ export function useRealtime() {
           qc.invalidateQueries({ queryKey: ["pinned", upd.chatType, upd.chatId] });
           break;
         }
-        case "message.deleted":
-          patchMessage(qc, ev.data.chatType as ChatType, ev.data.chatId, ev.data.messageId, (m) => ({
-            ...m,
-            isDeleted: true,
-            text: null,
-          }));
+        case "message.deleted": {
+          // Security-critical (stage J): ANY deletion purges the locally
+          // cached E2EE plaintext — a "disappeared" message must not
+          // survive in IndexedDB.
+          const s = e2eeSession();
+          if (s) void dropPlaintext(s, ev.data.messageId).catch(() => {});
+
+          if (ev.data.expired) {
+            // Self-destructed: hard-deleted server-side, so the bubble
+            // vanishes entirely (no tombstone).
+            removeMessage(qc, ev.data.chatType as ChatType, ev.data.chatId, ev.data.messageId);
+            qc.invalidateQueries({ queryKey: ["pinned", ev.data.chatType, ev.data.chatId] });
+          } else {
+            patchMessage(qc, ev.data.chatType as ChatType, ev.data.chatId, ev.data.messageId, (m) => ({
+              ...m,
+              isDeleted: true,
+              text: null,
+            }));
+          }
           break;
+        }
         case "message.read":
           // The counterpart advanced their read position; record it so our
           // own messages up to that point render as read.
@@ -246,6 +260,24 @@ async function handleMessageCreated(
       return [updated, ...rest];
     });
   }
+}
+
+// removeMessage drops a message from the cache entirely (expired
+// self-destructing messages leave no tombstone).
+function removeMessage(
+  qc: ReturnType<typeof useQueryClient>,
+  chatType: ChatType,
+  chatId: string,
+  messageId: string,
+) {
+  qc.setQueryData(messageKeys.list(chatType, chatId), (old: any) => {
+    if (!old) return old;
+    const pages = (old.pages as { items: Message[] }[]).map((p) => ({
+      ...p,
+      items: p.items.filter((m) => m.id !== messageId),
+    }));
+    return { ...old, pages };
+  });
 }
 
 function patchMessage(

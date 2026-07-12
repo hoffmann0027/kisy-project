@@ -69,6 +69,11 @@ type Message struct {
 	// was born from. Metadata only — it lets the sender's client re-key its
 	// locally cached E2EE plaintext (sched/<scheduledId> → msg/<messageId>).
 	ScheduledMessageID *uuid.UUID
+
+	// Disappearing messages (stage J): when the reaper hard-deletes this
+	// message. Metadata only (like reply_to) — in E2EE chats the server sees
+	// the timer but never the content.
+	ExpiresAt *time.Time
 }
 
 // ReactionSummary aggregates one emoji on a message: how many users chose
@@ -117,6 +122,9 @@ type DTO struct {
 	// Scheduled origin (stage I) — present only on messages sent by the
 	// scheduler, so the sender's client can restore its plaintext cache.
 	ScheduledID *uuid.UUID `json:"scheduledId,omitempty"`
+
+	// Disappearing (stage J): when this message self-destructs.
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
 }
 
 // ForwardedFrom is the "Переслано от …" attribution shown on a forwarded
@@ -149,6 +157,7 @@ func (m *Message) ToDTO() DTO {
 		dto.Epoch = m.Epoch
 		dto.ContentKind = m.ContentKind
 		dto.ScheduledID = m.ScheduledMessageID
+		dto.ExpiresAt = m.ExpiresAt
 		if m.ForwardedFromSenderID != nil {
 			name := ""
 			if m.ForwardedFromSenderName != nil {

@@ -9,6 +9,8 @@ import { MediaViewer, type MediaViewerItem } from "@shared/ui/MediaViewer";
 import { ChatPanel } from "./ChatPanel";
 import { ForwardModal, type ForwardTarget } from "@features/forward/ForwardModal";
 import { MuteMenu } from "@features/notif-prefs/MuteMenu";
+import { DisappearMenu } from "@features/disappear/DisappearMenu";
+import { useSetMessageExpiry } from "@entities/chat/disappearing";
 import type { Attachment, ChatMediaItem, ChatType, Message } from "@shared/api/types";
 import {
   flattenMessages,
@@ -69,6 +71,7 @@ export function Conversation({ target, headerActions }: Props) {
   const react = useReaction();
   const cache = useMessageCacheWriter();
   const schedule = useScheduleMessage(chatType, chatId, target.peerUserId);
+  const setExpiry = useSetMessageExpiry();
   const { scheduled } = useScheduledMessages();
   const pendingScheduled = useMemo(() => pendingForChat(scheduled, chatType, chatId), [scheduled, chatType, chatId]);
   const [scheduledOpen, setScheduledOpen] = useState(false);
@@ -177,6 +180,15 @@ export function Conversation({ target, headerActions }: Props) {
 
   const handlePin = (m: Message, doPin: boolean) =>
     pin.mutate({ messageId: m.id, pin: doPin }, { onError: () => toast.error("Не удалось закрепить сообщение") });
+
+  const handleSetExpiry = (m: Message, ttlSeconds: number | null) =>
+    setExpiry.mutate(
+      { messageId: m.id, ttlSeconds },
+      {
+        onSuccess: () => toast.success(ttlSeconds ? "Таймер установлен" : "Таймер убран"),
+        onError: () => toast.error("Не удалось изменить таймер"),
+      },
+    );
 
   const handleReact = (m: Message, emoji: string) => {
     const existing = m.reactions.find((r) => r.emoji === emoji);
@@ -335,6 +347,7 @@ export function Conversation({ target, headerActions }: Props) {
             <Icon.Phone size={20} />
           </button>
         )}
+        <DisappearMenu chatType={chatType} chatId={chatId} />
         <MuteMenu chatType={chatType} chatId={chatId} />
         <button
           className={cn("conv__panel-toggle", panelOpen && "conv__panel-toggle--active")}
@@ -409,6 +422,7 @@ export function Conversation({ target, headerActions }: Props) {
                 selectionMode={selectionMode}
                 selected={selected.has(m.id)}
                 onToggleSelect={toggleSelect}
+                onSetExpiry={handleSetExpiry}
               />
             </div>
           );

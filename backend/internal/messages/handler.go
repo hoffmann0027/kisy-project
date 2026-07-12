@@ -33,6 +33,40 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Delete("/messages/{messageID}", h.delete)
 	r.Post("/messages/{messageID}/pin", h.pin(true))
 	r.Post("/messages/{messageID}/unpin", h.pin(false))
+	r.Put("/messages/{messageID}/expiry", h.setExpiry)
+}
+
+type expiryRequest struct {
+	// TTLSeconds counts from now; null/0 clears the timer.
+	TTLSeconds *int64 `json:"ttlSeconds"`
+}
+
+func (h *Handler) setExpiry(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actor(r)
+	if !ok {
+		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "messageID"))
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "message not found")
+		return
+	}
+	var req expiryRequest
+	if err := httpjson.Decode(w, r, &req); err != nil {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "malformed JSON body")
+		return
+	}
+	if req.TTLSeconds != nil && (*req.TTLSeconds < 0 || *req.TTLSeconds > maxTTLSeconds) {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "ttlSeconds out of range")
+		return
+	}
+	dto, err := h.svc.SetExpiry(r.Context(), id, req.TTLSeconds, actor)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"message": dto})
 }
 
 func (h *Handler) listPinned(w http.ResponseWriter, r *http.Request) {
@@ -128,7 +162,14 @@ type sendRequest struct {
 	// Forwarded-from attribution for a client-side (E2EE) forward.
 	ForwardedFromSenderID   *string `json:"forwardedFromSenderId"`
 	ForwardedFromSenderName *string `json:"forwardedFromSenderName"`
+
+	// Per-message disappearing timer in seconds (stage J, additive);
+	// overrides the chat's default TTL for this message.
+	TTLSeconds *int64 `json:"ttlSeconds"`
 }
+
+// maxTTLSeconds bounds a disappearing timer (1 year).
+const maxTTLSeconds = 365 * 24 * 3600
 
 func (h *Handler) send(w http.ResponseWriter, r *http.Request) {
 	actor, ok := h.actor(r)
@@ -189,6 +230,11 @@ func (h *Handler) send(w http.ResponseWriter, r *http.Request) {
 		fwdSenderID = &id
 	}
 
+	if req.TTLSeconds != nil && (*req.TTLSeconds < 0 || *req.TTLSeconds > maxTTLSeconds) {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "ttlSeconds out of range")
+		return
+	}
+
 	dto, err := h.svc.Send(r.Context(), SendInput{
 		ChatType:                req.ChatType,
 		ChatID:                  chatID,
@@ -201,6 +247,7 @@ func (h *Handler) send(w http.ResponseWriter, r *http.Request) {
 		ContentKind:             req.ContentKind,
 		ForwardedFromSenderID:   fwdSenderID,
 		ForwardedFromSenderName: req.ForwardedFromSenderName,
+		TTLSeconds:              req.TTLSeconds,
 	}, actor)
 	if err != nil {
 		h.writeError(w, r, err)

@@ -447,3 +447,27 @@ so the sender's client re-keys its locally cached plaintext
 (`sched/<scheduledId>` → `msg/<messageId>`); the UI warns that key
 rotation before `sendAt` can make the message undecryptable. Tables:
 scheduled_messages + `messages.scheduled_message_id` (migration 000034).
+
+## Disappearing Messages (UPD3 stage J)
+
+`GET/PUT /chats/{chatType}/{chatID}/disappearing {ttlSeconds|null}` — the
+chat's default timer (chat-wide, any member may change it; 5s..1y; audited
+with TTL only, never content; masked 404 for inaccessible chats). New
+messages then get `expiresAt = now + ttl`; a forward inherits the TARGET
+chat's timer; a scheduled message sent into a disappearing chat expires at
+`send_at + ttl` (the timer is applied at send time). The additive
+`ttlSeconds` field of `POST /messages` and
+`PUT /messages/{id}/expiry {ttlSeconds|null}` (sender-only) set a
+per-message timer that overrides the chat default.
+
+The reaper HARD-deletes expired rows — text, ciphertext and attachment
+bytes leave the database (cascade), the search index is cleaned — and
+publishes `message.deleted` with `expired: true`. Clients react by
+dropping the bubble entirely (no tombstone) **and purging the locally
+cached E2EE plaintext (`msg/<id>` in the IndexedDB keystore)**: without
+that purge a "disappeared" message would silently survive client-side.
+The same purge runs for ordinary deletions. `expiresAt` is metadata (like
+`replyTo`): in E2EE chats the server sees when a message dies, never what
+it said. This is a system deletion — users still cannot hard-delete each
+other's messages. Tables: `messages.expires_at` + chat_disappear_settings
+(migration 000035).

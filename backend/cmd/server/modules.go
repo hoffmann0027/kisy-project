@@ -27,6 +27,7 @@ import (
 	"kisy-backend/internal/chats"
 	"kisy-backend/internal/conditions"
 	"kisy-backend/internal/config"
+	"kisy-backend/internal/disappear"
 	"kisy-backend/internal/e2ee"
 	"kisy-backend/internal/favorites"
 	"kisy-backend/internal/feedback"
@@ -70,6 +71,7 @@ type modules struct {
 	favoritesHandler     *favorites.Handler
 	chatfoldersHandler   *chatfolders.Handler
 	scheduledHandler     *scheduled.Handler
+	disappearHandler     *disappear.Handler
 	feedbackHandler      *feedback.Handler
 	notesHandler         *notes.Handler
 	conditionsHandler    *conditions.Handler
@@ -469,6 +471,24 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	// --- full-text message search ---
 	searchSvc := search.NewService(pool, log)
 	messagesSvc.SetIndexer(searchSvc)
+
+	// --- disappearing messages (UPD3 stage J) ---
+	disappearSvc := disappear.NewService(pool, disappear.NewPostgresRepository(),
+		disappear.ChatAuthorizer(chatAuthorizer), auditRec)
+	disappearSvc.SetPublisher(wsPublisher)
+	disappearSvc.SetIndexer(searchSvc)
+	// New messages of a chat with a timer get expires_at stamped on send.
+	messagesSvc.SetDisappearTTL(disappearSvc.TTLFor)
+	// The reaper hard-deletes expired rows (attachments cascade) and tells
+	// clients to drop the bubbles and purge local plaintext caches.
+	disappearSvc.StartReaper(ctx, 5*time.Second, log)
+	disappearHandler := disappear.NewHandler(disappearSvc, func(r *http.Request) (disappear.Actor, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return disappear.Actor{}, false
+		}
+		return disappear.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
+	})
 	searchHandler := search.NewHandler(searchSvc, func(r *http.Request) (uuid.UUID, bool) {
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {
@@ -701,6 +721,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		favoritesHandler:     favoritesHandler,
 		chatfoldersHandler:   chatfoldersHandler,
 		scheduledHandler:     scheduledHandler,
+		disappearHandler:     disappearHandler,
 		feedbackHandler:      feedbackHandler,
 		notesHandler:         notesHandler,
 		conditionsHandler:    conditionsHandler,

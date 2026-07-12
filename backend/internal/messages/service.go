@@ -89,6 +89,11 @@ type GroupReadLoader func(ctx context.Context, chatID uuid.UUID) (reads map[uuid
 type AttachmentLinker func(ctx context.Context, q db.DBTX, ids []uuid.UUID, messageID, uploader uuid.UUID) error
 type AttachmentLoader func(ctx context.Context, messageIDs []uuid.UUID) (map[uuid.UUID][]any, error)
 
+// DisappearTTL resolves a chat's default disappearing-message TTL in
+// seconds (nil = off). Injected to avoid a messages→disappear import cycle;
+// a nil resolver disables chat-level timers.
+type DisappearTTL func(ctx context.Context, chatType string, chatID uuid.UUID) (*int64, error)
+
 // Indexer keeps the full-text search index in sync with the message
 // lifecycle. Injected to avoid a messages→search import cycle; a nil indexer
 // disables indexing. Implementations must be best-effort (never block sends).
@@ -112,6 +117,7 @@ type Service struct {
 	groupRead  GroupReadLoader
 	attachLink AttachmentLinker
 	attachLoad AttachmentLoader
+	ttl        DisappearTTL
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository, rec audit.Recorder, authz Authorizer) *Service {
@@ -133,6 +139,9 @@ func (s *Service) SetIndexer(i Indexer) { s.indexer = i }
 
 // SetGroupReadLoader wires per-message group read-count enrichment.
 func (s *Service) SetGroupReadLoader(l GroupReadLoader) { s.groupRead = l }
+
+// SetDisappearTTL wires the chat-level disappearing-message timer resolver.
+func (s *Service) SetDisappearTTL(r DisappearTTL) { s.ttl = r }
 
 // SetAttachments wires attachment linking (on send) and enrichment (on list).
 func (s *Service) SetAttachments(link AttachmentLinker, load AttachmentLoader) {
@@ -208,6 +217,11 @@ type SendInput struct {
 	// Scheduled origin (stage I). Set only by the scheduled-send worker —
 	// never accepted from the HTTP handler.
 	ScheduledMessageID *uuid.UUID
+
+	// Per-message disappearing timer (stage J): seconds until
+	// self-destruction, counted from creation. Overrides the chat's default
+	// TTL for this one message.
+	TTLSeconds *int64
 }
 
 // Send validates access, persists the message and publishes it, returning the
@@ -278,6 +292,14 @@ func (s *Service) SendTx(ctx context.Context, q db.DBTX, in SendInput, actor Act
 	if text != "" {
 		m.Text = &text
 	}
+	// Disappearing timer (stage J): a per-message TTL wins over the chat's
+	// default. The countdown starts at creation — a scheduled message sent
+	// into a disappearing chat therefore expires at send_at + ttl.
+	if at, err := s.expiryFor(ctx, in); err == nil && at != nil {
+		m.ExpiresAt = at
+	} else if err != nil {
+		return DTO{}, nil, err
+	}
 	if err := s.repo.Create(ctx, q, m); err != nil {
 		return DTO{}, nil, err
 	}
@@ -309,6 +331,24 @@ func (s *Service) SendTx(ctx context.Context, q db.DBTX, in SendInput, actor Act
 		return dto
 	}
 	return dto, deliver, nil
+}
+
+// expiryFor computes a new message's self-destruct time: the explicit
+// per-message TTL, else the chat's default timer, else none.
+func (s *Service) expiryFor(ctx context.Context, in SendInput) (*time.Time, error) {
+	ttl := in.TTLSeconds
+	if ttl == nil && s.ttl != nil {
+		chatTTL, err := s.ttl(ctx, in.ChatType, in.ChatID)
+		if err != nil {
+			return nil, err
+		}
+		ttl = chatTTL
+	}
+	if ttl == nil || *ttl <= 0 {
+		return nil, nil
+	}
+	at := time.Now().UTC().Add(time.Duration(*ttl) * time.Second)
+	return &at, nil
 }
 
 // clearanceBreadth returns a chat's audience breadth (weakest level that can
@@ -397,6 +437,13 @@ func (s *Service) Forward(ctx context.Context, in ForwardInput, actor ActorMeta)
 		items = append(items, prepared{src: src, senderName: name})
 	}
 
+	// A forward is a NEW message: it inherits the TARGET chat's disappearing
+	// timer, never the source's (stage J).
+	targetExpiry, err := s.expiryFor(ctx, SendInput{ChatType: in.TargetChatType, ChatID: in.TargetChatID})
+	if err != nil {
+		return nil, err
+	}
+
 	out := make([]DTO, 0, len(items))
 	for _, it := range items {
 		src := it.src
@@ -411,6 +458,7 @@ func (s *Service) Forward(ctx context.Context, in ForwardInput, actor ActorMeta)
 			ForwardedFromMessageID:  &src.ID,
 			ForwardedFromSenderID:   &senderID,
 			ForwardedFromSenderName: &senderName,
+			ExpiresAt:               targetExpiry,
 		}
 		if err := s.repo.Create(ctx, s.pool, m); err != nil {
 			return nil, err
@@ -625,6 +673,38 @@ func (s *Service) SetPinned(ctx context.Context, messageID uuid.UUID, pin bool, 
 		by = &actor.UserID
 	}
 	updated, err := s.repo.SetPinned(ctx, s.pool, messageID, by, at)
+	if err != nil {
+		return nil, err
+	}
+
+	dto := updated.ToDTO()
+	if s.pub != nil {
+		s.pub.PublishMessageUpdated(updated.ChatType, updated.ChatID, dto)
+	}
+	return &dto, nil
+}
+
+// SetExpiry sets or clears a disappearing timer on the actor's OWN message
+// (ttlSeconds counts from now; nil clears). Republished as message.updated
+// so every viewer's bubble shows the timer.
+func (s *Service) SetExpiry(ctx context.Context, messageID uuid.UUID, ttlSeconds *int64, actor ActorMeta) (*DTO, error) {
+	m, err := s.repo.GetByID(ctx, s.pool, messageID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authorize(ctx, m.ChatType, m.ChatID, actor); err != nil {
+		return nil, ErrNotFound
+	}
+	if m.SenderID != actor.UserID {
+		return nil, ErrForbidden
+	}
+
+	var at *time.Time
+	if ttlSeconds != nil && *ttlSeconds > 0 {
+		t := time.Now().UTC().Add(time.Duration(*ttlSeconds) * time.Second)
+		at = &t
+	}
+	updated, err := s.repo.SetExpiry(ctx, s.pool, messageID, actor.UserID, at)
 	if err != nil {
 		return nil, err
 	}

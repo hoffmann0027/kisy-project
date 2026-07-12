@@ -32,6 +32,19 @@ func (p *Publisher) PublishMessageDeleted(chatType string, chatID, messageID uui
 	}))
 }
 
+// PublishMessageExpired is message.deleted with expired=true: the message
+// self-destructed (stage J) and was HARD-deleted, so clients drop the
+// bubble entirely (no tombstone) and purge their local plaintext caches.
+// Satisfies the disappear.Publisher port.
+func (p *Publisher) PublishMessageExpired(chatType string, chatID, messageID uuid.UUID) {
+	p.hub.publishToChat(chatType, chatID, encode(EventMessageDeleted, map[string]any{
+		"chatType":  chatType,
+		"chatId":    chatID,
+		"messageId": messageID,
+		"expired":   true,
+	}))
+}
+
 // PublishNotification pushes a notification.created event to one user's
 // connected clients; satisfies the notifications.WSPublisher port.
 func (p *Publisher) PublishNotification(userID uuid.UUID, data any) {

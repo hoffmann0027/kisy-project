@@ -80,6 +80,17 @@ export async function cachedPlaintext(s: E2EESession, messageId: string): Promis
   return raw ? utf8dec.decode(raw) : null;
 }
 
+/**
+ * Purge a message's locally cached plaintext (stage J). MUST be called for
+ * every message.deleted event — otherwise a "disappeared" E2EE message
+ * would silently survive in IndexedDB and the security feature would leak.
+ * Also the hook for the future client-side search index (E2EE stage 8):
+ * add its cleanup here.
+ */
+export async function dropPlaintext(s: E2EESession, messageId: string): Promise<void> {
+  await s.store.remove(`msg/${messageId}`);
+}
+
 // Scheduled sending (stage I): the client encrypts at scheduling time, so
 // the plaintext is cached under the scheduled id until the real message
 // exists — MLS senders consume their keys at encryption time and cannot

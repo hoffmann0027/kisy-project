@@ -4,7 +4,7 @@ import type { Message, User } from "@shared/api/types";
 export type ServerEvent =
   | { event: "message.created"; data: Message }
   | { event: "message.updated"; data: Message }
-  | { event: "message.deleted"; data: { chatType: string; chatId: string; messageId: string } }
+  | { event: "message.deleted"; data: { chatType: string; chatId: string; messageId: string; expired?: boolean } }
   | { event: "message.read"; data: ReadData }
   | { event: "typing.started"; data: TypingData }
   | { event: "typing.stopped"; data: TypingData }

@@ -122,6 +122,7 @@ import {
   cachePlaintext,
   cacheScheduledPlaintext,
   cachedScheduledPlaintext,
+  dropPlaintext,
   encryptForChat,
   hydrateMessage,
   processChatHandshake,
@@ -267,6 +268,29 @@ describe("E2EE private chat orchestration", () => {
     expect(await cachedScheduledPlaintext(alice, "sched-1")).toBeNull();
     const again = await hydrateMessage(alice, delivered);
     expect(again.text).toBe("отложенное");
+  });
+
+  it("purges the plaintext cache when a message disappears (stage J)", async () => {
+    const alice = await makeSession("user-alice");
+    const bob = await makeSession("user-bob");
+    await publishPool(bob, 2);
+    const chatId = "chat-ttl";
+
+    const enc = await encryptForChat(alice, chatId, "user-bob", "самоуничтожаюсь");
+    expect(enc).not.toBeNull();
+    await cachePlaintext(alice, "m-ttl", "самоуничтожаюсь");
+
+    // Readable while alive.
+    const alive = await hydrateMessage(alice, messageDTO("m-ttl", chatId, "user-alice", enc!.ciphertext));
+    expect(alive.text).toBe("самоуничтожаюсь");
+
+    // message.deleted arrives → the local plaintext MUST be purged. The
+    // ciphertext is undecryptable afterwards (one-time MLS keys), so the
+    // disappeared text is unrecoverable on this device.
+    await dropPlaintext(alice, "m-ttl");
+    const gone = await hydrateMessage(alice, messageDTO("m-ttl", chatId, "user-alice", enc!.ciphertext));
+    expect(gone.text).toBeNull();
+    expect(gone.undecryptable).toBe(true);
   });
 
   it("marks history from before the device joined as undecryptable", async () => {

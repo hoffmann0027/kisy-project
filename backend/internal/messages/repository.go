@@ -28,6 +28,9 @@ type Repository interface {
 	Update(ctx context.Context, q db.DBTX, id, senderID uuid.UUID, text string, at time.Time) (*Message, error)
 	// SetPinned pins or unpins a message and returns the fresh row.
 	SetPinned(ctx context.Context, q db.DBTX, id uuid.UUID, by *uuid.UUID, at *time.Time) (*Message, error)
+	// SetExpiry sets or clears a message's self-destruct time, but only for
+	// the sender and only while the message is not deleted.
+	SetExpiry(ctx context.Context, q db.DBTX, id, senderID uuid.UUID, at *time.Time) (*Message, error)
 	// ListPinned returns the chat's pinned messages, most recently pinned first.
 	ListPinned(ctx context.Context, q db.DBTX, chatType string, chatID uuid.UUID) ([]Message, error)
 }
@@ -36,14 +39,14 @@ type PostgresRepository struct{}
 
 func NewPostgresRepository() *PostgresRepository { return &PostgresRepository{} }
 
-const messageColumns = `id, chat_type, chat_id, sender_id, text, reply_to, is_deleted, deleted_at, edited_at, pinned_at, pinned_by, created_at, ciphertext, alg, epoch, content_kind, forwarded_from_sender_id, forwarded_from_sender_name, scheduled_message_id`
+const messageColumns = `id, chat_type, chat_id, sender_id, text, reply_to, is_deleted, deleted_at, edited_at, pinned_at, pinned_by, created_at, ciphertext, alg, epoch, content_kind, forwarded_from_sender_id, forwarded_from_sender_name, scheduled_message_id, expires_at`
 
 func scanMessage(row pgx.Row) (*Message, error) {
 	var m Message
 	err := row.Scan(&m.ID, &m.ChatType, &m.ChatID, &m.SenderID, &m.Text, &m.ReplyTo,
 		&m.IsDeleted, &m.DeletedAt, &m.EditedAt, &m.PinnedAt, &m.PinnedBy, &m.CreatedAt,
 		&m.Ciphertext, &m.Alg, &m.Epoch, &m.ContentKind,
-		&m.ForwardedFromSenderID, &m.ForwardedFromSenderName, &m.ScheduledMessageID)
+		&m.ForwardedFromSenderID, &m.ForwardedFromSenderName, &m.ScheduledMessageID, &m.ExpiresAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -57,12 +60,12 @@ func (r *PostgresRepository) Create(ctx context.Context, q db.DBTX, m *Message) 
 	err := q.QueryRow(ctx, `
 		INSERT INTO messages (chat_type, chat_id, sender_id, text, reply_to, ciphertext, alg, epoch, content_kind,
 		                      forwarded_from_message_id, forwarded_from_sender_id, forwarded_from_sender_name,
-		                      scheduled_message_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		                      scheduled_message_id, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		RETURNING id, is_deleted, created_at`,
 		m.ChatType, m.ChatID, m.SenderID, m.Text, m.ReplyTo, m.Ciphertext, m.Alg, m.Epoch, m.ContentKind,
 		m.ForwardedFromMessageID, m.ForwardedFromSenderID, m.ForwardedFromSenderName,
-		m.ScheduledMessageID,
+		m.ScheduledMessageID, m.ExpiresAt,
 	).Scan(&m.ID, &m.IsDeleted, &m.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("messages: create: %w", err)
@@ -104,7 +107,7 @@ func (r *PostgresRepository) ListPage(ctx context.Context, q db.DBTX, chatType s
 		if err := rows.Scan(&m.ID, &m.ChatType, &m.ChatID, &m.SenderID, &m.Text, &m.ReplyTo,
 			&m.IsDeleted, &m.DeletedAt, &m.EditedAt, &m.PinnedAt, &m.PinnedBy, &m.CreatedAt,
 			&m.Ciphertext, &m.Alg, &m.Epoch, &m.ContentKind,
-			&m.ForwardedFromSenderID, &m.ForwardedFromSenderName, &m.ScheduledMessageID); err != nil {
+			&m.ForwardedFromSenderID, &m.ForwardedFromSenderName, &m.ScheduledMessageID, &m.ExpiresAt); err != nil {
 			return nil, fmt.Errorf("messages: scan row: %w", err)
 		}
 		out = append(out, m)
@@ -134,6 +137,18 @@ func (r *PostgresRepository) SetPinned(ctx context.Context, q db.DBTX, id uuid.U
 	return scanMessage(row)
 }
 
+func (r *PostgresRepository) SetExpiry(ctx context.Context, q db.DBTX, id, senderID uuid.UUID, at *time.Time) (*Message, error) {
+	row := q.QueryRow(ctx, `
+		UPDATE messages SET expires_at = $3
+		WHERE id = $1 AND sender_id = $2 AND is_deleted = false
+		RETURNING `+messageColumns, id, senderID, at)
+	m, err := scanMessage(row)
+	if errors.Is(err, ErrNotFound) {
+		return nil, ErrForbidden
+	}
+	return m, err
+}
+
 func (r *PostgresRepository) ListPinned(ctx context.Context, q db.DBTX, chatType string, chatID uuid.UUID) ([]Message, error) {
 	rows, err := q.Query(ctx, `
 		SELECT `+messageColumns+` FROM messages
@@ -150,7 +165,7 @@ func (r *PostgresRepository) ListPinned(ctx context.Context, q db.DBTX, chatType
 		if err := rows.Scan(&m.ID, &m.ChatType, &m.ChatID, &m.SenderID, &m.Text, &m.ReplyTo,
 			&m.IsDeleted, &m.DeletedAt, &m.EditedAt, &m.PinnedAt, &m.PinnedBy, &m.CreatedAt,
 			&m.Ciphertext, &m.Alg, &m.Epoch, &m.ContentKind,
-			&m.ForwardedFromSenderID, &m.ForwardedFromSenderName, &m.ScheduledMessageID); err != nil {
+			&m.ForwardedFromSenderID, &m.ForwardedFromSenderName, &m.ScheduledMessageID, &m.ExpiresAt); err != nil {
 			return nil, fmt.Errorf("messages: scan pinned: %w", err)
 		}
 		out = append(out, m)

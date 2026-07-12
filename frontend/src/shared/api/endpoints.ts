@@ -13,6 +13,7 @@ import type {
   CallLogItem,
   ChatLinkPage,
   ChatMediaPage,
+  DisappearSetting,
   Group,
   IceConfig,
   Invitation,
@@ -74,6 +75,16 @@ export interface SendMessageBody {
   forwardedFromSenderId?: string;
   forwardedFromSenderName?: string;
 }
+
+// Disappearing messages (UPD3 stage J): a chat-wide default timer for new
+// messages; expired messages are HARD-deleted server-side and the client
+// purges its local plaintext cache in step.
+export const disappearApi = {
+  get: (chatType: ChatType, chatId: string) =>
+    apiClient.get<{ disappearing: DisappearSetting }>(`/chats/${chatType}/${chatId}/disappearing`),
+  set: (chatType: ChatType, chatId: string, ttlSeconds: number | null) =>
+    apiClient.put<{ disappearing: DisappearSetting }>(`/chats/${chatType}/${chatId}/disappearing`, { ttlSeconds }),
+};
 
 // Scheduled sending (UPD3 stage I): a frozen SendMessageBody snapshot the
 // server replays at sendAt. For E2EE chats the client encrypts at
@@ -313,6 +324,9 @@ export const messagesApi = {
   remove: (messageId: string) => apiClient.del<{ deleted: boolean }>(`/messages/${messageId}`),
   pin: (messageId: string) => apiClient.post<{ message: Message }>(`/messages/${messageId}/pin`),
   unpin: (messageId: string) => apiClient.post<{ message: Message }>(`/messages/${messageId}/unpin`),
+  // Per-message disappearing timer (stage J): sender-only; null clears.
+  setExpiry: (messageId: string, ttlSeconds: number | null) =>
+    apiClient.put<{ message: Message }>(`/messages/${messageId}/expiry`, { ttlSeconds }),
   listPinned: (chatType: ChatType, chatId: string) =>
     apiClient.get<{ pinned: Message[] }>(`/messages/pinned?chatType=${chatType}&chatId=${chatId}`),
   addReaction: (messageId: string, emoji: string) =>

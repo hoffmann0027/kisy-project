@@ -197,6 +197,8 @@ func newRouter(d routerDeps) http.Handler {
 				m.notifprefsHandler.ChatRoutes(r)
 				// Per-chat archive (UPD3 stage H).
 				m.chatfoldersHandler.ChatRoutes(r)
+				// Per-chat disappearing timer (UPD3 stage J).
+				m.disappearHandler.ChatRoutes(r)
 			})
 
 			r.Route("/settings", func(r chi.Router) {

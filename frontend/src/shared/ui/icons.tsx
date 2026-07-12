@@ -134,6 +134,15 @@ export const Icon = {
       </>,
       size,
     ),
+  Timer: ({ size }: IconProps) =>
+    svg(
+      <>
+        <path d="M10 2h4" />
+        <circle cx="12" cy="14" r="8" />
+        <path d="M12 14v-4" />
+      </>,
+      size,
+    ),
   Archive: ({ size }: IconProps) =>
     svg(
       <>

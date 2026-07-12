@@ -36,9 +36,29 @@ interface Props {
   selectionMode?: boolean;
   selected?: boolean;
   onToggleSelect?: (m: Message) => void;
+  /** Per-message disappearing timer (stage J, own messages only). */
+  onSetExpiry?: (m: Message, ttlSeconds: number | null) => void;
 }
 
 const QUICK_EMOJI = ["👍", "❤️", "😂", "🔥", "👏"];
+
+const TIMER_OPTIONS: { ttl: number; label: string }[] = [
+  { ttl: 3600, label: "1 час" },
+  { ttl: 86400, label: "24 часа" },
+  { ttl: 7 * 86400, label: "7 дней" },
+];
+
+// expiresIn renders a compact countdown label ("исчезнет через 5 мин").
+function expiresIn(iso: string): string {
+  const ms = new Date(iso).getTime() - Date.now();
+  if (ms <= 0) return "исчезает…";
+  const min = Math.round(ms / 60000);
+  if (min < 1) return "исчезнет менее чем через минуту";
+  if (min < 60) return `исчезнет через ${min} мин`;
+  const h = Math.round(min / 60);
+  if (h < 48) return `исчезнет через ${h} ч.`;
+  return `исчезнет через ${Math.round(h / 24)} дн.`;
+}
 
 function StatusTick({ status }: { status: DeliveryStatus }) {
   if (status === "pending") return <span className="tick tick--pending" title="Отправляется">🕓</span>;
@@ -70,9 +90,11 @@ export const MessageBubble = memo(function MessageBubble({
   selectionMode,
   selected,
   onToggleSelect,
+  onSetExpiry,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [timerOpen, setTimerOpen] = useState(false);
   const [draft, setDraft] = useState(message.text ?? "");
   const previewUrl = message.text ? firstUrl(message.text) : null;
 
@@ -158,6 +180,44 @@ export const MessageBubble = memo(function MessageBubble({
           >
             <Icon.Pin size={15} />
           </button>
+          {mine && onSetExpiry && (
+            <div className="bubble__emoji-wrap">
+              <button
+                className="bubble__action bubble__timer-toggle"
+                onClick={() => setTimerOpen((v) => !v)}
+                title={message.expiresAt ? expiresIn(message.expiresAt) : "Таймер исчезновения"}
+              >
+                <Icon.Timer size={15} />
+              </button>
+              {timerOpen && (
+                <div className="chatmenu bubble__timer-menu" role="menu">
+                  {TIMER_OPTIONS.map((o) => (
+                    <button
+                      key={o.ttl}
+                      className="chatmenu__item"
+                      onClick={() => {
+                        onSetExpiry(message, o.ttl);
+                        setTimerOpen(false);
+                      }}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                  {message.expiresAt && (
+                    <button
+                      className="chatmenu__item"
+                      onClick={() => {
+                        onSetExpiry(message, null);
+                        setTimerOpen(false);
+                      }}
+                    >
+                      Убрать таймер
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           {canEdit && (
             <button className="bubble__action" onClick={startEdit} title="Изменить">
               <Icon.Edit size={15} />
@@ -239,6 +299,11 @@ export const MessageBubble = memo(function MessageBubble({
           <LinkPreviewCard url={previewUrl} autoFetch={!message.encrypted} />
         )}
         <span className="bubble__meta">
+          {message.expiresAt && (
+            <span className="bubble__expires" title={expiresIn(message.expiresAt)}>
+              <Icon.Timer size={12} />
+            </span>
+          )}
           {message.editedAt && <span className="bubble__edited">изменено</span>}
           {formatTime(message.createdAt)}
           {mine && status && <StatusTick status={status} />}

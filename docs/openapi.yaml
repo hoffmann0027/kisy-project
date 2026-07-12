@@ -41,6 +41,8 @@ tags:
     description: Personal chat folders and archive (organizational metadata over chat references; never grants or reveals access)
   - name: scheduled
     description: Delayed message sending — frozen send-body snapshots replayed by the worker at sendAt (E2EE chats encrypt at scheduling time, docs/security.md "path A")
+  - name: disappearing
+    description: Disappearing messages — a chat-wide default TTL plus per-message timers; expired messages are HARD-deleted (rows, ciphertext and attachment bytes) and clients purge their local plaintext caches
   - name: admin
     description: CEO administration (users, roles, credentials, audit)
   - name: websocket
@@ -1531,6 +1533,101 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /chats/{chatType}/{chatID}/disappearing:
+    get:
+      tags: [disappearing]
+      summary: The chat's disappearing-messages timer (UPD3 stage J)
+      parameters:
+        - { name: chatType, in: path, required: true, schema: { type: string, enum: [private, group] } }
+        - { name: chatID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Current timer (ttlSeconds null = off)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          disappearing: { $ref: '#/components/schemas/DisappearSetting' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [disappearing]
+      summary: Enable, change or disable the chat's timer
+      description: >
+        Chat-wide (as in Signal/Telegram) — any member may change it and
+        everyone sees the mode. New messages get expires_at = now + ttl; the
+        reaper then HARD-deletes them (text, ciphertext, attachments) and
+        clients purge local plaintext caches. The change is audited (TTL
+        only, never content). ttlSeconds null/0 disables; otherwise 5s..1y.
+        Inaccessible chats yield a masked 404.
+      parameters:
+        - { name: chatType, in: path, required: true, schema: { type: string, enum: [private, group] } }
+        - { name: chatID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ttlSeconds: { type: [integer, 'null'], description: null/0 disables the timer. }
+      responses:
+        '200':
+          description: Updated timer
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          disappearing: { $ref: '#/components/schemas/DisappearSetting' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /messages/{messageID}/expiry:
+    put:
+      tags: [disappearing]
+      summary: Set or clear a disappearing timer on the actor's own message
+      description: >
+        Sender-only. ttlSeconds counts from now; null/0 clears. Republished
+        as message.updated so every viewer's bubble shows the timer.
+      parameters:
+        - { name: messageID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ttlSeconds: { type: [integer, 'null'] }
+      responses:
+        '200':
+          description: Updated message
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          message: { $ref: '#/components/schemas/Message' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /folders:
     get:
       tags: [folders]
@@ -2925,6 +3022,13 @@ components:
             Scheduled origin (stage I) — present only on messages sent by the
             scheduler; lets the sender's client re-key its locally cached
             E2EE plaintext onto the delivered message id.
+        expiresAt:
+          type: [string, 'null']
+          format: date-time
+          description: >
+            Disappearing (stage J) — when this message self-destructs.
+            Metadata only; in E2EE chats the server sees the timer, never
+            the content.
     MessagePage:
       type: object
       properties:
@@ -2933,6 +3037,12 @@ components:
           items: { $ref: '#/components/schemas/Message' }
         nextCursor: { type: string }
         hasMore: { type: boolean }
+    DisappearSetting:
+      type: object
+      properties:
+        ttlSeconds: { type: [integer, 'null'], description: Default TTL for new messages; null = off. }
+        setBy: { type: [string, 'null'], format: uuid }
+        updatedAt: { type: [string, 'null'], format: date-time }
     ScheduledMessage:
       type: object
       properties:
