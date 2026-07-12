@@ -45,6 +45,7 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Get("/", h.list)
 	r.Post("/", h.create) // any user may create (clearance validated in service)
 	r.Get("/{groupID}", h.get)
+	r.Patch("/{groupID}", h.update) // CEO-only: change the group's level
 	r.Delete("/{groupID}", h.delete)
 	r.Get("/{groupID}/members", h.listMembers)
 	r.Post("/{groupID}/members", h.addMember)
@@ -85,6 +86,47 @@ func (h *Handler) uploadAvatar(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "only the CEO or the group founder may change the avatar")
 	case err != nil:
 		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
+	default:
+		httpresponse.OK(w, r, http.StatusOK, map[string]any{"group": g.ToDTO()})
+	}
+}
+
+type updateRequest struct {
+	MinRoleLevel int `json:"minRoleLevel"`
+}
+
+// update changes a group's minimum clearance level after creation. Only the
+// CEO may do this (enforced in the service).
+func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actor(r)
+	if !ok {
+		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "groupID"))
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "group not found")
+		return
+	}
+
+	var req updateRequest
+	if err := httpjson.Decode(w, r, &req); err != nil {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "malformed JSON body")
+		return
+	}
+	if req.MinRoleLevel < 1 || req.MinRoleLevel > 10 {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "minRoleLevel must be between 1 and 10")
+		return
+	}
+
+	g, err := h.svc.SetMinRoleLevel(r.Context(), id, req.MinRoleLevel, actor)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "group not found")
+	case errors.Is(err, ErrForbidden):
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "только CEO может менять уровень группы")
+	case err != nil:
+		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "failed to update group")
 	default:
 		httpresponse.OK(w, r, http.StatusOK, map[string]any{"group": g.ToDTO()})
 	}

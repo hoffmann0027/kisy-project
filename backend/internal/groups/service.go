@@ -22,9 +22,10 @@ type ActorMeta struct {
 
 // Action names for the audit log.
 const (
-	actionGroupCreated     = "group.created"
-	actionGroupMemberAdded = "group.member_added"
-	actionGroupDeleted     = "group.deleted"
+	actionGroupCreated      = "group.created"
+	actionGroupMemberAdded  = "group.member_added"
+	actionGroupDeleted      = "group.deleted"
+	actionGroupLevelChanged = "group.level_changed"
 )
 
 // ProfileLoader resolves a user's public profile, injected to avoid a
@@ -67,6 +68,58 @@ func (s *Service) SetAvatar(ctx context.Context, groupID uuid.UUID, url string, 
 	if err := s.repo.SetAvatarURL(ctx, s.pool, groupID, url); err != nil {
 		return nil, err
 	}
+	if s.changed != nil {
+		s.changed(groupID)
+	}
+	return s.repo.GetByID(ctx, s.pool, groupID)
+}
+
+// SetMinRoleLevel changes a group's minimum clearance (its "level") after
+// creation. Only the CEO may do this; other users get ErrForbidden (or
+// ErrNotFound if they cannot even see the group, to avoid leaking its
+// existence). newLevel must be 1..10 (validated by the handler). Members whose
+// clearance no longer satisfies a stricter level simply stop seeing the group;
+// they are not force-removed. Returns the refreshed group.
+func (s *Service) SetMinRoleLevel(ctx context.Context, groupID uuid.UUID, newLevel int, actor ActorMeta) (*Group, error) {
+	g, err := s.repo.GetByID(ctx, s.pool, groupID)
+	if err != nil {
+		return nil, err // ErrNotFound propagates
+	}
+	if !access.IsCEO(actor.RoleLevel) {
+		if g.IsArchived || !access.CanAccessGroup(actor.RoleLevel, g.MinRoleLevel) {
+			return nil, ErrNotFound
+		}
+		return nil, ErrForbidden
+	}
+	if newLevel == g.MinRoleLevel {
+		return g, nil // no-op; avoid a spurious audit entry and broadcast
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("groups: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err := s.repo.SetMinRoleLevel(ctx, tx, groupID, newLevel); err != nil {
+		return nil, err
+	}
+	if err := s.audit.Record(ctx, tx, audit.Event{
+		ActorID:    &actor.UserID,
+		Action:     actionGroupLevelChanged,
+		TargetType: "group",
+		TargetID:   &groupID,
+		IPHash:     actor.IPHash,
+		SessionID:  &actor.SessionID,
+		RequestID:  actor.RequestID,
+		Metadata:   map[string]any{"from": g.MinRoleLevel, "to": newLevel},
+	}); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("groups: commit: %w", err)
+	}
+
 	if s.changed != nil {
 		s.changed(groupID)
 	}

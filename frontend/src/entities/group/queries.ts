@@ -22,6 +22,19 @@ export function useCreateGroup() {
   });
 }
 
+export function useUpdateGroupLevel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { groupId: string; minRoleLevel: number }) =>
+      groupsApi.updateLevel(args.groupId, args.minRoleLevel),
+    onSuccess: ({ group }) => {
+      qc.setQueryData<Group[]>(groupKeys.list, (prev) =>
+        prev?.map((g) => (g.id === group.id ? group : g)),
+      );
+    },
+  });
+}
+
 export function useDeleteGroup() {
   const qc = useQueryClient();
   return useMutation({

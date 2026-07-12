@@ -30,6 +30,8 @@ type Repository interface {
 	DeleteGroupMessages(ctx context.Context, q db.DBTX, groupID uuid.UUID) error
 	// SetAvatarURL points the group's avatar_url at a (versioned) URL.
 	SetAvatarURL(ctx context.Context, q db.DBTX, id uuid.UUID, url string) error
+	// SetMinRoleLevel changes the group's minimum clearance (its "level").
+	SetMinRoleLevel(ctx context.Context, q db.DBTX, id uuid.UUID, level int) error
 }
 
 type PostgresRepository struct{}
@@ -141,6 +143,17 @@ func (r *PostgresRepository) SetAvatarURL(ctx context.Context, q db.DBTX, id uui
 	tag, err := q.Exec(ctx, `UPDATE groups SET avatar_url = $2, updated_at = now() WHERE id = $1`, id, url)
 	if err != nil {
 		return fmt.Errorf("groups: set avatar url: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *PostgresRepository) SetMinRoleLevel(ctx context.Context, q db.DBTX, id uuid.UUID, level int) error {
+	tag, err := q.Exec(ctx, `UPDATE groups SET min_role_level = $2, updated_at = now() WHERE id = $1`, id, level)
+	if err != nil {
+		return fmt.Errorf("groups: set min role level: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound

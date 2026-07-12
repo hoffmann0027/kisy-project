@@ -108,6 +108,57 @@ func TestDeletePermissions(t *testing.T) {
 	}
 }
 
+func TestSetMinRoleLevelPermissions(t *testing.T) {
+	svc, pool := newGroups(t)
+	ctx := context.Background()
+	ceo := testdb.SeedUser(t, pool, "ceo", 1)
+	founder := testdb.SeedUser(t, pool, "founder", 5)
+	low := testdb.SeedUser(t, pool, "low", 10)
+
+	g, err := svc.Create(ctx, groups.CreateInput{Name: "Team", MinRoleLevel: 5}, actor(founder, 5))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A low, unrelated user cannot see the group → change is masked as 404.
+	if _, err := svc.SetMinRoleLevel(ctx, g.ID, 8, actor(low, 10)); !errors.Is(err, groups.ErrNotFound) {
+		t.Fatalf("hidden change: got %v, want ErrNotFound", err)
+	}
+	// The founder can see it but is not the CEO → forbidden.
+	if _, err := svc.SetMinRoleLevel(ctx, g.ID, 8, actor(founder, 5)); !errors.Is(err, groups.ErrForbidden) {
+		t.Fatalf("founder change: got %v, want ErrForbidden", err)
+	}
+
+	// The CEO widens the group's audience to level 8.
+	updated, err := svc.SetMinRoleLevel(ctx, g.ID, 8, actor(ceo, 1))
+	if err != nil {
+		t.Fatalf("CEO change: %v", err)
+	}
+	if updated.MinRoleLevel != 8 {
+		t.Fatalf("min level not applied: got %d, want 8", updated.MinRoleLevel)
+	}
+
+	// The level-8 user can now see the group; tightening back to 4 hides it.
+	if !containsGroup(mustList(t, svc, low, 8), g.ID) {
+		t.Fatal("level-8 user should now see the widened group")
+	}
+	if _, err := svc.SetMinRoleLevel(ctx, g.ID, 4, actor(ceo, 1)); err != nil {
+		t.Fatalf("CEO tighten: %v", err)
+	}
+	if containsGroup(mustList(t, svc, low, 8), g.ID) {
+		t.Fatal("level-8 user must not see the tightened group")
+	}
+}
+
+func mustList(t *testing.T, svc *groups.Service, id uuid.UUID, level int) []groups.Group {
+	t.Helper()
+	list, err := svc.ListVisible(context.Background(), actor(id, level))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return list
+}
+
 func containsGroup(list []groups.Group, id uuid.UUID) bool {
 	for i := range list {
 		if list[i].ID == id {

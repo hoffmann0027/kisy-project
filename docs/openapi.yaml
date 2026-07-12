@@ -453,6 +453,42 @@ paths:
                           group: { $ref: '#/components/schemas/Group' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [groups]
+      summary: Change a group's clearance level (CEO only)
+      description: >
+        Only the CEO may change a group's minimum clearance (its "level") after
+        creation. Members whose clearance no longer satisfies a stricter level
+        simply stop seeing the group; they are not removed. A group hidden from
+        the caller's clearance returns 404 (not 403).
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [minRoleLevel]
+              properties:
+                minRoleLevel: { type: integer, minimum: 1, maximum: 10 }
+      responses:
+        '200':
+          description: Group updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          group: { $ref: '#/components/schemas/Group' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
     delete:
       tags: [groups]
       summary: Delete a group (CEO or founder)

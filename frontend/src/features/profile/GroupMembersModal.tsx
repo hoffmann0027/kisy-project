@@ -2,9 +2,9 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Avatar, Button, Modal, Spinner, toast } from "@shared/ui";
-import { roleLabel, type Group } from "@shared/api/types";
+import { ROLE_LABELS, roleLabel, type Group } from "@shared/api/types";
 import { groupsApi, usersApi } from "@shared/api/endpoints";
-import { groupKeys, useAddMember, useDeleteGroup, useGroupMembers } from "@entities/group/queries";
+import { groupKeys, useAddMember, useDeleteGroup, useGroupMembers, useUpdateGroupLevel } from "@entities/group/queries";
 import { useAuthStore } from "@shared/store/auth";
 import { ApiError } from "@shared/api/envelope";
 import { AvatarCropper } from "./AvatarCropper";
@@ -23,9 +23,22 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
   const del = useDeleteGroup();
   const qc = useQueryClient();
   const me = useAuthStore((s) => s.user!);
+  const updateLevel = useUpdateGroupLevel();
   // The CEO may delete/manage any group; the founder their own.
-  const canManage = me.roleLevel === 1 || me.id === group.createdBy;
+  const isCEO = me.roleLevel === 1;
+  const canManage = isCEO || me.id === group.createdBy;
   const canDelete = canManage;
+
+  const changeLevel = (level: number) => {
+    if (level === group.minRoleLevel) return;
+    updateLevel.mutate(
+      { groupId: group.id, minRoleLevel: level },
+      {
+        onSuccess: () => toast.success("Уровень группы изменён"),
+        onError: () => toast.error("Не удалось изменить уровень"),
+      },
+    );
+  };
 
   const uploadGroupAvatar = async (blob: Blob) => {
     await groupsApi.uploadAvatar(group.id, blob);
@@ -58,6 +71,33 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
             {canManage ? "Нажмите на аватар, чтобы изменить" : "Группа"}
           </div>
         </div>
+      </div>
+
+      <div className="ui-field">
+        <label className="ui-field__label">Уровень доступа</label>
+        {isCEO ? (
+          <select
+            className="ui-input"
+            value={group.minRoleLevel}
+            disabled={updateLevel.isPending}
+            onChange={(e) => changeLevel(Number(e.target.value))}
+          >
+            {Object.entries(ROLE_LABELS).map(([lvl, label]) => (
+              <option key={lvl} value={lvl}>
+                {lvl}. {label}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div className="ui-input" style={{ display: "flex", alignItems: "center" }}>
+            {group.minRoleLevel}. {roleLabel(group.minRoleLevel)}
+          </div>
+        )}
+        <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
+          {isCEO
+            ? "Как CEO вы можете менять уровень группы. Она видна пользователям выбранного уровня и выше."
+            : "Группа видна пользователям этого уровня и выше."}
+        </span>
       </div>
 
       {canAdd && !adding && (

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@shared/lib/cn";
 import { Icon } from "@shared/ui/icons";
-import type { Group } from "@shared/api/types";
+import { roleLabel, type Group } from "@shared/api/types";
 import { useAuthStore } from "@shared/store/auth";
 import { Conversation } from "./Conversation";
 import { BoardView } from "@widgets/board/BoardView";
@@ -15,6 +15,8 @@ export function GroupView({ group }: { group: Group }) {
   const [tab, setTab] = useState<Tab>("chat");
   const [membersOpen, setMembersOpen] = useState(false);
   const isFounder = useAuthStore((s) => s.user?.id === group.createdBy);
+  // Group's clearance, shown in the header so the level is visible in-chat.
+  const levelLabel = `Группа · от ${roleLabel(group.minRoleLevel)} и выше`;
 
   const tabs = (
     <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
@@ -64,7 +66,7 @@ export function GroupView({ group }: { group: Group }) {
           title: group.name,
           avatarName: group.name,
           avatarUrl: group.avatarUrl,
-          offlineLabel: "Группа",
+          offlineLabel: levelLabel,
         }}
         headerActions={tabs}
       />

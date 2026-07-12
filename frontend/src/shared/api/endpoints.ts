@@ -279,6 +279,8 @@ export const groupsApi = {
   create: (name: string, minRoleLevel: number, description?: string) =>
     apiClient.post<{ group: Group }>("/groups", { name, minRoleLevel, description }),
   get: (groupId: string) => apiClient.get<{ group: Group }>(`/groups/${groupId}`),
+  updateLevel: (groupId: string, minRoleLevel: number) =>
+    apiClient.patch<{ group: Group }>(`/groups/${groupId}`, { minRoleLevel }),
   remove: (groupId: string) => apiClient.del<{ deleted: boolean }>(`/groups/${groupId}`),
   members: (groupId: string) => apiClient.get<{ members: User[] }>(`/groups/${groupId}/members`),
   addMember: (groupId: string, userId: string) =>
