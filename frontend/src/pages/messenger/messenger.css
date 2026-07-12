@@ -779,7 +779,10 @@
 }
 .bubble-row--out .bubble__actions { right: 0; }
 .bubble-row--in .bubble__actions { left: 0; }
-.bubble-row:hover .bubble__actions { display: flex; }
+.bubble-row:hover .bubble__actions,
+/* Keep the bar visible while its emoji picker / timer menu is open, so
+   crossing the gap up into the popover does not hide its own parent. */
+.bubble--menu-open .bubble__actions { display: flex; }
 .bubble__action {
   border: none;
   background: transparent;

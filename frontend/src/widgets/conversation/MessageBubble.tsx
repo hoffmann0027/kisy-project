@@ -140,9 +140,15 @@ export const MessageBubble = memo(function MessageBubble({
     );
   }
 
+  // The action bar shows on hover only; while a popover anchored inside it
+  // (emoji picker / disappearing-timer menu) is open, pin the bar visible so
+  // moving the cursor up into the popover — across the gap, off the bubble —
+  // does not hide its own parent and dismiss it.
+  const menuOpen = emojiOpen || timerOpen;
+
   return (
     <div className={cn("bubble-row", mine ? "bubble-row--out" : "bubble-row--in")}>
-      <div className={cn("bubble", mine ? "bubble--out" : "bubble--in")}>
+      <div className={cn("bubble", mine ? "bubble--out" : "bubble--in", menuOpen && "bubble--menu-open")}>
         <div className="bubble__actions">
           {QUICK_EMOJI.map((e) => (
             <button key={e} className="bubble__action" onClick={() => onReact(message, e)} title={`Реакция ${e}`}>
