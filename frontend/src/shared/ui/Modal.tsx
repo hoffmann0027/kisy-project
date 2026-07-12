@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { IconButton } from "./IconButton";
 
 interface Props {
@@ -20,7 +21,10 @@ export function Modal({ open, title, onClose, children }: Props) {
 
   if (!open) return null;
 
-  return (
+  // Portal to <body> so the fixed backdrop always covers the whole viewport
+  // and is never contained/clipped by a panel with backdrop-filter or
+  // overflow:hidden (e.g. modals opened from the chat list or conversation).
+  return createPortal(
     <div className="ui-modal__backdrop" onMouseDown={onClose}>
       <div className="ui-modal" role="dialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
         <div className="ui-modal__header">
@@ -33,6 +37,7 @@ export function Modal({ open, title, onClose, children }: Props) {
         </div>
         <div className="ui-modal__body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

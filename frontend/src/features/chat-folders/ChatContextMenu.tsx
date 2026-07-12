@@ -2,6 +2,7 @@
 // chat and toggle its membership in the user's folders. Opens at the cursor
 // (right-click / long-press friendly), closes on outside click or Escape.
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "@shared/ui/icons";
 import { toast } from "@shared/ui";
 import type { ChatType } from "@shared/api/types";
@@ -75,7 +76,11 @@ export function ChatContextMenu({ target, onClose }: Props) {
     top: Math.min(target.y, window.innerHeight - (120 + folders.length * 36)),
   };
 
-  return (
+  // Rendered in a portal on <body> so the fixed-position menu escapes the
+  // chat-list panel: that panel has backdrop-filter (a containing block for
+  // fixed descendants) + overflow:hidden, which would otherwise mis-position
+  // and clip this menu behind the panel edge.
+  return createPortal(
     <div className="chatmenu" style={style} ref={rootRef} role="menu">
       <button className="chatmenu__item" onClick={toggleArchive}>
         <Icon.Archive size={16} />
@@ -92,6 +97,7 @@ export function ChatContextMenu({ target, onClose }: Props) {
           </button>
         );
       })}
-    </div>
+    </div>,
+    document.body,
   );
 }
