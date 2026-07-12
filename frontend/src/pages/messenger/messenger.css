@@ -1,23 +1,27 @@
+/* Floating panels on the themed underlay (design handoff). */
 .msgr {
   display: grid;
-  grid-template-columns: 72px 336px 1fr;
+  grid-template-columns: 60px 336px 1fr;
+  gap: 10px;
+  padding: 10px;
   height: 100%;
   overflow: hidden;
 }
 .msgr--with-panel {
-  grid-template-columns: 72px 336px 1fr 300px;
+  grid-template-columns: 60px 336px 1fr 300px;
 }
 
-/* --- Nav rail --- */
+/* --- Nav rail (satin-metal key panel) --- */
 .rail {
-  background: var(--color-surface-glass-strong);
-  backdrop-filter: blur(var(--blur-glass));
-  border-right: 1px solid var(--color-border);
+  background: var(--rail-bg);
+  border: 1px solid var(--rail-brd);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--soft-shadow);
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: var(--space-4) 0;
-  gap: var(--space-3);
+  padding: 13px 0;
+  gap: 6px;
 }
 .rail__logo {
   display: flex;
@@ -34,25 +38,39 @@
 }
 .rail__item {
   position: relative;
-  width: 46px;
-  height: 46px;
-  border-radius: var(--radius-md);
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
   border: none;
-  background: transparent;
-  color: var(--color-text-secondary);
+  background: var(--key-bg);
+  box-shadow: var(--key-sh);
+  color: var(--key-ink);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition: transform var(--spring), box-shadow var(--spring), color var(--spring), background var(--spring);
 }
 .rail__item:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--color-text-primary);
+  color: var(--ink);
+}
+.rail__item:active {
+  transform: translateY(2px) scale(0.92);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.28);
 }
 .rail__item--active {
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
+  background: var(--acc-bg);
+  box-shadow: var(--acc-sh);
+  color: var(--acc-ink);
+  transform: translateY(1px);
+}
+/* The profile avatar sits flush (its own circle), not as a key. */
+.rail__item:has(.ui-avatar) {
+  background: transparent;
+  box-shadow: none;
+}
+.rail__item:has(.ui-avatar):active {
+  box-shadow: none;
 }
 .rail__item-badge {
   position: absolute;
@@ -62,11 +80,16 @@
 
 /* --- Chat list column --- */
 .chatlist {
-  border-right: 1px solid var(--color-border);
+  border: 1px solid var(--panel-brd);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--soft-shadow);
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
   display: flex;
   flex-direction: column;
-  background: rgba(16, 16, 22, 0.5);
+  background: var(--side-bg);
   min-width: 0;
+  overflow: hidden;
   /* Allow the inner scroll area to shrink below content height so it can
      scroll (required by Safari/iOS for flex/grid children). */
   min-height: 0;
@@ -117,10 +140,10 @@
   color: inherit;
 }
 .chat-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover);
 }
 .chat-item--active {
-  background: var(--color-accent-soft);
+  background: var(--acc-soft);
 }
 .chat-item__body {
   flex: 1;
@@ -191,16 +214,19 @@
   min-width: 0;
   min-height: 0;
   position: relative; /* anchors the context panel (stage C) */
-  background:
-    radial-gradient(800px 500px at 70% 0%, rgba(10, 132, 255, 0.05), transparent 60%);
+  background: var(--conv-bg);
+  border: 1px solid var(--panel-brd);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--soft-shadow);
+  overflow: hidden;
 }
 .conv__header {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface-glass-strong);
+  border-bottom: 1px solid var(--divider);
+  background: var(--head-bg);
   backdrop-filter: blur(var(--blur-glass));
   /* The backdrop-filter creates a stacking context; without a positive
      z-index the header's dropdowns (mute/disappear menus) would paint UNDER
@@ -241,9 +267,9 @@
 .conv__day {
   align-self: center;
   font-size: 12px;
-  color: var(--color-text-secondary);
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
+  color: var(--dim);
+  background: var(--chip-bg);
+  border: 1px solid var(--divider);
   padding: 4px 12px;
   border-radius: var(--radius-round);
   margin: var(--space-3) 0;
@@ -260,20 +286,23 @@
 }
 .bubble {
   max-width: min(560px, 72%);
-  padding: 8px 12px 6px;
-  border-radius: var(--radius-lg);
+  padding: 9px 13px 7px;
+  border-radius: 18px;
   position: relative;
   font-size: 15px;
-  line-height: 1.4;
+  line-height: 1.42;
   word-wrap: break-word;
   white-space: pre-wrap;
 }
 .bubble--in {
-  background: var(--color-bubble-in);
+  background: var(--bubin-bg);
+  box-shadow: var(--bubin-sh);
+  color: var(--ink);
   border-bottom-left-radius: 6px;
 }
 .bubble--out {
-  background: var(--color-bubble-out);
+  background: var(--bubout-bg);
+  box-shadow: var(--bubout-sh);
   color: #fff;
   border-bottom-right-radius: 6px;
 }
@@ -840,17 +869,17 @@
   align-items: flex-end;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
-  border-top: 1px solid var(--color-border);
-  background: var(--color-surface-glass-strong);
+  border-top: 1px solid var(--divider);
+  background: var(--head-bg);
   backdrop-filter: blur(var(--blur-glass));
 }
 .composer__input {
   flex: 1;
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
+  background: var(--field-bg);
+  border: 1px solid var(--field-brd);
   border-radius: var(--radius-lg);
   padding: 11px 15px;
-  color: var(--color-text-primary);
+  color: var(--ink);
   font-size: 15px;
   resize: none;
   max-height: 160px;
@@ -858,25 +887,37 @@
 }
 .composer__input:focus {
   outline: none;
-  border-color: var(--color-accent);
+  border-color: var(--acc);
 }
+/* Send: radial-gradient actuator (inset highlight + outer shadow). */
 .composer__send {
   width: 44px;
   height: 44px;
   border-radius: var(--radius-round);
   border: none;
-  background: var(--color-accent);
+  background: var(--send-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 4px 12px rgba(0, 0, 0, 0.28);
   color: #fff;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: background var(--transition-fast), transform var(--transition-fast);
+  transition: transform var(--spring), box-shadow var(--spring), filter var(--spring);
+  animation: pop-in 0.18s ease;
 }
-.composer__send:hover:not(:disabled) { background: var(--color-accent-hover); }
+.composer__send:hover:not(:disabled) { filter: brightness(1.05); }
 .composer__send:disabled { opacity: 0.4; cursor: not-allowed; }
-.composer__send:active:not(:disabled) { transform: scale(0.92); }
+.composer__send:active:not(:disabled) {
+  transform: translateY(1px) scale(0.94);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+/* Empty composer: the send slot becomes a satin-key microphone. */
+.composer__send--mic {
+  background: var(--mic-bg);
+  box-shadow: var(--key-sh);
+  color: var(--key-ink);
+}
 
 .composer__reply {
   display: flex;
@@ -897,8 +938,11 @@
 
 /* --- context panel --- */
 .ctx-panel {
-  border-left: 1px solid var(--color-border);
-  background: rgba(16, 16, 22, 0.5);
+  border: 1px solid var(--panel-brd);
+  border-radius: var(--radius-xl);
+  background: var(--side-bg);
+  backdrop-filter: blur(var(--blur-glass));
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -938,7 +982,7 @@
   text-align: left;
   color: inherit;
 }
-.user-row:hover { background: rgba(255, 255, 255, 0.06); }
+.user-row:hover { background: var(--hover); }
 .user-row__name { font-weight: 560; }
 .user-row__role { font-size: 12px; color: var(--color-text-tertiary); }
 
@@ -959,7 +1003,7 @@
   margin-right: 2px;
 }
 .conv__back:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover);
   color: var(--color-text-primary);
 }
 
@@ -1312,7 +1356,7 @@
   border-radius: var(--radius-md);
 }
 .bubble-row--select:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--hover);
 }
 .bubble-row--selected {
   background: var(--color-accent-soft, rgba(76, 141, 255, 0.14));
@@ -1514,14 +1558,14 @@
   height: 28px;
   border: none;
   background: none;
-  color: var(--color-text-secondary);
+  color: var(--dim);
   border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
 }
 .composer__fmt:hover {
-  background: var(--color-surface-glass);
-  color: var(--color-text);
+  background: var(--hover);
+  color: var(--ink);
 }
 
 /* --- emoji picker + reply jump (stage F) --- */
@@ -1655,22 +1699,27 @@
 }
 .chatlist__tab {
   border: none;
-  background: transparent;
-  color: var(--color-text-secondary);
+  background: var(--key-bg);
+  box-shadow: var(--key-sh);
+  color: var(--dim);
   font-size: 13px;
   font-weight: 600;
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
+  padding: 6px 14px;
+  border-radius: 10px;
   cursor: pointer;
   white-space: nowrap;
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition: transform var(--spring), box-shadow var(--spring), color var(--spring);
 }
 .chatlist__tab:hover {
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+}
+.chatlist__tab:active {
+  transform: translateY(1px) scale(0.97);
 }
 .chatlist__tab--active {
-  background: var(--color-accent-soft);
-  color: var(--color-text-primary, inherit);
+  background: var(--acc-grad);
+  box-shadow: var(--acc-tab-sh);
+  color: #fff;
 }
 
 .chatlist__archive {
@@ -1775,7 +1824,7 @@
   border-radius: var(--radius-sm);
 }
 .foldermgr__row:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--hover);
 }
 .foldermgr__name {
   display: inline-flex;

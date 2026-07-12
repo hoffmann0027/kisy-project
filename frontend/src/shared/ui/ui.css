@@ -17,35 +17,37 @@
   white-space: nowrap;
   user-select: none;
 }
-.ui-btn:active {
-  transform: scale(0.97);
+.ui-btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.98);
 }
 .ui-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
+/* Primary: accent actuator (gradient + raised shadow). */
 .ui-btn--primary {
-  background: var(--color-accent);
+  background: var(--acc-grad);
+  box-shadow: var(--acc-tab-sh);
   color: #fff;
 }
 .ui-btn--primary:hover:not(:disabled) {
-  background: var(--color-accent-hover);
+  filter: brightness(1.05);
 }
+/* Secondary: satin key. */
 .ui-btn--secondary {
-  background: var(--color-surface-2);
-  color: var(--color-text-primary);
-  border-color: var(--color-border);
+  background: var(--key-bg);
+  box-shadow: var(--key-sh);
+  color: var(--key-ink);
 }
 .ui-btn--secondary:hover:not(:disabled) {
-  border-color: var(--color-border-strong);
-  background: #23232d;
+  color: var(--ink);
 }
 .ui-btn--ghost {
   background: transparent;
   color: var(--color-text-secondary);
 }
 .ui-btn--ghost:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover);
   color: var(--color-text-primary);
 }
 .ui-btn--danger {
@@ -74,7 +76,7 @@
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 .ui-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--hover);
   color: var(--color-text-primary);
 }
 
@@ -170,7 +172,7 @@
 .ui-spinner {
   width: 20px;
   height: 20px;
-  border: 2px solid rgba(255, 255, 255, 0.18);
+  border: 2px solid var(--divider);
   border-top-color: var(--color-accent);
   border-radius: var(--radius-round);
   animation: spin 0.7s linear infinite;
@@ -190,10 +192,10 @@
   padding: var(--space-4);
 }
 .ui-modal {
-  background: var(--color-surface-glass-strong);
+  background: var(--overlay-bg);
   backdrop-filter: blur(var(--blur-glass));
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--panel-brd);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-elevated);
   width: 100%;
   max-width: 440px;
@@ -244,10 +246,10 @@
 }
 .ui-toast--error {
   border-color: var(--color-danger);
-  color: #ffd7d4;
+  color: var(--color-danger);
 }
 .ui-toast--success {
-  border-color: rgba(50, 215, 75, 0.5);
+  border-color: rgba(52, 199, 89, 0.5);
 }
 
 /* Empty state */
