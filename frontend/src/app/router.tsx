@@ -4,7 +4,7 @@ import { RegisterPage } from "@pages/auth/RegisterPage";
 import { MessengerPage } from "@pages/messenger/MessengerPage";
 import { RatingPage } from "@pages/rating/RatingPage";
 import { AdminPage } from "@pages/admin/AdminPage";
-import { RequireAuth, RequireCEO, RedirectIfAuth } from "./guards";
+import { RequireAuth, RequireCEO, RequireRatingAccess, RedirectIfAuth } from "./guards";
 import { useRealtime } from "./useRealtime";
 import { CallProvider } from "@features/call/CallProvider";
 
@@ -44,7 +44,7 @@ export const router = createBrowserRouter([
       { path: "/", element: <RequireAuth><MessengerPage /></RequireAuth> },
       { path: "/chat/:chatId", element: <RequireAuth><MessengerPage /></RequireAuth> },
       { path: "/group/:groupId", element: <RequireAuth><MessengerPage /></RequireAuth> },
-      { path: "/rating", element: <RequireAuth><RatingPage /></RequireAuth> },
+      { path: "/rating", element: <RequireRatingAccess><RatingPage /></RequireRatingAccess> },
       { path: "/admin", element: <RequireCEO><AdminPage /></RequireCEO> },
     ],
   },

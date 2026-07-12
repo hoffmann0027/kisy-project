@@ -232,6 +232,9 @@ func newRouter(d routerDeps) http.Handler {
 			})
 
 			r.Route("/rating", func(r chi.Router) {
+				// The rating board is the clan board: open to clearance levels
+				// 1–9; the weakest level (10) is "not in a clan" and blocked.
+				r.Use(m.authMW.RequireClearance(9))
 				m.ratingHandler.Routes(r)
 			})
 
