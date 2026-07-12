@@ -2,7 +2,10 @@
 // Screen") and to serve the app shell offline. It deliberately never caches
 // API or WebSocket traffic — only the static shell and build assets — so no
 // authenticated data is persisted on disk.
-const CACHE = "kisy-shell-v1";
+// Bump this whenever the shell caching behavior changes: the new bytes make
+// browsers install the updated worker on next navigation, which purges the
+// old cache in activate and takes control (skipWaiting + clients.claim).
+const CACHE = "kisy-shell-v2";
 const SHELL = ["/", "/favicon.svg", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -63,10 +66,16 @@ self.addEventListener("fetch", (event) => {
   // Never touch API or realtime traffic.
   if (url.pathname.startsWith("/api") || url.pathname.startsWith("/ws")) return;
 
-  // App navigations: network-first, fall back to the cached shell offline.
+  // App navigations: always fetch the HTML shell fresh from the network
+  // (bypassing the HTTP cache), falling back to the cached shell only when
+  // offline. Without `cache: "no-store"` the browser could hand back a
+  // heuristically-cached index.html that still points at a previous deploy's
+  // hashed bundles, so new releases would never take effect.
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(() => caches.match("/").then((r) => r || caches.match("/index.html"))),
+      fetch(request, { cache: "no-store" }).catch(() =>
+        caches.match("/").then((r) => r || caches.match("/index.html")),
+      ),
     );
     return;
   }
