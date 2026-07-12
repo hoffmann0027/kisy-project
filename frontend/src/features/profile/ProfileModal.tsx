@@ -3,6 +3,7 @@ import { Button, Input, Modal, toast } from "@shared/ui";
 import { roleLabel } from "@shared/api/types";
 import { authApi, usersApi } from "@shared/api/endpoints";
 import { useAuthStore } from "@shared/store/auth";
+import { useThemeStore, type Theme } from "@shared/store/theme";
 import { disablePush, enablePush, pushEnabled, pushSupported } from "@shared/lib/push";
 import { useNotificationSettings, useUpdateNotificationSettings } from "@entities/notif-prefs/queries";
 import type { GroupNotifyMode } from "@shared/api/endpoints";
@@ -125,6 +126,8 @@ export function ProfileModal({ open, onClose }: Props) {
         </Button>
       </div>
 
+      <ThemeSwitcher />
+
       <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
         <div style={{ fontWeight: 600, fontSize: 15 }}>Сменить пароль</div>
         <Input
@@ -159,6 +162,36 @@ export function ProfileModal({ open, onClose }: Props) {
         Выйти из аккаунта
       </Button>
     </Modal>
+  );
+}
+
+// Theme switcher (design handoff): segmented control with a preview swatch
+// per theme, wired to the persisted useThemeStore.
+const THEME_OPTIONS: { id: Theme; label: string; swatch: string }[] = [
+  { id: "glass", label: "Стекло", swatch: "linear-gradient(135deg,#d9e2fb,#e9e6fb 50%,#c9b8f0)" },
+  { id: "luce", label: "Luce", swatch: "linear-gradient(135deg,#e2e6ea,#8f949c 55%,#31404b)" },
+];
+
+function ThemeSwitcher() {
+  const theme = useThemeStore((s) => s.theme);
+  const setTheme = useThemeStore((s) => s.setTheme);
+  return (
+    <div className="profile-section">
+      <div className="profile-section__label">Оформление</div>
+      <div className="theme-switch">
+        {THEME_OPTIONS.map((o) => (
+          <button
+            key={o.id}
+            className={`theme-switch__opt${theme === o.id ? " theme-switch__opt--active" : ""}`}
+            onClick={() => setTheme(o.id)}
+            type="button"
+          >
+            <span className="theme-switch__swatch" style={{ background: o.swatch }} />
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
