@@ -5,7 +5,7 @@
 // Bump this whenever the shell caching behavior changes: the new bytes make
 // browsers install the updated worker on next navigation, which purges the
 // old cache in activate and takes control (skipWaiting + clients.claim).
-const CACHE = "kisy-shell-v4";
+const CACHE = "kisy-shell-v5";
 const SHELL = ["/", "/favicon.png", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -80,8 +80,9 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Build assets and icons: cache-first (they are content-hashed / versioned).
-  if (url.pathname.startsWith("/assets/") || /\.(png|svg|webmanifest|woff2?)$/.test(url.pathname)) {
+  // Build assets under /assets/ are content-hashed (index-<hash>.js/.css), so
+  // cache-first is safe and fast — a changed file gets a new URL.
+  if (url.pathname.startsWith("/assets/")) {
     event.respondWith(
       caches.match(request).then(
         (hit) =>
@@ -92,6 +93,24 @@ self.addEventListener("fetch", (event) => {
             return resp;
           }),
       ),
+    );
+    return;
+  }
+
+  // Other static files (favicon.png, logo.png, icon-*.png, manifest, fonts)
+  // have STABLE names, so cache-first would pin a stale copy forever (this is
+  // why an updated logo did not appear). Use network-first: serve the fresh
+  // bytes when online, fall back to cache offline, and refresh the cache on
+  // every successful fetch.
+  if (/\.(png|svg|webmanifest|woff2?)$/.test(url.pathname)) {
+    event.respondWith(
+      fetch(request)
+        .then((resp) => {
+          const copy = resp.clone();
+          caches.open(CACHE).then((c) => c.put(request, copy));
+          return resp;
+        })
+        .catch(() => caches.match(request)),
     );
   }
 });
