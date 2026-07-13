@@ -5,6 +5,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+
+	"kisy-backend/internal/platform/security"
 )
 
 // Authenticated is the identity resolved from a WebSocket handshake.
@@ -68,19 +70,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	go client.readPump()
 }
 
-// originChecker permits same-origin handshakes. When allowedOrigin is set
-// (production) only that origin is accepted; when empty (development) any
-// origin is allowed. Requests without an Origin header (non-browser
-// clients) are always allowed.
+// originChecker permits handshakes from the configured allowed origin or from
+// the same origin as the request (Origin host == request Host, which the edge
+// proxy and the Vite dev proxy both preserve). It is fail-closed: an
+// unconfigured allowedOrigin no longer admits arbitrary origins — cookies
+// authenticate the handshake, so a permissive check would allow cross-site
+// WebSocket hijacking (CSWSH) from any page the user visits. Requests without
+// an Origin header (non-browser clients) are allowed: browsers always send
+// Origin on cross-site WebSocket handshakes, so those cannot be CSWSH.
 func originChecker(allowedOrigin string) func(*http.Request) bool {
 	return func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
 		if origin == "" {
 			return true
 		}
-		if allowedOrigin == "" {
-			return true
-		}
-		return origin == allowedOrigin
+		return security.OriginAllowed(origin, r, allowedOrigin)
 	}
 }

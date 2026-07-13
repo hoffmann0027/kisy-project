@@ -255,8 +255,11 @@ func (h *Handler) writeAuthError(w http.ResponseWriter, r *http.Request, err err
 	}
 }
 
+// Cookies below are HttpOnly + SameSite=Strict; Secure is h.secureCookie,
+// which is literal true whenever APP_ENV=production (dev serves plain http).
+// gosec cannot see through the variable, hence the G124 annotations.
 func (h *Handler) setAuthCookies(w http.ResponseWriter, t TokenPair) {
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure=true in production
 		Name:     AccessCookieName,
 		Value:    t.AccessToken,
 		Path:     "/",
@@ -265,7 +268,7 @@ func (h *Handler) setAuthCookies(w http.ResponseWriter, t TokenPair) {
 		Secure:   h.secureCookie,
 		SameSite: http.SameSiteStrictMode,
 	})
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure=true in production
 		Name:     RefreshCookieName,
 		Value:    t.RefreshCookie,
 		Path:     refreshCookiePath,
@@ -277,11 +280,11 @@ func (h *Handler) setAuthCookies(w http.ResponseWriter, t TokenPair) {
 }
 
 func (h *Handler) clearAuthCookies(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- expiring cookie, Secure=true in production
 		Name: AccessCookieName, Value: "", Path: "/", MaxAge: -1,
 		HttpOnly: true, Secure: h.secureCookie, SameSite: http.SameSiteStrictMode,
 	})
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- expiring cookie, Secure=true in production
 		Name: RefreshCookieName, Value: "", Path: refreshCookiePath, MaxAge: -1,
 		HttpOnly: true, Secure: h.secureCookie, SameSite: http.SameSiteStrictMode,
 	})

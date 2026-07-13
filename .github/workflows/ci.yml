@@ -100,8 +100,55 @@ jobs:
         # ships in the production bundle.
         run: npm audit --omit=dev --audit-level=high
 
+  security:
+    name: Security (gitleaks · gosec · trivy config · SBOM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # gitleaks scans the full commit history, not just HEAD.
+          fetch-depth: 0
+
+      - name: Secret scan (gitleaks)
+        # Pinned by digest: the scanner itself is supply-chain-sensitive.
+        run: >-
+          docker run --rm -v "$PWD:/repo"
+          zricethezav/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+          detect --source /repo --no-banner --redact
+
+      - name: IaC / Dockerfile scan (trivy config)
+        run: >-
+          docker run --rm -v "$PWD:/repo"
+          aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
+          config /repo --severity HIGH,CRITICAL --exit-code 1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: backend/go.sum
+
+      - name: SAST (gosec)
+        working-directory: backend
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          "$(go env GOPATH)/bin/gosec" -quiet -exclude-generated ./...
+
+      - name: SBOM (trivy cyclonedx)
+        # Answers "are we affected?" in minutes during the next supply-chain
+        # incident: the artifact lists every dependency of this commit.
+        run: >-
+          docker run --rm -v "$PWD:/repo"
+          aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
+          fs /repo --format cyclonedx --output /repo/sbom.cdx.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cdx.json
+          retention-days: 90
+
   docker:
-    name: Docker images build
+    name: Docker images build & scan
     runs-on: ubuntu-latest
     needs: [backend, frontend]
     steps:
@@ -113,6 +160,7 @@ jobs:
         with:
           context: ./backend
           push: false
+          load: true
           tags: kisy-backend:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -122,6 +170,18 @@ jobs:
         with:
           context: ./frontend
           push: false
+          load: true
           tags: kisy-frontend:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Image vulnerability scan (trivy image)
+        # CRITICAL + fixed-only keeps this actionable: an unfixed HIGH in the
+        # base image would otherwise block every merge with no remedy.
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f \
+            image --severity CRITICAL --ignore-unfixed --exit-code 1 kisy-backend:ci
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f \
+            image --severity CRITICAL --ignore-unfixed --exit-code 1 kisy-frontend:ci

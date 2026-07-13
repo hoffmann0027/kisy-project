@@ -45,18 +45,23 @@ type DTO struct {
 	IsActive    bool       `json:"isActive"`
 	LastSeen    *time.Time `json:"lastSeen"`
 	CreatedAt   time.Time  `json:"createdAt"`
+	// MustChangePassword is surfaced (omitempty → only when true) so the
+	// client can force a password change before granting access. Relevant on
+	// the self ("/me", login) response; harmless elsewhere.
+	MustChangePassword bool `json:"mustChangePassword,omitempty"`
 }
 
 func (u *User) ToDTO() DTO {
 	return DTO{
-		ID:          u.ID,
-		Username:    u.Username,
-		DisplayName: u.DisplayName,
-		RoleLevel:   u.RoleID,
-		AvatarURL:   u.AvatarURL,
-		Status:      u.Status,
-		IsActive:    u.IsActive,
-		LastSeen:    u.LastSeenAt,
-		CreatedAt:   u.CreatedAt,
+		ID:                 u.ID,
+		Username:           u.Username,
+		DisplayName:        u.DisplayName,
+		RoleLevel:          u.RoleID,
+		AvatarURL:          u.AvatarURL,
+		Status:             u.Status,
+		IsActive:           u.IsActive,
+		LastSeen:           u.LastSeenAt,
+		CreatedAt:          u.CreatedAt,
+		MustChangePassword: u.MustChangePassword,
 	}
 }

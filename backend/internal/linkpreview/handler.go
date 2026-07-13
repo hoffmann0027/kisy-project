@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -51,12 +52,22 @@ func (h *Handler) image(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Serve as an opaque download-safe image; nosniff (set globally) prevents
-	// a mislabeled body being treated as active content.
+	// a mislabeled body being treated as active content. A per-response
+	// sandbox CSP neutralizes the remaining direct-navigation vector, and SVG
+	// (the one image type that can carry scripts) is forced to download.
 	w.Header().Set("Content-Type", mime)
 	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	w.Header().Set("Cache-Control", "private, max-age=21600")
-	w.Header().Set("Content-Disposition", "inline")
+	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
+	if strings.HasPrefix(mime, "image/svg") {
+		w.Header().Set("Content-Disposition", "attachment")
+	} else {
+		w.Header().Set("Content-Disposition", "inline")
+	}
 	w.WriteHeader(http.StatusOK)
+	// #nosec G705 -- data is a remote image fetched through the SSRF guard,
+	// MIME-allowlisted to image/* by ImageProxy, served with nosniff +
+	// sandbox CSP, and never interpolated into HTML.
 	_, _ = w.Write(data)
 }
 

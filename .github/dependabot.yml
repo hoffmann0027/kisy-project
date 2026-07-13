@@ -1,10 +1,19 @@
 version: 2
+
+# Supply-chain policy (July 2026 security update): Dependabot PRs are reviewed
+# and merged BY A HUMAN — do not add an auto-merge workflow. `cooldown` keeps a
+# 7-day quarantine between a release and the update PR, mirroring
+# min-release-age in frontend/.npmrc: every major npm compromise of 2025-2026
+# (axios, node-ipc, Shai-Hulud/Miasma — the latter reaching the Go ecosystem)
+# was detected and unpublished well inside that window.
 updates:
   - package-ecosystem: gomod
     directory: /backend
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
     groups:
       go-dependencies:
         patterns: ["*"]
@@ -14,6 +23,8 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
     groups:
       npm-dependencies:
         patterns: ["*"]
@@ -22,12 +33,18 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: docker
     directory: /backend
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
   - package-ecosystem: docker
     directory: /frontend
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7

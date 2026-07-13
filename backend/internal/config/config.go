@@ -4,7 +4,10 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -271,7 +274,117 @@ func Load() (*Config, error) {
 		cfg.RunMigrations = v == "true" || v == "1"
 	}
 
+	if err := cfg.validateProduction(); err != nil {
+		return nil, err
+	}
+
 	return cfg, nil
+}
+
+// knownCompromisedDigests maps SHA-256 digests of secret values that have
+// left the trusted environment (they were bundled into an archive during the
+// July 2026 security audit and must be treated as burned) to the variable
+// they were used for. Production refuses to boot with any of them. Storing
+// digests of dead 256-bit-entropy values reveals nothing useful.
+var knownCompromisedDigests = map[string]string{
+	"9fd557efaff4f461a536b055f59aa9eee380e569856f4d0ead606876866c3968": "POSTGRES_PASSWORD (July 2026 audit bundle)",
+	"741ef7367130c8263f39d8e7d72ff22ae9a4d86bd98fae9b2024e0adc5e82c2a": "REDIS_PASSWORD (July 2026 audit bundle)",
+	"bd7fd072deef8ccb0f6bdc680aeb9e5b11dc9d3f2ee7c973b7054df9bb36f0c6": "JWT_ACCESS_SECRET (July 2026 audit bundle)",
+	"9eedc2dc2772d95e0c9903d8a7bc2a8e41ebe479236a377d6e166ca7ff6eda49": "JWT_REFRESH_SECRET (July 2026 audit bundle)",
+	"eb67cc63803f41dbcfd4ff780ebcf44e984e8c5654ef2a18ceebcf7b9729eb9f": "IP_HASH_SALT (July 2026 audit bundle)",
+	"332ebc8c4d084d42fe6405fdc6a4bd323073d254253ced28c9917dcd0b08c9e8": "BOOTSTRAP_CEO_PASSWORD (July 2026 audit bundle)",
+	"6c31a12221c3e378d89d4824a5fc7d87f11bebe6486b21ad0788f5336a0f12a9": "TURN_SECRET (July 2026 audit bundle)",
+	"c56b5c4f856a1beb62b0c658b5f34f76d0590e2e183fba32b9761e8d90c6f1af": "VAPID_PRIVATE_KEY (dev pair committed in .env.example history)",
+}
+
+func sha256Hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
+}
+
+// validateProduction is the fail-closed gate for APP_ENV=production: an
+// insecure configuration must refuse to start rather than silently run. It
+// collects every violation so the operator can fix them in one pass.
+func (c *Config) validateProduction() error {
+	if c.Env != "production" {
+		return nil
+	}
+
+	var problems []string
+
+	// The WebSocket handshake and CSRF middleware are cookie-authenticated;
+	// without an explicit allowed origin only same-host requests pass, and an
+	// unset value usually means the operator forgot to configure it.
+	if c.WSAllowedOrigin == "" {
+		problems = append(problems, "WS_ALLOWED_ORIGIN must be set (e.g. https://kisy.example) — WebSocket/CSRF origin allowlist")
+	}
+
+	// Plaintext to the database is only acceptable over loopback (same-host /
+	// all-in-one deployments). A private single-host docker network may opt in
+	// explicitly with ALLOW_PLAINTEXT_DB=true; anything else requires TLS
+	// (sslmode=require, better verify-full).
+	if c.insecureDBTransport() && os.Getenv("ALLOW_PLAINTEXT_DB") != "true" {
+		problems = append(problems, "POSTGRES_SSLMODE=disable over a non-loopback connection — enable TLS to the database, or set ALLOW_PLAINTEXT_DB=true only for a single-host private docker network")
+	}
+
+	if c.RedisURL == "" && c.Redis.Password == "" {
+		problems = append(problems, "REDIS_PASSWORD must be set (or provide REDIS_URL with credentials)")
+	}
+
+	// Secrets that ever left the trusted environment are burned: refuse them.
+	for name, val := range map[string]string{
+		"JWT_ACCESS_SECRET":      c.JWTAccessSecret,
+		"JWT_REFRESH_SECRET":     c.JWTRefreshSecret,
+		"POSTGRES_PASSWORD":      c.Postgres.Password,
+		"REDIS_PASSWORD":         c.Redis.Password,
+		"IP_HASH_SALT":           c.IPHashSalt,
+		"TURN_SECRET":            c.ICE.TURNSecret,
+		"BOOTSTRAP_CEO_PASSWORD": c.BootstrapCEOPassword,
+		"VAPID_PRIVATE_KEY":      c.VAPIDPrivateKey,
+	} {
+		if val == "" {
+			continue
+		}
+		if origin, burned := knownCompromisedDigests[sha256Hex(val)]; burned {
+			problems = append(problems, fmt.Sprintf("%s is a known-compromised value (%s) — rotate it", name, origin))
+		}
+	}
+
+	if len(problems) > 0 {
+		return fmt.Errorf("config: refusing to start in production:\n  - %s", strings.Join(problems, "\n  - "))
+	}
+	return nil
+}
+
+// insecureDBTransport reports whether the effective database connection would
+// travel in plaintext over a non-loopback transport.
+func (c *Config) insecureDBTransport() bool {
+	if c.DatabaseURL != "" {
+		u, err := url.Parse(c.DatabaseURL)
+		if err != nil {
+			return false // the pool constructor will surface the real error
+		}
+		// Only an explicit sslmode=disable is insecure; drivers default to
+		// negotiating TLS ("prefer") and managed platforms terminate TLS.
+		if u.Query().Get("sslmode") != "disable" {
+			return false
+		}
+		return !isLoopbackHost(u.Hostname())
+	}
+	if c.Postgres.SSLMode != "disable" {
+		return false
+	}
+	return !isLoopbackHost(c.Postgres.Host)
+}
+
+func isLoopbackHost(host string) bool {
+	switch strings.ToLower(host) {
+	case "", "localhost", "127.0.0.1", "::1":
+		// An empty host means a unix socket — no network transport at all.
+		return true
+	default:
+		return false
+	}
 }
 
 func getEnv(key, fallback string) string {

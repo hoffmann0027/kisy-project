@@ -33,6 +33,7 @@ func New(t *testing.T) *pgxpool.Pool {
 	}
 
 	ctx := context.Background()
+	// #nosec G404 -- non-security use: a unique throwaway test database name.
 	dbName := fmt.Sprintf("kisy_it_%d", rand.Int63n(1_000_000_000))
 
 	admin, err := pgxpool.New(ctx, adminURL)

@@ -1,0 +1,9 @@
+# Accepted findings (reviewed July 2026 security update).
+#
+# Dev VAPID keypair that was deliberately committed in .env.example (commit
+# 4ea77c5) and later removed. The key is treated as burned: it was never used
+# in any production .env, the example now ships empty values, and the config
+# production-guard refuses to boot with this exact value
+# (backend/internal/config/config.go, knownCompromisedDigests). Rewriting
+# published git history is not worth it for a dead dev sample.
+4ea77c56ae1fb35b94dcad551bd08125dd9e1ebe:.env.example:generic-api-key:35

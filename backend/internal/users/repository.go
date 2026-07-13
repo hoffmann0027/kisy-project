@@ -78,10 +78,10 @@ func scanUser(row pgx.Row) (*User, error) {
 
 func (r *PostgresRepository) Create(ctx context.Context, q db.DBTX, u *User) error {
 	err := q.QueryRow(ctx, `
-		INSERT INTO users (username, display_name, password_hash, role_id)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO users (username, display_name, password_hash, role_id, must_change_password)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, status, is_active, failed_login_attempts, must_change_password, created_at, updated_at`,
-		u.Username, u.DisplayName, u.PasswordHash, u.RoleID,
+		u.Username, u.DisplayName, u.PasswordHash, u.RoleID, u.MustChangePassword,
 	).Scan(&u.ID, &u.Status, &u.IsActive, &u.FailedLoginAttempts, &u.MustChangePassword, &u.CreatedAt, &u.UpdatedAt)
 
 	var pgErr *pgconn.PgError

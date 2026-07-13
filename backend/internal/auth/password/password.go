@@ -75,6 +75,8 @@ func Verify(plain, encoded string) (bool, error) {
 		return false, ErrMalformedHash
 	}
 
+	// #nosec G115 -- len(expected) is our own stored Argon2 digest (32 bytes);
+	// it cannot approach uint32 range.
 	derived := argon2.IDKey([]byte(plain), salt, t, m, p, uint32(len(expected)))
 
 	return subtle.ConstantTimeCompare(derived, expected) == 1, nil

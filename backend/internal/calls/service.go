@@ -3,6 +3,9 @@ package calls
 import (
 	"context"
 	"crypto/hmac"
+	// #nosec G505 -- the TURN REST API (coturn static-auth-secret) mandates
+	// HMAC-SHA1 for ephemeral credentials; HMAC is unaffected by SHA-1
+	// collision attacks. Not used for anything else.
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"

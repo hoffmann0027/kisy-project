@@ -34,7 +34,7 @@ func CSRF(allowedOrigin string) func(http.Handler) http.Handler {
 				return
 			}
 
-			if originAllowed(origin, r, allowedOrigin) {
+			if OriginAllowed(origin, r, allowedOrigin) {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -64,12 +64,16 @@ func originOf(rawURL string) string {
 	return u.Scheme + "://" + u.Host
 }
 
-func originAllowed(origin string, r *http.Request, allowedOrigin string) bool {
+// OriginAllowed reports whether a browser-supplied Origin may talk to this
+// server: either it equals the explicitly configured allowed origin, or it is
+// same-origin with the request (the Origin host matches the request Host —
+// behind the edge proxy the Host header carries the public host). It is shared
+// by the CSRF middleware and the WebSocket handshake check so both enforce the
+// same fail-closed policy.
+func OriginAllowed(origin string, r *http.Request, allowedOrigin string) bool {
 	if allowedOrigin != "" && strings.EqualFold(origin, allowedOrigin) {
 		return true
 	}
-	// Same-origin: the Origin host matches the request Host (behind the
-	// edge proxy the Host header carries the public host).
 	if u, err := url.Parse(origin); err == nil && strings.EqualFold(u.Host, r.Host) {
 		return true
 	}

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuthStore } from "@shared/store/auth";
 import { Spinner } from "@shared/ui";
+import { ForcePasswordChange } from "@features/auth/ForcePasswordChange";
 
 function FullScreenLoader() {
   return (
@@ -13,8 +14,11 @@ function FullScreenLoader() {
 
 export function RequireAuth({ children }: { children: ReactNode }) {
   const status = useAuthStore((s) => s.status);
+  const mustChange = useAuthStore((s) => s.user?.mustChangePassword ?? false);
   if (status === "loading") return <FullScreenLoader />;
   if (status === "anonymous") return <Navigate to="/login" replace />;
+  // A seeded/reset password must be replaced before anything else loads.
+  if (mustChange) return <ForcePasswordChange />;
   return <>{children}</>;
 }
 

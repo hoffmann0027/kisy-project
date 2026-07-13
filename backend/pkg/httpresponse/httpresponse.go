@@ -27,9 +27,11 @@ type ErrorBody struct {
 // Known error codes from docs/spec/09-api-contracts.md, plus
 // AUTH_INVALID_CREDENTIALS for login failures (the spec list is the
 // baseline, not exhaustive).
+//
+// #nosec G101 -- public API error-code identifiers, not credentials.
 const (
-	ErrAuthInvalidToken       = "AUTH_INVALID_TOKEN"
-	ErrAuthInvalidCredentials = "AUTH_INVALID_CREDENTIALS"
+	ErrAuthInvalidToken       = "AUTH_INVALID_TOKEN"       // #nosec G101
+	ErrAuthInvalidCredentials = "AUTH_INVALID_CREDENTIALS" // #nosec G101
 	ErrAuthExpired            = "AUTH_EXPIRED"
 	ErrAccessDenied           = "ACCESS_DENIED"
 	ErrResourceNotFound       = "RESOURCE_NOT_FOUND"

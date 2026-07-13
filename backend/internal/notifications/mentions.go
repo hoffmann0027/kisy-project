@@ -148,6 +148,8 @@ func (s *Service) raiseMention(ctx context.Context, target uuid.UUID, m messages
 		})
 	}
 	if s.pusher != nil {
+		// #nosec G118 -- deliberate: the push must outlive the originating
+		// request; the pusher applies its own timeout.
 		go s.pusher.Notify(context.Background(), target, "KISY", "Вас упомянули в сообщении", s.chatURL(m))
 	}
 }
@@ -159,5 +161,7 @@ func (s *Service) pushNewMessage(ctx context.Context, target uuid.UUID, m messag
 	if s.pusher == nil {
 		return
 	}
+	// #nosec G118 -- deliberate: the push must outlive the originating
+	// request; the pusher applies its own timeout.
 	go s.pusher.Notify(context.Background(), target, "KISY", "Новое сообщение", s.chatURL(m))
 }

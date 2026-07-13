@@ -12,6 +12,9 @@ export interface User {
   isActive: boolean;
   lastSeen: string | null;
   createdAt: string;
+  /** When true the account must set a new password before using the app
+   * (seeded bootstrap CEO). Absent/false otherwise. */
+  mustChangePassword?: boolean;
 }
 
 export interface Chat {
