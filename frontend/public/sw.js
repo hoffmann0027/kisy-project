@@ -5,7 +5,7 @@
 // Bump this whenever the shell caching behavior changes: the new bytes make
 // browsers install the updated worker on next navigation, which purges the
 // old cache in activate and takes control (skipWaiting + clients.claim).
-const CACHE = "kisy-shell-v6";
+const CACHE = "kisy-shell-v7";
 const SHELL = ["/", "/favicon.png?v=2", "/manifest.webmanifest", "/icon-192.png?v=2", "/icon-512.png?v=2"];
 
 self.addEventListener("install", (event) => {
@@ -14,10 +14,23 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim()),
+    (async () => {
+      const keys = await caches.keys();
+      const stale = keys.filter((k) => k !== CACHE);
+      await Promise.all(stale.map((k) => caches.delete(k)));
+      await self.clients.claim();
+      // Self-heal a stuck deploy: when this is an UPDATE (an older cache
+      // existed), force every open tab to reload through the new worker so a
+      // redeploy (new bundle, logo, theme) applies without the user manually
+      // clearing the service worker. First installs (no older cache) are left
+      // alone so new visitors don't get a spurious reload.
+      if (stale.length > 0) {
+        const clients = await self.clients.matchAll({ type: "window" });
+        for (const client of clients) {
+          client.navigate(client.url).catch(() => {});
+        }
+      }
+    })(),
   );
 });
 
