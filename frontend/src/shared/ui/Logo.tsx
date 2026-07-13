@@ -12,7 +12,7 @@ interface Props {
 export function Logo({ size = 40, className }: Props) {
   return (
     <img
-      src="/logo.png"
+      src="/logo.png?v=2"
       width={size}
       height={size}
       className={className}

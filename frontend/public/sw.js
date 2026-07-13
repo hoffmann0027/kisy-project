@@ -5,8 +5,8 @@
 // Bump this whenever the shell caching behavior changes: the new bytes make
 // browsers install the updated worker on next navigation, which purges the
 // old cache in activate and takes control (skipWaiting + clients.claim).
-const CACHE = "kisy-shell-v5";
-const SHELL = ["/", "/favicon.png", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
+const CACHE = "kisy-shell-v6";
+const SHELL = ["/", "/favicon.png?v=2", "/manifest.webmanifest", "/icon-192.png?v=2", "/icon-512.png?v=2"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -32,8 +32,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || "KISY", {
       body: data.body || "",
-      icon: "/icon-192.png",
-      badge: "/icon-192.png",
+      icon: "/icon-192.png?v=2",
+      badge: "/icon-192.png?v=2",
       tag: data.tag || "kisy",
       data: { url: data.url || "/" },
     }),
