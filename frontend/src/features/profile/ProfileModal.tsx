@@ -167,12 +167,14 @@ export function ProfileModal({ open, onClose }: Props) {
 
 // Theme switcher (design handoff): a physical rotary knob ("manettino"). The
 // indicator sits at 3 o'clock and the whole knob rotates so it points exactly
-// at the active label. Clicking the knob cycles glass → luce → aurora; clicking
-// a label selects that theme directly. Angles: glass −25°, luce 0°, aurora +25°.
+// at the active label. Clicking the knob cycles glass → luce → aurora → cyber;
+// clicking a label selects that theme directly. Four positions, angles:
+// glass −36°, luce −12°, aurora +12°, cyber +36°.
 const THEME_OPTIONS: { id: Theme; label: string; angle: number }[] = [
-  { id: "glass", label: "Стекло", angle: -25 },
-  { id: "luce", label: "Luce", angle: 0 },
-  { id: "aurora", label: "Аврора", angle: 25 },
+  { id: "glass", label: "Стекло", angle: -36 },
+  { id: "luce", label: "Luce", angle: -12 },
+  { id: "aurora", label: "Аврора", angle: 12 },
+  { id: "cyber", label: "Cyber", angle: 36 },
 ];
 
 function GearIcon() {

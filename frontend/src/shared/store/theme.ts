@@ -1,24 +1,25 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-// Three visual themes from the design handoff:
+// Four visual themes from the design handoff:
 //   `glass`  — light, frosted, violet accent
 //   `luce`   — dark, cold aluminium/graphite + red accent
 //   `aurora` — light, vivid pink→violet→indigo gradients, magenta accent
+//   `cyber`  — dark neon/cyberpunk, cyan→magenta→violet glow, cyan accent
 // The choice is persisted so it survives reloads (key `kisy-theme`); the
 // active theme is reflected as `data-theme` on <html>, which selects the token
 // set in theme.css. Default is `glass`; an unknown persisted value falls back
 // to `glass`.
-export type Theme = "glass" | "luce" | "aurora";
+export type Theme = "glass" | "luce" | "aurora" | "cyber";
 
-export const THEME_ORDER: Theme[] = ["glass", "luce", "aurora"];
+export const THEME_ORDER: Theme[] = ["glass", "luce", "aurora", "cyber"];
 
 const isTheme = (v: unknown): v is Theme => THEME_ORDER.includes(v as Theme);
 
 interface ThemeState {
   theme: Theme;
   setTheme: (theme: Theme) => void;
-  // Advance through the themes in a cycle: glass → luce → aurora → glass.
+  // Advance through the themes in a cycle: glass → luce → aurora → cyber → glass.
   cycleTheme: () => void;
 }
 

@@ -1,10 +1,10 @@
-/* Design system: three themes from the KISY handoff — `glass` (light),
-   `luce` (dark), and `aurora` (light, vivid gradients). The active theme is
-   `data-theme` on <html> (set by useThemeStore / the inline bootstrap in
-   index.html). Per-theme design tokens (--ink, --acc, --key-bg, --rail-bg,
-   --bubout-bg, …) are the source of truth; the legacy `--color-*` names are
-   aliased onto them so every existing component re-skins automatically in all
-   three themes. */
+/* Design system: four themes from the KISY handoff — `glass` (light),
+   `luce` (dark), `aurora` (light, vivid gradients) and `cyber` (dark neon).
+   The active theme is `data-theme` on <html> (set by useThemeStore / the
+   inline bootstrap in index.html). Per-theme design tokens (--ink, --acc,
+   --key-bg, --rail-bg, --bubout-bg, …) are the source of truth; the legacy
+   `--color-*` names are aliased onto them so every existing component re-skins
+   automatically in all four themes. */
 
 :root {
   /* --- theme-neutral primitives --- */
@@ -81,6 +81,7 @@
   --acc: #5e5ce6;
   --acc-soft: rgba(94, 92, 230, 0.12);
   --acc-ink: #4b49c9;
+  --acc-on: #fff;
   --acc-grad: linear-gradient(180deg, #8886f4, #5451e0);
   --acc-tab-sh: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 3px 8px rgba(94, 92, 230, 0.42), 0 1px 2px rgba(0, 0, 0, 0.14);
   --acc-bg: linear-gradient(180deg, rgba(120, 118, 238, 0.32), rgba(84, 81, 224, 0.22));
@@ -132,6 +133,7 @@
   --acc: #d84332;
   --acc-soft: rgba(216, 67, 50, 0.16);
   --acc-ink: #f0705f;
+  --acc-on: #fff;
   --acc-grad: linear-gradient(180deg, #e0503d, #a82519);
   --acc-tab-sh: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 3px 8px rgba(0, 0, 0, 0.45);
   --acc-bg: linear-gradient(180deg, rgba(216, 67, 50, 0.32), rgba(150, 35, 25, 0.22));
@@ -187,6 +189,7 @@
   --acc: #c8269e;
   --acc-soft: rgba(200, 38, 158, 0.12);
   --acc-ink: #c8269e;
+  --acc-on: #fff;
   --acc-grad: linear-gradient(135deg, #ff5f9e, #a855f7 55%, #6366f1);
   --acc-tab-sh: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 3px 10px rgba(168, 85, 247, 0.45), 0 1px 2px rgba(0, 0, 0, 0.1);
   --acc-bg: linear-gradient(135deg, rgba(255, 95, 158, 0.34), rgba(139, 92, 246, 0.26));
@@ -215,6 +218,62 @@
   --bubin-sh: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 3px 10px rgba(120, 70, 160, 0.14);
   --bubout-bg: linear-gradient(140deg, #ff6fae, #a855f7 58%, #6366f1);
   --bubout-sh: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 5px 16px rgba(168, 85, 247, 0.4), 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* ===== Theme: cyber (dark neon / cyberpunk) ===== */
+:root[data-theme="cyber"] {
+  color-scheme: dark;
+
+  --bg: #150a34;
+  --bg-deep: #0a0620;
+  --app-underlay: radial-gradient(110% 80% at 8% 0%, rgba(0, 245, 255, 0.42) 0%, transparent 42%),
+    radial-gradient(110% 80% at 92% 100%, rgba(255, 43, 214, 0.46) 0%, transparent 44%),
+    radial-gradient(90% 70% at 100% 0%, rgba(169, 53, 255, 0.4) 0%, transparent 46%),
+    linear-gradient(150deg, #140a36 0%, #1c0c4a 50%, #0e0722 100%);
+  --scroll-thumb: rgba(0, 245, 255, 0.3);
+  --elev-shadow: 0 18px 48px rgba(0, 0, 0, 0.6), 0 0 40px rgba(0, 245, 255, 0.12);
+  --soft-shadow: 0 2px 12px rgba(0, 245, 255, 0.22);
+
+  --ink: #f5fbff;
+  --dim: #a6c4e8;
+  --dim2: #7fa0d8;
+  --divider: rgba(0, 245, 255, 0.18);
+  --hover: rgba(0, 245, 255, 0.16);
+
+  --acc: #00f5ff;
+  --acc-soft: rgba(0, 245, 255, 0.2);
+  --acc-ink: #7dfcff;
+  --acc-on: #03121a;
+  --acc-grad: linear-gradient(120deg, #00f5ff, #ff2bd6 48%, #a935ff);
+  --acc-tab-sh: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 0 18px rgba(0, 245, 255, 0.85), 0 0 30px rgba(255, 43, 214, 0.55);
+  --acc-bg: linear-gradient(120deg, rgba(0, 245, 255, 0.42), rgba(255, 43, 214, 0.4));
+  --acc-sh: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 0 0 1px rgba(0, 245, 255, 0.7), 0 0 22px rgba(0, 245, 255, 0.6), 0 0 30px rgba(255, 43, 214, 0.4);
+
+  --side-bg: linear-gradient(180deg, rgba(30, 12, 68, 0.92), rgba(16, 8, 44, 0.92));
+  --conv-bg: radial-gradient(100% 70% at 50% 0%, rgba(0, 245, 255, 0.14), transparent 55%),
+    radial-gradient(90% 60% at 100% 100%, rgba(255, 43, 214, 0.16), transparent 55%),
+    linear-gradient(180deg, #150a34, #0a0620);
+  --head-bg: linear-gradient(120deg, #241056, #160a3e);
+  --field-bg: linear-gradient(180deg, #241458, #170c40);
+  --field-brd: rgba(0, 245, 255, 0.3);
+  --panel-brd: rgba(0, 245, 255, 0.34);
+  --overlay-bg: linear-gradient(180deg, #1e0f4e, #100826);
+
+  --rail-bg: linear-gradient(180deg, #2a1266, #160a40);
+  --rail-brd: rgba(0, 245, 255, 0.4);
+  --key-bg: linear-gradient(160deg, #3a1a86, #1d0f56);
+  --key-sh: inset 0 1px 0 rgba(150, 250, 255, 0.4), inset 0 -2px 6px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 245, 255, 0.35), 0 0 12px rgba(168, 53, 255, 0.35);
+  --key-ink: #4ff5ff;
+
+  --send-bg: radial-gradient(120% 120% at 30% 22%, #7dfcff, #00e0ff 38%, #ff2bd6 78%, #a935ff);
+  --klogo-bg: radial-gradient(120% 120% at 30% 22%, #7dfcff, #ff2bd6 55%, #a935ff);
+  --mic-bg: linear-gradient(160deg, #3a1a86, #1d0f56);
+  --chip-bg: rgba(58, 26, 134, 0.85);
+
+  --bubin-bg: linear-gradient(160deg, #2a1568, #180d44);
+  --bubin-sh: inset 0 1px 0 rgba(150, 250, 255, 0.22), 0 0 0 1px rgba(0, 245, 255, 0.28), 0 0 14px rgba(168, 53, 255, 0.3);
+  --bubout-bg: linear-gradient(120deg, #00e5ff, #ff2bd6 58%, #a935ff);
+  --bubout-sh: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 0 20px rgba(0, 245, 255, 0.6), 0 0 30px rgba(255, 43, 214, 0.45);
 }
 
 * {
