@@ -5,7 +5,7 @@
 // Bump this whenever the shell caching behavior changes: the new bytes make
 // browsers install the updated worker on next navigation, which purges the
 // old cache in activate and takes control (skipWaiting + clients.claim).
-const CACHE = "kisy-shell-v9";
+const CACHE = "kisy-shell-v10";
 const SHELL = ["/", "/favicon.png?v=2", "/manifest.webmanifest", "/icon-192.png?v=2", "/icon-512.png?v=2"];
 
 self.addEventListener("install", (event) => {

@@ -1,10 +1,11 @@
-/* Design system: four themes from the KISY handoff — `glass` (light),
-   `luce` (dark), `aurora` (light, vivid gradients) and `cyber` (dark neon).
-   The active theme is `data-theme` on <html> (set by useThemeStore / the
-   inline bootstrap in index.html). Per-theme design tokens (--ink, --acc,
-   --key-bg, --rail-bg, --bubout-bg, …) are the source of truth; the legacy
-   `--color-*` names are aliased onto them so every existing component re-skins
-   automatically in all four themes. */
+/* Design system: six themes from the KISY handoff — `glass` (light),
+   `luce` (dark), `aurora` (light, vivid gradients), `cyber` (dark neon),
+   `xp` (retro Windows 95) and `matrix` (phosphor terminal). The active theme
+   is `data-theme` on <html> (set by useThemeStore / the inline bootstrap in
+   index.html). Per-theme design tokens (--ink, --acc, --key-bg, --rail-bg,
+   --bubout-bg, --font, …) are the source of truth; the legacy `--color-*`
+   names are aliased onto them so every existing component re-skins
+   automatically in all six themes. */
 
 :root {
   /* --- theme-neutral primitives --- */
@@ -276,6 +277,112 @@
   --bubout-sh: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 0 20px rgba(0, 245, 255, 0.6), 0 0 30px rgba(255, 43, 214, 0.45);
 }
 
+/* ===== Theme: xp (retro Windows 95; label "Windows 95") ===== */
+:root[data-theme="xp"] {
+  color-scheme: light;
+  --font: "MS Sans Serif", Tahoma, Geneva, Verdana, sans-serif;
+
+  --bg: #008080;
+  --bg-deep: #006a6a;
+  --app-underlay: #008080;
+  --scroll-thumb: #808080;
+  --elev-shadow: inset -1px -1px 0 #000, inset 1px 1px 0 #dfdfdf, inset -2px -2px 0 #808080, inset 2px 2px 0 #fff;
+  --soft-shadow: inset -1px -1px 0 #808080, inset 1px 1px 0 #fff;
+
+  --ink: #000000;
+  --dim: #404040;
+  --dim2: #5a5a5a;
+  --divider: #808080;
+  --hover: rgba(0, 0, 128, 0.1);
+
+  --acc: #000080;
+  --acc-soft: #c3c7cb;
+  --acc-ink: #000080;
+  --acc-on: #ffffff;
+  --acc-grad: linear-gradient(90deg, #000080, #1084d0);
+  --acc-tab-sh: inset -1px -1px 0 #000, inset 1px 1px 0 #808080;
+  --acc-bg: linear-gradient(90deg, #000080, #1084d0);
+  --acc-sh: inset -1px -1px 0 #000, inset 1px 1px 0 #dfdfdf, inset -2px -2px 0 #808080, inset 2px 2px 0 #fff;
+
+  --side-bg: #c0c0c0;
+  --conv-bg: #c0c0c0;
+  --head-bg: #c0c0c0;
+  --field-bg: #ffffff;
+  --field-brd: #808080;
+  --panel-brd: #808080;
+  --overlay-bg: #c0c0c0;
+
+  --rail-bg: #c0c0c0;
+  --rail-brd: #808080;
+  --key-bg: #c0c0c0;
+  --key-sh: inset -1px -1px 0 #000, inset 1px 1px 0 #fff, inset -2px -2px 0 #808080, inset 2px 2px 0 #dfdfdf;
+  --key-ink: #000000;
+
+  --send-bg: #c0c0c0;
+  --klogo-bg: linear-gradient(135deg, #008080, #005a5a);
+  --mic-bg: #c0c0c0;
+  --chip-bg: #ffffcc;
+
+  --bubin-bg: #ffffff;
+  --bubin-sh: inset -1px -1px 0 #808080, inset 1px 1px 0 #fff, 0 0 0 1px #000;
+  --bubout-bg: #c0c0c0;
+  --bubout-sh: inset -1px -1px 0 #808080, inset 1px 1px 0 #fff, 0 0 0 1px #000;
+}
+
+/* ===== Theme: matrix (phosphor IT terminal) ===== */
+:root[data-theme="matrix"] {
+  color-scheme: dark;
+  --font: "Consolas", "Courier New", ui-monospace, monospace;
+
+  --bg: #000600;
+  --bg-deep: #000400;
+  --app-underlay: repeating-linear-gradient(0deg, rgba(0, 255, 65, 0.05) 0 1px, transparent 1px 3px),
+    radial-gradient(90% 80% at 50% 0%, rgba(0, 90, 25, 0.5) 0%, transparent 60%), #000600;
+  --scroll-thumb: rgba(0, 255, 65, 0.3);
+  --elev-shadow: 0 0 0 1px rgba(0, 255, 65, 0.4), 0 0 30px rgba(0, 255, 65, 0.25);
+  --soft-shadow: 0 0 12px rgba(0, 255, 65, 0.2);
+
+  --ink: #39ff5a;
+  --dim: #1f9a37;
+  --dim2: #157a29;
+  --divider: rgba(0, 255, 65, 0.18);
+  --hover: rgba(0, 255, 65, 0.1);
+
+  --acc: #00ff41;
+  --acc-soft: rgba(0, 255, 65, 0.14);
+  --acc-ink: #8dffa0;
+  --acc-on: #001b06;
+  --acc-grad: linear-gradient(180deg, #39ff5a, #00b82f);
+  --acc-tab-sh: inset 0 0 0 1px #00ff41, 0 0 12px rgba(0, 255, 65, 0.6);
+  --acc-bg: linear-gradient(180deg, rgba(0, 255, 65, 0.26), rgba(0, 150, 40, 0.16));
+  --acc-sh: inset 0 0 0 1px rgba(0, 255, 65, 0.7), 0 0 14px rgba(0, 255, 65, 0.5);
+
+  --side-bg: linear-gradient(180deg, rgba(3, 20, 6, 0.94), rgba(1, 10, 3, 0.94));
+  --conv-bg: radial-gradient(120% 80% at 50% 0%, rgba(0, 255, 65, 0.06), transparent 55%),
+    linear-gradient(180deg, #020a03, #000400);
+  --head-bg: linear-gradient(180deg, #052008, #031204);
+  --field-bg: #020c04;
+  --field-brd: rgba(0, 255, 65, 0.4);
+  --panel-brd: rgba(0, 255, 65, 0.45);
+  --overlay-bg: linear-gradient(180deg, #041505, #010a02);
+
+  --rail-bg: linear-gradient(180deg, #062309, #020e04);
+  --rail-brd: rgba(0, 255, 65, 0.4);
+  --key-bg: linear-gradient(180deg, #08260c, #031204);
+  --key-sh: inset 0 0 0 1px rgba(0, 255, 65, 0.35), 0 0 8px rgba(0, 255, 65, 0.2);
+  --key-ink: #39ff5a;
+
+  --send-bg: radial-gradient(120% 120% at 30% 22%, #8dffa0, #00ff41 45%, #00a82b);
+  --klogo-bg: radial-gradient(120% 120% at 30% 22%, #8dffa0, #00c235 55%, #007a20);
+  --mic-bg: linear-gradient(180deg, #08260c, #031204);
+  --chip-bg: rgba(0, 60, 18, 0.85);
+
+  --bubin-bg: linear-gradient(180deg, #051a08, #020e04);
+  --bubin-sh: inset 0 0 0 1px rgba(0, 255, 65, 0.28), 0 0 10px rgba(0, 255, 65, 0.15);
+  --bubout-bg: linear-gradient(180deg, rgba(0, 255, 65, 0.2), rgba(0, 120, 32, 0.14));
+  --bubout-sh: inset 0 0 0 1px rgba(0, 255, 65, 0.55), 0 0 14px rgba(0, 255, 65, 0.4);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -309,7 +416,9 @@ body {
   background-attachment: fixed;
   transition: background 0.35s ease;
   color: var(--color-text-primary);
-  font-family: var(--font-family);
+  /* A theme may override the font via --font (Windows 95 → MS Sans Serif,
+     Matrix → monospace); other themes fall back to the system stack. */
+  font-family: var(--font, var(--font-family));
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }

@@ -1,25 +1,27 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-// Four visual themes from the design handoff:
+// Six visual themes from the design handoff:
 //   `glass`  — light, frosted, violet accent
 //   `luce`   — dark, cold aluminium/graphite + red accent
 //   `aurora` — light, vivid pink→violet→indigo gradients, magenta accent
 //   `cyber`  — dark neon/cyberpunk, cyan→magenta→violet glow, cyan accent
+//   `xp`     — retro Windows 95 (teal desktop, grey bevels); label "Windows 95"
+//   `matrix` — phosphor terminal, acid-green on black, monospace
 // The choice is persisted so it survives reloads (key `kisy-theme`); the
 // active theme is reflected as `data-theme` on <html>, which selects the token
 // set in theme.css. Default is `glass`; an unknown persisted value falls back
-// to `glass`.
-export type Theme = "glass" | "luce" | "aurora" | "cyber";
+// to `glass`. (`xp` key kept for persist compatibility; UI label is "Windows 95".)
+export type Theme = "glass" | "luce" | "aurora" | "cyber" | "xp" | "matrix";
 
-export const THEME_ORDER: Theme[] = ["glass", "luce", "aurora", "cyber"];
+export const THEME_ORDER: Theme[] = ["glass", "luce", "aurora", "cyber", "xp", "matrix"];
 
 const isTheme = (v: unknown): v is Theme => THEME_ORDER.includes(v as Theme);
 
 interface ThemeState {
   theme: Theme;
   setTheme: (theme: Theme) => void;
-  // Advance through the themes in a cycle: glass → luce → aurora → cyber → glass.
+  // Advance through the themes in a cycle: glass → luce → aurora → cyber → xp → matrix → glass.
   cycleTheme: () => void;
 }
 

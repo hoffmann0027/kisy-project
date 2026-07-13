@@ -165,16 +165,20 @@ export function ProfileModal({ open, onClose }: Props) {
   );
 }
 
-// Theme switcher (design handoff): a physical rotary knob ("manettino"). The
-// indicator sits at 3 o'clock and the whole knob rotates so it points exactly
-// at the active label. Clicking the knob cycles glass → luce → aurora → cyber;
-// clicking a label selects that theme directly. Four positions, angles:
-// glass −36°, luce −12°, aurora +12°, cyber +36°.
-const THEME_OPTIONS: { id: Theme; label: string; angle: number }[] = [
-  { id: "glass", label: "Стекло", angle: -36 },
-  { id: "luce", label: "Luce", angle: -12 },
-  { id: "aurora", label: "Аврора", angle: 12 },
-  { id: "cyber", label: "Cyber", angle: 36 },
+// Theme switcher (design handoff): a physical rotary knob ("manettino")
+// centered between two columns of labels. The indicator rests at 3 o'clock and
+// the knob rotates to point at the active label — the left column (Стекло /
+// Luce / Аврора) is pointed at by rotating left, the right column (Cyber /
+// Windows 95 / Matrix) by rotating right. Clicking the knob cycles through all
+// six; clicking a label selects it directly.
+type ThemeOption = { id: Theme; label: string; angle: number; col: "left" | "right" };
+const THEME_OPTIONS: ThemeOption[] = [
+  { id: "glass", label: "Стекло", angle: -150, col: "left" },
+  { id: "luce", label: "Luce", angle: 180, col: "left" },
+  { id: "aurora", label: "Аврора", angle: 150, col: "left" },
+  { id: "cyber", label: "Cyber", angle: -30, col: "right" },
+  { id: "xp", label: "Windows 95", angle: 0, col: "right" },
+  { id: "matrix", label: "Matrix", angle: 30, col: "right" },
 ];
 
 function GearIcon() {
@@ -191,6 +195,18 @@ function ThemeSwitcher() {
   const setTheme = useThemeStore((s) => s.setTheme);
   const cycleTheme = useThemeStore((s) => s.cycleTheme);
   const angle = THEME_OPTIONS.find((o) => o.id === theme)?.angle ?? 0;
+
+  const labelBtn = (o: ThemeOption) => (
+    <button
+      key={o.id}
+      type="button"
+      className={`theme-knob__label${theme === o.id ? " theme-knob__label--active" : ""}`}
+      onClick={() => setTheme(o.id)}
+    >
+      {o.label}
+    </button>
+  );
+
   return (
     <div className="profile-section">
       <div className="profile-section__label">
@@ -198,23 +214,17 @@ function ThemeSwitcher() {
         Оформление
       </div>
       <div className="theme-knob">
+        <div className="theme-knob__labels theme-knob__labels--left">
+          {THEME_OPTIONS.filter((o) => o.col === "left").map(labelBtn)}
+        </div>
         <button type="button" className="theme-knob__dial" onClick={cycleTheme} aria-label="Переключить тему">
           <span className="theme-knob__face" style={{ transform: `rotate(${angle}deg)` }}>
             <span className="theme-knob__dimple" />
             <span className="theme-knob__pointer" />
           </span>
         </button>
-        <div className="theme-knob__labels">
-          {THEME_OPTIONS.map((o) => (
-            <button
-              key={o.id}
-              type="button"
-              className={`theme-knob__label${theme === o.id ? " theme-knob__label--active" : ""}`}
-              onClick={() => setTheme(o.id)}
-            >
-              {o.label}
-            </button>
-          ))}
+        <div className="theme-knob__labels theme-knob__labels--right">
+          {THEME_OPTIONS.filter((o) => o.col === "right").map(labelBtn)}
         </div>
       </div>
     </div>

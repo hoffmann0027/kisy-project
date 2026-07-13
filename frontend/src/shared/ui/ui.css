@@ -288,7 +288,8 @@ input[type="radio"] {
 .theme-knob {
   display: flex;
   align-items: center;
-  gap: 20px;
+  justify-content: center;
+  gap: 18px;
   padding: 16px 20px;
   border-radius: 18px;
   background: var(--field-bg);
@@ -347,17 +348,26 @@ input[type="radio"] {
   display: flex;
   flex-direction: column;
   gap: 11px;
+  flex: 1;
+}
+.theme-knob__labels--left {
+  align-items: flex-end;
+  text-align: right;
+}
+.theme-knob__labels--right {
+  align-items: flex-start;
+  text-align: left;
 }
 .theme-knob__label {
   padding: 0;
   border: none;
   background: none;
-  text-align: left;
   font-size: 13.5px;
   font-weight: 700;
   color: var(--dim);
   cursor: pointer;
   transition: color var(--transition-fast);
+  white-space: nowrap;
 }
 .theme-knob__label--active {
   color: var(--acc);
