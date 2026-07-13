@@ -59,6 +59,19 @@ func TestProductionRequiresWSOrigin(t *testing.T) {
 	}
 }
 
+func TestProductionSameOriginDeploySkipsWSOrigin(t *testing.T) {
+	setBaseEnv(t)
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("POSTGRES_SSLMODE", "require")
+	t.Setenv("WS_ALLOWED_ORIGIN", "")
+	// A single-service deploy that serves the SPA itself (WEB_DIR set) is
+	// same-origin, so an explicit WS_ALLOWED_ORIGIN is not required.
+	t.Setenv("WEB_DIR", "/app/web")
+	if _, err := Load(); err != nil {
+		t.Fatalf("same-origin deploy should not require WS_ALLOWED_ORIGIN: %v", err)
+	}
+}
+
 func TestProductionRejectsPlaintextDBOverNetwork(t *testing.T) {
 	setBaseEnv(t)
 	t.Setenv("APP_ENV", "production")

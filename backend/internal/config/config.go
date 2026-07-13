@@ -315,7 +315,12 @@ func (c *Config) validateProduction() error {
 	// The WebSocket handshake and CSRF middleware are cookie-authenticated;
 	// without an explicit allowed origin only same-host requests pass, and an
 	// unset value usually means the operator forgot to configure it.
-	if c.WSAllowedOrigin == "" {
+	// A single-service deploy that also serves the SPA (WebDir set) is
+	// same-origin, so the WS/CSRF same-host fallback is correct and secure —
+	// an explicit WS_ALLOWED_ORIGIN is optional there. For a split deployment
+	// (API on its own origin) an empty value usually signals a misconfiguration
+	// and must be set.
+	if c.WSAllowedOrigin == "" && c.WebDir == "" {
 		problems = append(problems, "WS_ALLOWED_ORIGIN must be set (e.g. https://kisy.example) — WebSocket/CSRF origin allowlist")
 	}
 
