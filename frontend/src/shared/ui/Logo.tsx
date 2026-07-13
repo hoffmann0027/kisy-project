@@ -4,15 +4,15 @@ interface Props {
   className?: string;
 }
 
-// Logo is the KISY app mark: an orange rounded-tile icon with the stylised
-// "K" cat and KISY wordmark. The same artwork backs public/favicon.png and the
-// PWA icons, so the header, tab icon and installed-app icon all match. It is a
-// raster asset (public/logo.png) served with transparent corners so it sits
-// cleanly on any theme background.
+// Logo is the KISY/SChat app mark used in-app (nav rail, auth screen): a
+// circular badge with the orange "S" glyph on the dark tile (public/logo.png),
+// matching the round icon buttons. The favicon and PWA icons use the full
+// square-tile artwork (public/favicon.png, icon-*.png) instead — those want the
+// wordmark and OS-side masking.
 export function Logo({ size = 40, className }: Props) {
   return (
     <img
-      src="/logo.png?v=2"
+      src="/logo.png?v=3"
       width={size}
       height={size}
       className={className}
