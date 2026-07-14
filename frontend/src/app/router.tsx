@@ -43,6 +43,7 @@ export const router = createBrowserRouter([
     children: [
       { path: "/", element: <RequireAuth><MessengerPage /></RequireAuth> },
       { path: "/chat/:chatId", element: <RequireAuth><MessengerPage /></RequireAuth> },
+      { path: "/communities", element: <RequireAuth><MessengerPage /></RequireAuth> },
       { path: "/group/:groupId", element: <RequireAuth><MessengerPage /></RequireAuth> },
       { path: "/rating", element: <RequireRatingAccess><RatingPage /></RequireRatingAccess> },
       { path: "/admin", element: <RequireCEO><AdminPage /></RequireCEO> },

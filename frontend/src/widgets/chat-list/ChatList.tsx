@@ -16,6 +16,8 @@ import { FindGroupModal } from "@features/new-chat/FindGroupModal";
 import { usePresenceStore } from "@shared/store/presence";
 
 interface Props {
+  /** Which column to render: private chats ("chats") or groups ("communities"). */
+  view: "chats" | "communities";
   activeId: string | null;
   onSelect: (chat: Chat) => void;
   onSelectGroup: (group: Group) => void;
@@ -26,7 +28,8 @@ interface Props {
 /** Chat-list tab: the fixed "all"/"unread" pseudo-tabs or a folder id. */
 type Tab = "all" | "unread" | string;
 
-export function ChatList({ activeId, onSelect, onSelectGroup, onNewChat, onNewGroup }: Props) {
+export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, onNewGroup }: Props) {
+  const communities = view === "communities";
   const { data: chats, isPending } = useChats();
   const { data: groups } = useGroups();
   const [query, setQuery] = useState("");
@@ -89,7 +92,9 @@ export function ChatList({ activeId, onSelect, onSelectGroup, onNewChat, onNewGr
     () => (groups ?? []).filter((g) => isArchived(archivedSet, "group", g.id)),
     [groups, archivedSet],
   );
-  const archivedCount = archivedChats.length + archivedGroups.length;
+  // The archive folds under whichever column is active: groups in Сообщества,
+  // private chats in Чаты.
+  const viewArchivedCount = communities ? archivedGroups.length : archivedChats.length;
 
   const onRowMenu = (e: React.MouseEvent, chatType: ChatType, chatId: string) => {
     e.preventDefault();
@@ -154,26 +159,33 @@ export function ChatList({ activeId, onSelect, onSelectGroup, onNewChat, onNewGr
 
   const emptyLabel = query
     ? "Ничего не найдено"
-    : tab === "unread"
-      ? "Нет непрочитанных чатов"
-      : activeFolder
-        ? "В папке пока нет чатов. Добавьте чат через правый клик по нему."
-        : "Пока нет чатов. Начните новый диалог.";
+    : communities
+      ? "Пока нет сообществ. Создайте группу или найдите существующую."
+      : tab === "unread"
+        ? "Нет непрочитанных чатов"
+        : activeFolder
+          ? "В папке пока нет чатов. Добавьте чат через правый клик по нему."
+          : "Пока нет чатов. Начните новый диалог.";
 
   return (
     <aside className="chatlist">
       <div className="chatlist__header">
-        <h1 className="chatlist__title">Сообщения</h1>
+        <h1 className="chatlist__title">{communities ? "Сообщества" : "Сообщения"}</h1>
         <div style={{ display: "flex", gap: 2 }}>
-          <IconButton label="Папки чатов" onClick={() => setManagerOpen(true)}>
-            <Icon.FolderPlus />
-          </IconButton>
-          <IconButton label="Новая группа" onClick={onNewGroup}>
-            <Icon.Users />
-          </IconButton>
-          <IconButton label="Новый чат" onClick={onNewChat}>
-            <Icon.Plus />
-          </IconButton>
+          {communities ? (
+            <IconButton label="Новая группа" onClick={onNewGroup}>
+              <Icon.Plus />
+            </IconButton>
+          ) : (
+            <>
+              <IconButton label="Папки чатов" onClick={() => setManagerOpen(true)}>
+                <Icon.FolderPlus />
+              </IconButton>
+              <IconButton label="Новый чат" onClick={onNewChat}>
+                <Icon.Plus />
+              </IconButton>
+            </>
+          )}
         </div>
       </div>
       <div className="chatlist__search">
@@ -191,7 +203,7 @@ export function ChatList({ activeId, onSelect, onSelectGroup, onNewChat, onNewGr
         </div>
       </div>
 
-      {!searching && (
+      {!searching && !communities && (
         <div className="chatlist__tabs" role="tablist">
           <button
             className={cn("chatlist__tab", tab === "all" && "chatlist__tab--active")}
@@ -227,25 +239,38 @@ export function ChatList({ activeId, onSelect, onSelectGroup, onNewChat, onNewGr
           </div>
         )}
 
-        <div className="chatlist__section" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span>Группы</span>
-          <button
-            type="button"
-            onClick={() => setFindOpen(true)}
-            style={{ border: "none", background: "none", color: "var(--acc)", cursor: "pointer", fontSize: 12, fontWeight: 700, textTransform: "none", letterSpacing: 0 }}
-          >
-            Найти группу
-          </button>
-        </div>
-        {filteredGroups.map(groupRow)}
-
-        {filtered.length > 0 && <div className="chatlist__section">Личные чаты</div>}
-        {!isPending && filtered.length === 0 && filteredGroups.length === 0 && (
-          <div style={{ padding: 24, textAlign: "center", color: "var(--color-text-secondary)", fontSize: 14 }}>
-            {emptyLabel}
-          </div>
+        {communities && (
+          <>
+            <div className="chatlist__section" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span>Группы</span>
+              <button
+                type="button"
+                onClick={() => setFindOpen(true)}
+                style={{ border: "none", background: "none", color: "var(--acc)", cursor: "pointer", fontSize: 12, fontWeight: 700, textTransform: "none", letterSpacing: 0 }}
+              >
+                Найти группу
+              </button>
+            </div>
+            {filteredGroups.map(groupRow)}
+            {!isPending && filteredGroups.length === 0 && (
+              <div style={{ padding: 24, textAlign: "center", color: "var(--color-text-secondary)", fontSize: 14 }}>
+                {emptyLabel}
+              </div>
+            )}
+          </>
         )}
-        {filtered.map(chatRow)}
+
+        {!communities && (
+          <>
+            {filtered.length > 0 && <div className="chatlist__section">Личные чаты</div>}
+            {!isPending && filtered.length === 0 && (
+              <div style={{ padding: 24, textAlign: "center", color: "var(--color-text-secondary)", fontSize: 14 }}>
+                {emptyLabel}
+              </div>
+            )}
+            {filtered.map(chatRow)}
+          </>
+        )}
 
         {q.length >= 2 && messageHits && messageHits.length > 0 && (
           <>
@@ -265,20 +290,15 @@ export function ChatList({ activeId, onSelect, onSelectGroup, onNewChat, onNewGr
           </>
         )}
 
-        {!searching && tab === "all" && archivedCount > 0 && (
+        {!searching && tab === "all" && viewArchivedCount > 0 && (
           <>
             <button className="chatlist__archive" onClick={() => setShowArchive((v) => !v)}>
               <Icon.Archive size={18} />
               <span>Архив</span>
-              <span className="chatlist__archive-count">{archivedCount}</span>
+              <span className="chatlist__archive-count">{viewArchivedCount}</span>
               <span className="chatlist__archive-chevron">{showArchive ? "▾" : "▸"}</span>
             </button>
-            {showArchive && (
-              <>
-                {archivedGroups.map(groupRow)}
-                {archivedChats.map(chatRow)}
-              </>
-            )}
+            {showArchive && (communities ? archivedGroups.map(groupRow) : archivedChats.map(chatRow))}
           </>
         )}
       </div>

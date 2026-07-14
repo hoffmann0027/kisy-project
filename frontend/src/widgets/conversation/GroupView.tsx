@@ -53,7 +53,7 @@ export function GroupView({ group }: { group: Group }) {
     return (
       <section className="conv">
         <header className="conv__header">
-          <button className="conv__back" title="Назад" onClick={() => navigate("/")}>
+          <button className="conv__back" title="Назад" onClick={() => navigate("/communities")}>
             <Icon.Back size={22} />
           </button>
           <div className="conv__header-body">

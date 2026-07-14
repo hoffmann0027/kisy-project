@@ -35,6 +35,10 @@ export function Rail({ onProfile, onNotifications, onFeedback, onNotes, onCondit
   if (!user) return null;
 
   const onRating = pathname.startsWith("/rating");
+  // Groups now live under the "Сообщества" (communities) section; a group route
+  // therefore highlights Сообщества, not Чаты.
+  const onCommunities = pathname.startsWith("/communities") || pathname.startsWith("/group/");
+  const onChats = !onRating && !onCommunities;
   const canRating = user.roleLevel <= RATING_MAX_LEVEL;
   const openRating = () => (canRating ? navigate("/rating") : setNoClan(true));
 
@@ -47,13 +51,20 @@ export function Rail({ onProfile, onNotifications, onFeedback, onNotes, onCondit
         <button className={cn("rail__item", onRating && "rail__item--active")} title="Рейтинг" onClick={openRating}>
           <Icon.Trophy />
         </button>
-        <button className={cn("rail__item", !onRating && "rail__item--active")} title="Чаты" onClick={() => navigate("/")}>
+        <button className={cn("rail__item", onChats && "rail__item--active")} title="Чаты" onClick={() => navigate("/")}>
           <Icon.Chat />
           {chatUnread > 0 && (
             <span className="rail__item-badge">
               <Badge>{chatUnread > 9 ? "9+" : chatUnread}</Badge>
             </span>
           )}
+        </button>
+        <button
+          className={cn("rail__item", onCommunities && "rail__item--active")}
+          title="Сообщества"
+          onClick={() => navigate("/communities")}
+        >
+          <Icon.Community />
         </button>
         <button className="rail__item" title="Уведомления" onClick={onNotifications}>
           <Icon.Bell />

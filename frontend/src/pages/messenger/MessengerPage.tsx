@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import "./messenger.css";
 import { Rail } from "@widgets/rail/Rail";
 import { ChatList } from "@widgets/chat-list/ChatList";
@@ -23,7 +23,12 @@ import { usePresenceStore } from "@shared/store/presence";
 
 export function MessengerPage() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { chatId, groupId } = useParams();
+  // Groups moved under "Сообщества": the middle column shows groups on the
+  // communities route (and whenever a group is open), private chats otherwise.
+  const view: "chats" | "communities" =
+    pathname.startsWith("/communities") || pathname.startsWith("/group/") ? "communities" : "chats";
   const { data: chats } = useChats();
   const { data: groups } = useGroups();
   const online = usePresenceStore((s) => s.online);
@@ -62,6 +67,7 @@ export function MessengerPage() {
       />
 
       <ChatList
+        view={view}
         activeId={activeId}
         onSelect={selectChat}
         onSelectGroup={selectGroup}

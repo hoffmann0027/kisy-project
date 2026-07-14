@@ -331,7 +331,11 @@ export function Conversation({ target, headerActions, readOnly }: Props) {
   return (
     <section className="conv">
       <header className="conv__header">
-        <button className="conv__back" title="Назад" onClick={() => navigate("/")}>
+        <button
+          className="conv__back"
+          title="Назад"
+          onClick={() => navigate(target.chatType === "group" ? "/communities" : "/")}
+        >
           <Icon.Back size={22} />
         </button>
         <Avatar name={target.avatarName} url={target.avatarUrl} presence={target.online ? "online" : undefined} />
