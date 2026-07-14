@@ -123,10 +123,10 @@ export function useGroupRequests(groupId: string | null, enabled: boolean) {
 export function useDecideRequest() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (args: { groupId: string; userId: string; approve: boolean }) =>
-      args.approve
-        ? groupsApi.approveRequest(args.groupId, args.userId)
-        : groupsApi.rejectRequest(args.groupId, args.userId),
+    mutationFn: async (args: { groupId: string; userId: string; approve: boolean }) => {
+      if (args.approve) await groupsApi.approveRequest(args.groupId, args.userId);
+      else await groupsApi.rejectRequest(args.groupId, args.userId);
+    },
     onSuccess: (_res, args) => {
       qc.invalidateQueries({ queryKey: groupKeys.requests(args.groupId) });
       qc.invalidateQueries({ queryKey: groupKeys.members(args.groupId) });

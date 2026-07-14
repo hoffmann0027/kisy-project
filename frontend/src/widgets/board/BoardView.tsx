@@ -29,7 +29,7 @@ export function BoardView({ group }: Props) {
   // The group founder owns the board structure (create board, add/remove
   // columns). Known from the group DTO even before a board exists.
   const founder = group.createdBy === me.id;
-  const memberList: User[] = members ?? [];
+  const memberList: User[] = members?.map((m) => m.user) ?? [];
 
   if (isPending) {
     return (
