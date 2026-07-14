@@ -28,14 +28,38 @@ export interface Chat {
   createdAt: string;
 }
 
+export type JoinPolicy = "open" | "request";
+export type PostPolicy = "all" | "editors";
+export type GroupRole = "member" | "moderator" | "editor" | "owner";
+
 export interface Group {
   id: string;
   name: string;
   description: string | null;
   avatarUrl: string | null;
   minRoleLevel: number;
+  joinPolicy: JoinPolicy;
+  postPolicy: PostPolicy;
   createdBy: string;
   createdAt: string;
+}
+
+/** A group in the "find a group" catalogue plus the actor's request status. */
+export interface DirectoryGroup extends Group {
+  requestStatus?: "" | "pending";
+}
+
+/** A group member with their in-group role (GET /groups/:id/members). */
+export interface GroupMember {
+  user: User;
+  role: GroupRole;
+}
+
+/** The caller's own standing in a group (GET /groups/:id/me). */
+export interface GroupViewer {
+  member: boolean;
+  role: GroupRole | "";
+  canPost: boolean;
 }
 
 export interface ReactionSummary {

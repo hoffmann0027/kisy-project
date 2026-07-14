@@ -218,6 +218,19 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 				return err
 			}
 		},
+		// GroupPost adds the post-policy check (editors-only groups): a
+		// read-only member gets Forbidden on send while still able to read.
+		GroupPost: func(ctx context.Context, groupID, actorID uuid.UUID, actorLevel int) error {
+			err := groupsSvc.EnsureCanPost(ctx, groupID, groups.ActorMeta{UserID: actorID, RoleLevel: actorLevel})
+			switch {
+			case errors.Is(err, groups.ErrNotFound):
+				return messages.ErrNotFound
+			case errors.Is(err, groups.ErrNotMember), errors.Is(err, groups.ErrForbidden):
+				return messages.ErrForbidden
+			default:
+				return err
+			}
+		},
 	}
 	messagesSvc := messages.NewService(pool, messagesRepo, auditRec, messagesAuthz)
 	messagesHandler := messages.NewHandler(messagesSvc, func(r *http.Request) (messages.ActorMeta, bool) {
@@ -368,6 +381,15 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		wsPublisher.PublishUserUpdated(audience, profile)
 	})
 	groupsSvc.SetChangePublisher(wsPublisher.PublishGroupChanged)
+	// Notify a join-request applicant (a non-member for a rejection) of the
+	// decision via a per-user realtime notification.
+	groupsSvc.SetDecisionNotifier(func(userID, groupID uuid.UUID, approved bool) {
+		wsPublisher.PublishNotification(userID, map[string]any{
+			"type":     "group.request_decided",
+			"groupId":  groupID.String(),
+			"approved": approved,
+		})
+	})
 
 	chatAuthorizer := ws.ChatAuthorizer(func(ctx context.Context, chatType string, chatID, actorID uuid.UUID, actorLevel int) error {
 		switch chatType {

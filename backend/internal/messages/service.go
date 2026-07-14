@@ -37,6 +37,10 @@ type ActorMeta struct {
 type Authorizer struct {
 	Private func(ctx context.Context, chatID, actorID uuid.UUID) error
 	Group   func(ctx context.Context, groupID uuid.UUID, actorID uuid.UUID, actorLevel int) error
+	// GroupPost gates POSTING to a group (the group's post_policy on top of
+	// membership); read paths keep using Group. When nil it falls back to
+	// Group. Injected by the router.
+	GroupPost func(ctx context.Context, groupID uuid.UUID, actorID uuid.UUID, actorLevel int) error
 }
 
 // ClearanceResolver returns a chat's audience breadth: the weakest clearance
@@ -180,8 +184,8 @@ func (s *Service) ResolveAccessible(ctx context.Context, messageID uuid.UUID, ac
 	return m.ChatType, m.ChatID, nil
 }
 
-// authorize checks the actor may access the target chat, normalizing the
-// chat type.
+// authorize checks the actor may access (read) the target chat, normalizing
+// the chat type.
 func (s *Service) authorize(ctx context.Context, chatType string, chatID uuid.UUID, actor ActorMeta) error {
 	switch chatType {
 	case ChatPrivate:
@@ -191,6 +195,15 @@ func (s *Service) authorize(ctx context.Context, chatType string, chatID uuid.UU
 	default:
 		return ErrBadChatType
 	}
+}
+
+// authorizeWrite checks the actor may POST to the target chat. For groups it
+// applies the post policy (GroupPost); private chats are unchanged.
+func (s *Service) authorizeWrite(ctx context.Context, chatType string, chatID uuid.UUID, actor ActorMeta) error {
+	if chatType == ChatGroup && s.authz.GroupPost != nil {
+		return s.authz.GroupPost(ctx, chatID, actor.UserID, actor.RoleLevel)
+	}
+	return s.authorize(ctx, chatType, chatID, actor)
 }
 
 // SendInput is validated by the handler. A message body is either Text
@@ -265,7 +278,7 @@ func (s *Service) SendTx(ctx context.Context, q db.DBTX, in SendInput, actor Act
 		text = text[:MaxTextLength]
 	}
 
-	if err := s.authorize(ctx, in.ChatType, in.ChatID, actor); err != nil {
+	if err := s.authorizeWrite(ctx, in.ChatType, in.ChatID, actor); err != nil {
 		return DTO{}, nil, err
 	}
 

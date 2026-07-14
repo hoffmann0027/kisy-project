@@ -54,9 +54,12 @@ interface Props {
   target: ConversationTarget;
   /** Extra controls rendered on the right of the header (e.g. board tab). */
   headerActions?: ReactNode;
+  /** When set, the composer is replaced by this read-only notice (e.g. an
+   *  editors-only group where the viewer is a plain member). */
+  readOnly?: string;
 }
 
-export function Conversation({ target, headerActions }: Props) {
+export function Conversation({ target, headerActions, readOnly }: Props) {
   const { chatType, chatId } = target;
   const navigate = useNavigate();
   const { startCall, busy: callBusy } = useCallControls();
@@ -476,16 +479,20 @@ export function Conversation({ target, headerActions }: Props) {
               Запланированные сообщения: {pendingScheduled.length}
             </button>
           )}
-          <Composer
-            chatType={chatType}
-            chatId={chatId}
-            replyTo={replyTo}
-            replyPreview={previewFor(replyTo?.id ?? null)}
-            onClearReply={() => setReplyTo(null)}
-            onSend={handleSend}
-            onSchedule={handleSchedule}
-            scheduleE2EEWarning={chatType === "private" && !!e2eeSession()}
-          />
+          {readOnly ? (
+            <div className="conv__readonly">{readOnly}</div>
+          ) : (
+            <Composer
+              chatType={chatType}
+              chatId={chatId}
+              replyTo={replyTo}
+              replyPreview={previewFor(replyTo?.id ?? null)}
+              onClearReply={() => setReplyTo(null)}
+              onSend={handleSend}
+              onSchedule={handleSchedule}
+              scheduleE2EEWarning={chatType === "private" && !!e2eeSession()}
+            />
+          )}
         </>
       )}
 

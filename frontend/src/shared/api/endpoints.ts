@@ -15,6 +15,12 @@ import type {
   ChatMediaPage,
   DisappearSetting,
   Group,
+  DirectoryGroup,
+  GroupMember,
+  GroupViewer,
+  GroupRole,
+  JoinPolicy,
+  PostPolicy,
   IceConfig,
   Invitation,
   LevelCondition,
@@ -282,11 +288,24 @@ export const groupsApi = {
   updateLevel: (groupId: string, minRoleLevel: number) =>
     apiClient.patch<{ group: Group }>(`/groups/${groupId}`, { minRoleLevel }),
   remove: (groupId: string) => apiClient.del<{ deleted: boolean }>(`/groups/${groupId}`),
-  members: (groupId: string) => apiClient.get<{ members: User[] }>(`/groups/${groupId}/members`),
+  members: (groupId: string) => apiClient.get<{ members: GroupMember[] }>(`/groups/${groupId}/members`),
   addMember: (groupId: string, userId: string) =>
     apiClient.post<{ added: boolean }>(`/groups/${groupId}/members`, { userId }),
   uploadAvatar: (groupId: string, blob: Blob) =>
     apiClient.postBlob<{ group: Group }>(`/groups/${groupId}/avatar`, blob),
+  // Stage N — access settings, directory, join, requests, roles.
+  viewer: (groupId: string) => apiClient.get<{ viewer: GroupViewer }>(`/groups/${groupId}/me`),
+  updateSettings: (groupId: string, joinPolicy: JoinPolicy, postPolicy: PostPolicy) =>
+    apiClient.patch<{ group: Group }>(`/groups/${groupId}/settings`, { joinPolicy, postPolicy }),
+  directory: () => apiClient.get<{ groups: DirectoryGroup[] }>("/groups/directory"),
+  join: (groupId: string) => apiClient.post<{ joined: boolean; status: string }>(`/groups/${groupId}/join`),
+  listRequests: (groupId: string) => apiClient.get<{ requests: User[] }>(`/groups/${groupId}/requests`),
+  approveRequest: (groupId: string, userId: string) =>
+    apiClient.post<{ approved: boolean }>(`/groups/${groupId}/requests/${userId}/approve`),
+  rejectRequest: (groupId: string, userId: string) =>
+    apiClient.post<{ rejected: boolean }>(`/groups/${groupId}/requests/${userId}/reject`),
+  setMemberRole: (groupId: string, userId: string, role: GroupRole) =>
+    apiClient.post<{ ok: boolean }>(`/groups/${groupId}/members/${userId}/role`, { role }),
 };
 
 export const boardsApi = {

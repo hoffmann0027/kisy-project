@@ -545,8 +545,198 @@ paths:
                       data:
                         type: object
                         properties:
-                          members: { type: array, items: { $ref: '#/components/schemas/User' } }
+                          members:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                user: { $ref: '#/components/schemas/User' }
+                                role: { type: string, enum: [member, moderator, editor, owner] }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /groups/directory:
+    get:
+      tags: [groups]
+      summary: Groups the caller may join (cleared, not a member)
+      description: >
+        Returns non-archived groups the caller is cleared to see and is not
+        already a member of, each with the caller's pending-request status.
+      responses:
+        '200':
+          description: Joinable groups
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          groups:
+                            type: array
+                            items:
+                              allOf:
+                                - $ref: '#/components/schemas/Group'
+                                - properties:
+                                    requestStatus: { type: string, enum: ['', pending] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /groups/{groupID}/settings:
+    patch:
+      tags: [groups]
+      summary: Change a group's join/post policy (owner or CEO)
+      description: >
+        Sets joinPolicy (open|request) and postPolicy (all|editors). Clearance
+        always overrides these settings. Emits group.changed. Audited.
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [joinPolicy, postPolicy]
+              properties:
+                joinPolicy: { type: string, enum: [open, request] }
+                postPolicy: { type: string, enum: [all, editors] }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Envelope' }, { properties: { data: { type: object, properties: { group: { $ref: '#/components/schemas/Group' } } } } } ] } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /groups/{groupID}/me:
+    get:
+      tags: [groups]
+      summary: The caller's own membership/role/post-right in a group
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Viewer state
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          viewer:
+                            type: object
+                            properties:
+                              member: { type: boolean }
+                              role: { type: string }
+                              canPost: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /groups/{groupID}/join:
+    post:
+      tags: [groups]
+      summary: Join a group (open) or apply (request)
+      description: >
+        For an open group the cleared caller becomes a member immediately
+        (idempotent). For a request group a pending join request is created.
+        A caller who cannot see the group by clearance gets 404.
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Joined or applied
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          joined: { type: boolean }
+                          status: { type: string, enum: ['', pending] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /groups/{groupID}/requests:
+    get:
+      tags: [groups]
+      summary: Pending join requests (editor/owner/CEO only)
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Pending applicants
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          requests: { type: array, items: { $ref: '#/components/schemas/User' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /groups/{groupID}/requests/{userID}/approve:
+    post:
+      tags: [groups]
+      summary: Approve a join request (editor/owner/CEO)
+      description: Re-checks the candidate's clearance, then admits them as a member. Audited.
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: userID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Approved, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /groups/{groupID}/requests/{userID}/reject:
+    post:
+      tags: [groups]
+      summary: Reject a join request (editor/owner/CEO)
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: userID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Rejected, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /groups/{groupID}/members/{userID}/role:
+    post:
+      tags: [groups]
+      summary: Set a member's in-group role (owner or CEO)
+      description: >
+        Promote/demote a member between member, editor and moderator. The
+        founder's role cannot be changed. Audited; emits group.changed.
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: userID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { type: string, enum: [member, editor, moderator] }
+      responses:
+        '200': { description: Role changed, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
   /groups/{groupID}/avatar:
@@ -3000,6 +3190,8 @@ components:
         description: { type: [string, 'null'] }
         avatarUrl: { type: [string, 'null'] }
         minRoleLevel: { type: integer, minimum: 1, maximum: 10 }
+        joinPolicy: { type: string, enum: [open, request], description: "open = self-join; request = apply for approval" }
+        postPolicy: { type: string, enum: [all, editors], description: "all = any member posts; editors = owner/editor/moderator/CEO only" }
         createdBy: { type: string, format: uuid }
         createdAt: { type: string, format: date-time }
     BoardCard:

@@ -12,6 +12,7 @@ import { isMuted, useMutes } from "@entities/notif-prefs/queries";
 import { chatKey, folderChatSet, isArchived, useArchived, useFolders } from "@entities/chat-folders/queries";
 import { ChatContextMenu, type MenuTarget } from "@features/chat-folders/ChatContextMenu";
 import { FolderManager } from "@features/chat-folders/FolderManager";
+import { FindGroupModal } from "@features/new-chat/FindGroupModal";
 import { usePresenceStore } from "@shared/store/presence";
 
 interface Props {
@@ -40,6 +41,7 @@ export function ChatList({ activeId, onSelect, onSelectGroup, onNewChat, onNewGr
   const [showArchive, setShowArchive] = useState(false);
   const [menuTarget, setMenuTarget] = useState<MenuTarget | null>(null);
   const [managerOpen, setManagerOpen] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
 
   const openHit = (chatType: string, chatId: string) =>
     navigate(chatType === "group" ? `/group/${chatId}` : `/chat/${chatId}`);
@@ -225,7 +227,16 @@ export function ChatList({ activeId, onSelect, onSelectGroup, onNewChat, onNewGr
           </div>
         )}
 
-        {filteredGroups.length > 0 && <div className="chatlist__section">Группы</div>}
+        <div className="chatlist__section" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span>Группы</span>
+          <button
+            type="button"
+            onClick={() => setFindOpen(true)}
+            style={{ border: "none", background: "none", color: "var(--acc)", cursor: "pointer", fontSize: 12, fontWeight: 700, textTransform: "none", letterSpacing: 0 }}
+          >
+            Найти группу
+          </button>
+        </div>
         {filteredGroups.map(groupRow)}
 
         {filtered.length > 0 && <div className="chatlist__section">Личные чаты</div>}
@@ -274,6 +285,7 @@ export function ChatList({ activeId, onSelect, onSelectGroup, onNewChat, onNewGr
 
       {menuTarget && <ChatContextMenu target={menuTarget} onClose={() => setMenuTarget(null)} />}
       <FolderManager open={managerOpen} onClose={() => setManagerOpen(false)} />
+      <FindGroupModal open={findOpen} onClose={() => setFindOpen(false)} />
     </aside>
   );
 }

@@ -172,6 +172,11 @@ export function useRealtime() {
           break;
         case "group.changed":
           qc.invalidateQueries({ queryKey: groupKeys.list });
+          // Access settings, membership, pending requests and the "find a
+          // group" catalogue may all have shifted.
+          qc.invalidateQueries({ queryKey: groupKeys.directory });
+          qc.invalidateQueries({ queryKey: ["group-requests"] });
+          qc.invalidateQueries({ queryKey: ["group-viewer"] });
           break;
         case "rating.changed":
           qc.invalidateQueries({ queryKey: ["rating"] });

@@ -4,6 +4,7 @@ import { cn } from "@shared/lib/cn";
 import { Icon } from "@shared/ui/icons";
 import { roleLabel, type Group } from "@shared/api/types";
 import { useAuthStore } from "@shared/store/auth";
+import { useGroupViewer } from "@entities/group/queries";
 import { Conversation } from "./Conversation";
 import { BoardView } from "@widgets/board/BoardView";
 import { GroupMembersModal } from "@features/profile/GroupMembersModal";
@@ -15,6 +16,9 @@ export function GroupView({ group }: { group: Group }) {
   const [tab, setTab] = useState<Tab>("chat");
   const [membersOpen, setMembersOpen] = useState(false);
   const isFounder = useAuthStore((s) => s.user?.id === group.createdBy);
+  const { data: viewer } = useGroupViewer(group.id);
+  // Editors-only group where the viewer is a plain member → composer hidden.
+  const readOnly = viewer && !viewer.canPost ? "Писать могут только редакторы" : undefined;
   // Group's clearance, shown in the header so the level is visible in-chat.
   const levelLabel = `Группа · от ${roleLabel(group.minRoleLevel)} и выше`;
 
@@ -69,6 +73,7 @@ export function GroupView({ group }: { group: Group }) {
           offlineLabel: levelLabel,
         }}
         headerActions={tabs}
+        readOnly={readOnly}
       />
       <GroupMembersModal group={group} canAdd={isFounder} open={membersOpen} onClose={() => setMembersOpen(false)} />
     </>

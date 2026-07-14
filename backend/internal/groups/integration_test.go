@@ -159,6 +159,159 @@ func mustList(t *testing.T, svc *groups.Service, id uuid.UUID, level int) []grou
 	return list
 }
 
+// --- Stage N: access policies, self-join, join requests, roles ---
+
+func dirHas(dir []groups.DirectoryEntry, id uuid.UUID) bool {
+	for i := range dir {
+		if dir[i].ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func TestJoinPoliciesAndClearance(t *testing.T) {
+	svc, pool := newGroups(t)
+	ctx := context.Background()
+	mgr := testdb.SeedUser(t, pool, "mgr", 5)  // founder (owner)
+	emp := testdb.SeedUser(t, pool, "emp", 8)  // may join (group min 8)
+	low := testdb.SeedUser(t, pool, "low", 10) // too weak to see the group
+
+	g, err := svc.Create(ctx, groups.CreateInput{Name: "G", MinRoleLevel: 8}, actor(mgr, 5))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.JoinPolicy != groups.PolicyJoinRequest || g.PostPolicy != groups.PolicyPostAll {
+		t.Fatalf("default policies: got %s/%s, want request/all", g.JoinPolicy, g.PostPolicy)
+	}
+
+	// Clearance invariant: a weaker user cannot see it in the directory, and
+	// cannot join or apply — masked as not-found.
+	if dir, _ := svc.Directory(ctx, actor(low, 10)); dirHas(dir, g.ID) {
+		t.Fatal("low-clearance user must not see the group in the directory")
+	}
+	if _, err := svc.Join(ctx, g.ID, actor(low, 10)); !errors.Is(err, groups.ErrNotFound) {
+		t.Fatalf("low join: got %v, want ErrNotFound", err)
+	}
+
+	// emp sees it and applies → pending; a second apply is idempotent.
+	if dir, _ := svc.Directory(ctx, actor(emp, 8)); !dirHas(dir, g.ID) {
+		t.Fatal("emp should see the group in the directory")
+	}
+	res, err := svc.Join(ctx, g.ID, actor(emp, 8))
+	if err != nil || res.Status != "pending" {
+		t.Fatalf("emp apply: %v, %+v", err, res)
+	}
+	if _, err := svc.Join(ctx, g.ID, actor(emp, 8)); err != nil {
+		t.Fatalf("second apply should be idempotent: %v", err)
+	}
+	if member, _ := svc.IsMember(ctx, g.ID, emp); member {
+		t.Fatal("applicant must not be a member yet")
+	}
+
+	// Owner approves → member; group leaves emp's directory.
+	if err := svc.ApproveRequest(ctx, g.ID, emp, 8, actor(mgr, 5)); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+	if member, _ := svc.IsMember(ctx, g.ID, emp); !member {
+		t.Fatal("approved applicant should be a member")
+	}
+	if dir, _ := svc.Directory(ctx, actor(emp, 8)); dirHas(dir, g.ID) {
+		t.Fatal("a member must not see the group in the directory")
+	}
+
+	// Switch to open → another cleared user joins instantly.
+	if _, err := svc.SetPolicies(ctx, g.ID, groups.PolicyJoinOpen, groups.PolicyPostAll, actor(mgr, 5)); err != nil {
+		t.Fatalf("set policies: %v", err)
+	}
+	emp2 := testdb.SeedUser(t, pool, "emp2", 8)
+	res, err = svc.Join(ctx, g.ID, actor(emp2, 8))
+	if err != nil || !res.Joined {
+		t.Fatalf("open self-join: %v, %+v", err, res)
+	}
+}
+
+func TestRejectAndNoDoublePending(t *testing.T) {
+	svc, pool := newGroups(t)
+	ctx := context.Background()
+	mgr := testdb.SeedUser(t, pool, "mgr", 5)
+	emp := testdb.SeedUser(t, pool, "emp", 8)
+	g, err := svc.Create(ctx, groups.CreateInput{Name: "R", MinRoleLevel: 8}, actor(mgr, 5))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Join(ctx, g.ID, actor(emp, 8)); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RejectRequest(ctx, g.ID, emp, actor(mgr, 5)); err != nil {
+		t.Fatalf("reject: %v", err)
+	}
+	if member, _ := svc.IsMember(ctx, g.ID, emp); member {
+		t.Fatal("rejected applicant must not be a member")
+	}
+	// After rejection the user may apply again (a new pending row).
+	if res, err := svc.Join(ctx, g.ID, actor(emp, 8)); err != nil || res.Status != "pending" {
+		t.Fatalf("re-apply after reject: %v, %+v", err, res)
+	}
+}
+
+func TestPostPolicyEditors(t *testing.T) {
+	svc, pool := newGroups(t)
+	ctx := context.Background()
+	mgr := testdb.SeedUser(t, pool, "mgr", 5) // founder/owner
+	emp := testdb.SeedUser(t, pool, "emp", 8) // member
+	g, err := svc.Create(ctx, groups.CreateInput{Name: "Chan", MinRoleLevel: 8}, actor(mgr, 5))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetPolicies(ctx, g.ID, groups.PolicyJoinOpen, groups.PolicyPostEditors, actor(mgr, 5)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Join(ctx, g.ID, actor(emp, 8)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Plain member cannot post; owner can.
+	if err := svc.EnsureCanPost(ctx, g.ID, actor(emp, 8)); !errors.Is(err, groups.ErrForbidden) {
+		t.Fatalf("member post: got %v, want ErrForbidden", err)
+	}
+	if err := svc.EnsureCanPost(ctx, g.ID, actor(mgr, 5)); err != nil {
+		t.Fatalf("owner post: %v", err)
+	}
+	// Promote member to editor → may post.
+	if err := svc.SetMemberRole(ctx, g.ID, emp, groups.RoleEditor, actor(mgr, 5)); err != nil {
+		t.Fatalf("promote: %v", err)
+	}
+	if err := svc.EnsureCanPost(ctx, g.ID, actor(emp, 8)); err != nil {
+		t.Fatalf("editor post: %v", err)
+	}
+}
+
+func TestPolicyChangePermissions(t *testing.T) {
+	svc, pool := newGroups(t)
+	ctx := context.Background()
+	mgr := testdb.SeedUser(t, pool, "mgr", 5)
+	emp := testdb.SeedUser(t, pool, "emp", 8)
+	g, err := svc.Create(ctx, groups.CreateInput{Name: "P", MinRoleLevel: 8}, actor(mgr, 5))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetPolicies(ctx, g.ID, groups.PolicyJoinOpen, groups.PolicyPostAll, actor(mgr, 5)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Join(ctx, g.ID, actor(emp, 8)); err != nil {
+		t.Fatal(err)
+	}
+	// A plain member cannot change policies.
+	if _, err := svc.SetPolicies(ctx, g.ID, groups.PolicyJoinRequest, groups.PolicyPostAll, actor(emp, 8)); !errors.Is(err, groups.ErrForbidden) {
+		t.Fatalf("member policy change: got %v, want ErrForbidden", err)
+	}
+	// A member also cannot view pending requests.
+	if _, err := svc.ListRequests(ctx, g.ID, actor(emp, 8)); !errors.Is(err, groups.ErrForbidden) {
+		t.Fatalf("member list requests: got %v, want ErrForbidden", err)
+	}
+}
+
 func containsGroup(list []groups.Group, id uuid.UUID) bool {
 	for i := range list {
 		if list[i].ID == id {
