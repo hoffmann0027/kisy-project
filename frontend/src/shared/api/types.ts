@@ -62,6 +62,35 @@ export interface GroupViewer {
   canPost: boolean;
 }
 
+export type CalendarColor = "blue" | "green" | "red" | "orange" | "purple" | "teal" | "pink" | "gray";
+export const CALENDAR_COLORS: CalendarColor[] = ["blue", "green", "red", "orange", "purple", "teal", "pink", "gray"];
+
+/** A one-off group calendar event (kind "event"). */
+export interface CalendarEvent {
+  kind: "event";
+  id: string;
+  groupId: string;
+  title: string;
+  startsAt: string;
+  endsAt: string | null;
+  color: CalendarColor;
+  createdBy: string;
+}
+
+/** A board card surfaced in the calendar by its due date (read-only). */
+export interface CalendarCardRef {
+  cardId: string;
+  title: string;
+  dueDate: string;
+  columnId: string;
+}
+
+/** GET /groups/:id/calendar response. */
+export interface CalendarMonth {
+  events: CalendarEvent[];
+  cards: CalendarCardRef[];
+}
+
 export interface ReactionSummary {
   emoji: string;
   count: number;

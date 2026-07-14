@@ -15,6 +15,9 @@ import type {
   ChatMediaPage,
   DisappearSetting,
   Group,
+  CalendarColor,
+  CalendarEvent,
+  CalendarMonth,
   DirectoryGroup,
   GroupMember,
   GroupViewer,
@@ -306,6 +309,16 @@ export const groupsApi = {
     apiClient.post<{ rejected: boolean }>(`/groups/${groupId}/requests/${userId}/reject`),
   setMemberRole: (groupId: string, userId: string, role: GroupRole) =>
     apiClient.post<{ ok: boolean }>(`/groups/${groupId}/members/${userId}/role`, { role }),
+};
+
+export const calendarApi = {
+  list: (groupId: string, fromISO: string, toISO: string) =>
+    apiClient.get<CalendarMonth>(`/groups/${groupId}/calendar?from=${encodeURIComponent(fromISO)}&to=${encodeURIComponent(toISO)}`),
+  create: (groupId: string, body: { title: string; startsAt: string; endsAt?: string | null; color: CalendarColor }) =>
+    apiClient.post<{ event: CalendarEvent }>(`/groups/${groupId}/calendar`, body),
+  update: (eventId: string, body: { title: string; startsAt: string; endsAt?: string | null; color: CalendarColor }) =>
+    apiClient.patch<{ event: CalendarEvent }>(`/calendar/${eventId}`, body),
+  remove: (eventId: string) => apiClient.del<{ deleted: boolean }>(`/calendar/${eventId}`),
 };
 
 export const boardsApi = {

@@ -774,6 +774,103 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /groups/{groupID}/calendar:
+    get:
+      tags: [calendar]
+      summary: Group calendar for an interval (events + due-dated board cards)
+      description: >
+        Returns the group's one-off events overlapping [from, to) and the
+        board cards whose due date falls in the window (read-only refs).
+        Requires membership; a hidden group returns 404.
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: from, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date-time } }
+      responses:
+        '200':
+          description: Events and card refs
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          events: { type: array, items: { $ref: '#/components/schemas/CalendarEvent' } }
+                          cards:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                cardId: { type: string, format: uuid }
+                                title: { type: string }
+                                dueDate: { type: string, format: date-time }
+                                columnId: { type: string, format: uuid }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [calendar]
+      summary: Create a calendar event (any group member)
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, startsAt, color]
+              properties:
+                title: { type: string, minLength: 1, maxLength: 200 }
+                startsAt: { type: string, format: date-time }
+                endsAt: { type: [string, 'null'], format: date-time }
+                color: { type: string, enum: [blue, green, red, orange, purple, teal, pink, gray] }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Envelope' }, { properties: { data: { type: object, properties: { event: { $ref: '#/components/schemas/CalendarEvent' } } } } } ] } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /calendar/{eventID}:
+    patch:
+      tags: [calendar]
+      summary: Edit a calendar event (author, group owner or CEO)
+      parameters:
+        - { name: eventID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, startsAt, color]
+              properties:
+                title: { type: string, minLength: 1, maxLength: 200 }
+                startsAt: { type: string, format: date-time }
+                endsAt: { type: [string, 'null'], format: date-time }
+                color: { type: string, enum: [blue, green, red, orange, purple, teal, pink, gray] }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Envelope' }, { properties: { data: { type: object, properties: { event: { $ref: '#/components/schemas/CalendarEvent' } } } } } ] } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [calendar]
+      summary: Delete a calendar event (author, group owner or CEO)
+      parameters:
+        - { name: eventID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /groups/{groupID}/board:
     get:
       tags: [boards]
@@ -3194,6 +3291,17 @@ components:
         postPolicy: { type: string, enum: [all, editors], description: "all = any member posts; editors = owner/editor/moderator/CEO only" }
         createdBy: { type: string, format: uuid }
         createdAt: { type: string, format: date-time }
+    CalendarEvent:
+      type: object
+      properties:
+        kind: { type: string, enum: [event] }
+        id: { type: string, format: uuid }
+        groupId: { type: string, format: uuid }
+        title: { type: string }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: [string, 'null'], format: date-time }
+        color: { type: string, enum: [blue, green, red, orange, purple, teal, pink, gray] }
+        createdBy: { type: string, format: uuid }
     BoardCard:
       type: object
       properties:

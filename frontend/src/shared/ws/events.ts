@@ -15,6 +15,7 @@ export type ServerEvent =
   | { event: "reaction.removed"; data: ReactionEvent }
   | { event: "notification.created"; data: Record<string, unknown> }
   | { event: "board.changed"; data: { groupId: string } }
+  | { event: "calendar.changed"; data: { groupId: string } }
   | { event: "group.changed"; data: { groupId: string } }
   | { event: "rating.changed"; data: Record<string, never> }
   | { event: "poll.changed"; data: Record<string, never> }

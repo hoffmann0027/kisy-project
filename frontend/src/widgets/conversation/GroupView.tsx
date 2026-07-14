@@ -7,9 +7,10 @@ import { useAuthStore } from "@shared/store/auth";
 import { useGroupViewer } from "@entities/group/queries";
 import { Conversation } from "./Conversation";
 import { BoardView } from "@widgets/board/BoardView";
+import { CalendarView } from "@widgets/calendar/CalendarView";
 import { GroupMembersModal } from "@features/profile/GroupMembersModal";
 
-type Tab = "chat" | "board";
+type Tab = "chat" | "board" | "calendar";
 
 export function GroupView({ group }: { group: Group }) {
   const navigate = useNavigate();
@@ -36,13 +37,19 @@ export function GroupView({ group }: { group: Group }) {
       >
         <Icon.Board size={16} /> Доска
       </button>
+      <button
+        className={cn("group-tab", tab === "calendar" && "group-tab--active")}
+        onClick={() => setTab("calendar")}
+      >
+        <Icon.Calendar size={16} /> Календарь
+      </button>
       <button className="group-tab" onClick={() => setMembersOpen(true)} title="Участники">
         <Icon.Users size={16} />
       </button>
     </div>
   );
 
-  if (tab === "board") {
+  if (tab === "board" || tab === "calendar") {
     return (
       <section className="conv">
         <header className="conv__header">
@@ -51,11 +58,11 @@ export function GroupView({ group }: { group: Group }) {
           </button>
           <div className="conv__header-body">
             <div className="conv__title">{group.name}</div>
-            <div className="conv__status">Доска задач</div>
+            <div className="conv__status">{tab === "board" ? "Доска задач" : "Календарь"}</div>
           </div>
           {tabs}
         </header>
-        <BoardView group={group} />
+        {tab === "board" ? <BoardView group={group} /> : <CalendarView group={group} onOpenCard={() => setTab("board")} />}
         <GroupMembersModal group={group} canAdd={isFounder} open={membersOpen} onClose={() => setMembersOpen(false)} />
       </section>
     );

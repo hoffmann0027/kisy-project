@@ -21,6 +21,7 @@ import (
 	"kisy-backend/internal/avatars"
 	"kisy-backend/internal/boards"
 	"kisy-backend/internal/bootstrap"
+	"kisy-backend/internal/calendar"
 	"kisy-backend/internal/calls"
 	"kisy-backend/internal/chatfolders"
 	"kisy-backend/internal/chatmedia"
@@ -80,6 +81,7 @@ type modules struct {
 	notificationsHandler *notifications.Handler
 	notifprefsHandler    *notifprefs.Handler
 	boardsHandler        *boards.Handler
+	calendarHandler      *calendar.Handler
 	ratingHandler        *rating.Handler
 	votingHandler        *voting.Handler
 	callsHandler         *calls.Handler
@@ -611,6 +613,52 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		return boards.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
 	})
 
+	// --- group calendar (events + due-dated board cards) ---
+	calBoardsRepo := boards.NewPostgresRepository()
+	calendarSvc := calendar.NewService(pool, calendar.NewPostgresRepository(), auditRec, calendar.Access{
+		EnsureMember: func(ctx context.Context, groupID, actorID uuid.UUID, actorLevel int) error {
+			err := groupsSvc.EnsureMember(ctx, groupID, groups.ActorMeta{UserID: actorID, RoleLevel: actorLevel})
+			switch {
+			case errors.Is(err, groups.ErrNotFound):
+				return calendar.ErrNotFound
+			case errors.Is(err, groups.ErrNotMember):
+				return calendar.ErrForbidden
+			default:
+				return err
+			}
+		},
+		IsFounder: groupsSvc.IsFounder,
+	})
+	// Surface board cards that carry a due date within the requested window.
+	calendarSvc.SetCardLoader(func(ctx context.Context, groupID uuid.UUID, from, to time.Time) ([]calendar.CardRef, error) {
+		board, err := calBoardsRepo.GetBoardByGroup(ctx, pool, groupID)
+		if err != nil {
+			return nil, nil // no board → no cards
+		}
+		cards, err := calBoardsRepo.ListCards(ctx, pool, board.ID)
+		if err != nil {
+			return nil, err
+		}
+		var out []calendar.CardRef
+		for i := range cards {
+			d := cards[i].DueDate
+			if d == nil || d.Before(from) || !d.Before(to) {
+				continue
+			}
+			out = append(out, calendar.CardRef{CardID: cards[i].ID, Title: cards[i].Title, DueDate: *d, ColumnID: cards[i].ColumnID})
+		}
+		return out, nil
+	})
+	calendarSvc.SetChangePublisher(wsPublisher.PublishCalendarChanged)
+	calendarHandler := calendar.NewHandler(calendarSvc, func(r *http.Request) (calendar.Actor, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return calendar.Actor{}, false
+		}
+		m := authHandler.ClientMeta(r)
+		return calendar.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel, SessionID: claims.SessionID, IPHash: m.IPHash, RequestID: m.RequestID}, true
+	})
+
 	// --- rating board (projects → in progress → done + profit ledger) ---
 	ratingSvc := rating.NewService(pool, rating.NewPostgresRepository())
 	ratingSvc.SetChangePublisher(wsPublisher.PublishRatingChanged)
@@ -752,6 +800,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		notificationsHandler: notificationsHandler,
 		notifprefsHandler:    notifprefsHandler,
 		boardsHandler:        boardsHandler,
+		calendarHandler:      calendarHandler,
 		ratingHandler:        ratingHandler,
 		votingHandler:        votingHandler,
 		callsHandler:         callsHandler,

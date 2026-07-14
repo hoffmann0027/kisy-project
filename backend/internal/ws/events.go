@@ -25,6 +25,7 @@ const (
 	EventReactionRemoved = "reaction.removed"
 	EventNotification    = "notification.created"
 	EventBoardChanged    = "board.changed"
+	EventCalendarChanged = "calendar.changed"
 	EventGroupChanged    = "group.changed"
 	EventRatingChanged   = "rating.changed"
 	EventPollChanged     = "poll.changed"

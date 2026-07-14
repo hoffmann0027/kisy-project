@@ -190,6 +190,9 @@ export function useRealtime() {
         case "board.changed":
           qc.invalidateQueries({ queryKey: ["board", ev.data.groupId] });
           break;
+        case "calendar.changed":
+          qc.invalidateQueries({ queryKey: ["calendar", ev.data.groupId] });
+          break;
       }
     });
 

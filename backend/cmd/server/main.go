@@ -282,12 +282,20 @@ func newRouter(d routerDeps) http.Handler {
 				m.groupsHandler.Routes(r)
 				// Task board endpoints under a group.
 				m.boardsHandler.GroupRoutes(r)
+				// Calendar list/create under a group.
+				m.calendarHandler.GroupRoutes(r)
 			})
 
 			// Board structure/card endpoints (access checked per-board via
 			// group membership/founder).
 			r.Route("/boards", func(r chi.Router) {
 				m.boardsHandler.BoardRoutes(r)
+			})
+
+			// Calendar event edit/delete (access checked per-event via group
+			// membership; edit/delete gated to author/owner/CEO).
+			r.Route("/calendar", func(r chi.Router) {
+				m.calendarHandler.EventRoutes(r)
 			})
 
 			// Message, reaction and read-state endpoints live at the
