@@ -147,6 +147,11 @@
   max-height: calc(100vh - 360px);
   min-height: 200px;
 }
+@supports (height: 100dvh) {
+  .rating-col {
+    max-height: calc(100dvh - 360px);
+  }
+}
 .rating-col__head {
   display: flex;
   align-items: center;

@@ -205,6 +205,14 @@
   overflow: auto;
   animation: pop-in var(--transition-medium);
 }
+/* Dynamic viewport height so a tall modal stays fully reachable on mobile
+   while the browser's address bar is showing (100vh assumes it is hidden,
+   which pushes the modal's bottom — and its scroll — out of view). */
+@supports (height: 100dvh) {
+  .ui-modal {
+    max-height: 88dvh;
+  }
+}
 .ui-modal__header {
   display: flex;
   align-items: center;

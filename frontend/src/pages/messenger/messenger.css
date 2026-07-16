@@ -739,6 +739,11 @@
   max-height: 46vh;
   overflow-y: auto;
 }
+@supports (height: 100dvh) {
+  .feedback__list {
+    max-height: 46dvh;
+  }
+}
 .feedback__empty {
   text-align: center;
   color: var(--color-text-secondary);
@@ -1015,6 +1020,10 @@
     grid-template-columns: 1fr;
     grid-template-rows: 1fr;
     height: 100dvh;
+    /* Shared with the column-height maths below: the fixed rail's height and
+       the .msgr padding the columns start below. */
+    --rail-h: 58px;
+    --msgr-pad: 10px;
   }
 
   /* The nav rail becomes a fixed horizontal bar along the bottom. */
@@ -1026,7 +1035,7 @@
     z-index: 50;
     flex-direction: row;
     align-items: center;
-    height: 58px;
+    height: var(--rail-h);
     padding: 0 8px;
     gap: 4px;
     overflow-x: auto;
@@ -1046,15 +1055,24 @@
     height: 44px;
   }
 
-  /* Columns share the single grid cell; only one is shown at a time. Height
-     leaves room for the bottom nav bar. */
+  /* Columns share the single grid cell; only one is shown at a time. The
+     column starts one .msgr padding below the viewport top, so its height must
+     drop BOTH the rail and that padding — otherwise its bottom (composer, last
+     message) slides under the fixed rail. */
   .chatlist,
   .conv,
   .ui-empty {
     grid-column: 1;
     grid-row: 1;
-    height: calc(100dvh - 58px);
+    height: calc(100vh - var(--rail-h) - var(--msgr-pad));
     min-height: 0;
+  }
+  @supports (height: 100dvh) {
+    .chatlist,
+    .conv,
+    .ui-empty {
+      height: calc(100dvh - var(--rail-h) - var(--msgr-pad));
+    }
   }
   .chatlist {
     border-right: none;
@@ -1312,6 +1330,11 @@
   border-radius: var(--radius-md);
   cursor: zoom-in;
   transition: transform 0.2s ease;
+}
+@supports (height: 100dvh) {
+  .mviewer__img {
+    max-height: 86dvh;
+  }
 }
 .mviewer__img--zoomed {
   transform: scale(2);
@@ -1767,6 +1790,11 @@
   padding: 4px;
   display: flex;
   flex-direction: column;
+}
+@supports (height: 100dvh) {
+  .chatmenu {
+    max-height: 60dvh;
+  }
 }
 .chatmenu__item {
   display: flex;
