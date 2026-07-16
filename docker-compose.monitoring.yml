@@ -1,18 +1,103 @@
-# Observability overlay: Prometheus scrapes the backend's /metrics and
-# Grafana visualizes it. Apply alongside the base stack:
+# Observability overlay: Prometheus scrapes the backend + infrastructure
+# exporters, evaluates alert rules and routes firing alerts through
+# Alertmanager to Telegram; Grafana visualizes it. Apply alongside the base
+# stack:
 #
 #   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 #
-# Prometheus: http://localhost:9090  ·  Grafana: http://localhost:3000
+# Telegram delivery needs TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env
+# (see .env.example). Prometheus: http://localhost:9090 ·
+# Alertmanager: http://localhost:9093 · Grafana: http://localhost:3000
 services:
   prometheus:
     image: prom/prometheus:v2.54.1
     restart: unless-stopped
     volumes:
       - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/monitoring/alerts.rules.yml:/etc/prometheus/alerts.rules.yml:ro
       - prometheus-data:/prometheus
     ports:
       - "127.0.0.1:9090:9090"
+    depends_on:
+      - alertmanager
+    networks:
+      - kisy-net
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    restart: unless-stopped
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    volumes:
+      - ./deploy/monitoring/alertmanager.tmpl.yml:/etc/alertmanager/alertmanager.tmpl.yml:ro
+      - alertmanager-data:/alertmanager
+    # Render the config from the template at startup, injecting the Telegram
+    # secret from the environment (never committed). $$VAR is escaped so the
+    # shell — not compose — expands it at runtime. With no token configured,
+    # fall back to a null receiver so Alertmanager stays healthy (alerts still
+    # fire in Prometheus, they just aren't delivered).
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        if [ -n "$${TELEGRAM_BOT_TOKEN}" ] && [ -n "$${TELEGRAM_CHAT_ID}" ]; then
+          sed -e "s#__BOT_TOKEN__#$${TELEGRAM_BOT_TOKEN}#g" \
+              -e "s#__CHAT_ID__#$${TELEGRAM_CHAT_ID}#g" \
+              /etc/alertmanager/alertmanager.tmpl.yml > /tmp/alertmanager.yml
+        else
+          echo "TELEGRAM_BOT_TOKEN/CHAT_ID unset -> Telegram delivery disabled" >&2
+          printf 'route:\n  receiver: "null"\nreceivers:\n  - name: "null"\n' > /tmp/alertmanager.yml
+        fi
+        exec /bin/alertmanager --config.file=/tmp/alertmanager.yml \
+            --storage.path=/alertmanager --web.listen-address=:9093
+    ports:
+      - "127.0.0.1:9093:9093"
+    networks:
+      - kisy-net
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    pid: host
+    networks:
+      - kisy-net
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=${POSTGRES_SSLMODE:-disable}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - kisy-net
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: "redis://redis:6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - kisy-net
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    restart: unless-stopped
     networks:
       - kisy-net
 
@@ -34,4 +119,5 @@ services:
 
 volumes:
   prometheus-data:
+  alertmanager-data:
   grafana-data:

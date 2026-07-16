@@ -1,0 +1,30 @@
+# Alertmanager config TEMPLATE. The container's entrypoint fills the bot-token
+# and chat-id placeholders below from the TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID
+# environment variables at startup (see docker-compose.monitoring.yml), so no
+# secret is ever committed. Do not put real tokens here.
+route:
+  receiver: telegram
+  group_by: ["alertname"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    # Page harder on critical: re-notify hourly instead of every 4h.
+    - matchers:
+        - severity="critical"
+      receiver: telegram
+      repeat_interval: 1h
+
+receivers:
+  - name: telegram
+    telegram_configs:
+      - bot_token: "__BOT_TOKEN__"
+        chat_id: __CHAT_ID__
+        parse_mode: HTML
+        send_resolved: true
+        message: |-
+          {{ if eq .Status "firing" }}🔴 <b>FIRING</b>{{ else }}✅ <b>RESOLVED</b>{{ end }} ({{ .Alerts | len }})
+          {{ range .Alerts }}<b>{{ .Labels.alertname }}</b> [{{ .Labels.severity }}]
+          {{ .Annotations.summary }}
+          {{ .Annotations.description }}
+          {{ end }}

@@ -62,6 +62,9 @@ func run() error {
 	defer pgPool.Close()
 	log.Info("connected to postgres")
 
+	// Expose pool saturation to Prometheus for the O1 alert rules.
+	metrics.RegisterDBPool(pgPool)
+
 	redisClient, err := kisyredis.NewClient(ctx, cfg.Redis, cfg.RedisURL)
 	if err != nil {
 		return err

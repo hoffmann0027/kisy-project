@@ -10,6 +10,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"kisy-backend/internal/messages"
+	"kisy-backend/internal/platform/metrics"
 )
 
 // Sender persists a message sent over the socket. Satisfied by
@@ -147,6 +148,7 @@ func (h *Hub) addClient(c *Client) {
 	h.clients[c.userID][c] = struct{}{}
 	h.mu.Unlock()
 
+	metrics.WSConnect()
 	h.markPresence(c.userID, true)
 }
 
@@ -172,6 +174,7 @@ func (h *Hub) removeClient(c *Client) {
 	close(c.send)
 	h.mu.Unlock()
 
+	metrics.WSDisconnect()
 	h.markPresence(c.userID, false)
 }
 

@@ -21,6 +21,7 @@ import (
 
 	"kisy-backend/internal/audit"
 	"kisy-backend/internal/platform/db"
+	"kisy-backend/internal/platform/metrics"
 )
 
 var (
@@ -313,14 +314,17 @@ func (s *Service) StartReaper(ctx context.Context, interval time.Duration, log *
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				metrics.WorkerRun("disappear")
 				for {
 					n, err := s.ProcessExpired(ctx, time.Now(), 100)
 					if err != nil {
 						if ctx.Err() == nil {
+							metrics.WorkerError("disappear")
 							log.Warn("disappear: reaper pass failed", "error", err)
 						}
 						break
 					}
+					metrics.WorkerItems("disappear", n)
 					if n > 0 {
 						log.Info("disappear: reaped expired messages", "count", n)
 					}

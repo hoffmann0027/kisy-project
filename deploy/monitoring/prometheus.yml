@@ -2,6 +2,15 @@ global:
   scrape_interval: 15s
   scrape_timeout: 10s
 
+# Alert rules are evaluated here and routed to Alertmanager (Telegram).
+rule_files:
+  - /etc/prometheus/alerts.rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
 scrape_configs:
   - job_name: kisy-backend
     metrics_path: /metrics
@@ -11,3 +20,41 @@ scrape_configs:
   - job_name: prometheus
     static_configs:
       - targets: ["localhost:9090"]
+
+  - job_name: alertmanager
+    static_configs:
+      - targets: ["alertmanager:9093"]
+
+  # Host disk/CPU/memory (drives the low-disk alert — critical, see O5).
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  # Postgres: connection saturation, up/down.
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+
+  # Redis: up/down, memory.
+  - job_name: redis
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+
+  # Black-box probes of the readiness/liveness endpoints through the backend.
+  # `up` only tells us /metrics answers; this catches /ready returning 503 when
+  # Postgres or Redis is unreachable.
+  - job_name: blackbox-http
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://backend:8080/ready
+          - http://backend:8080/health
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

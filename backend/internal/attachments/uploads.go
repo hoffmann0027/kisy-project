@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"kisy-backend/internal/platform/db"
+	"kisy-backend/internal/platform/metrics"
 )
 
 // UploadSession is a chunked upload in progress: metadata is fixed at init,
@@ -201,10 +202,13 @@ func (s *Service) StartSessionCleanup(ctx context.Context, interval time.Duratio
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				metrics.WorkerRun("attachments_cleanup")
 				n, err := s.repo.DeleteExpiredSessions(ctx, s.pool, time.Now())
 				if err != nil && ctx.Err() == nil {
+					metrics.WorkerError("attachments_cleanup")
 					log.Warn("attachments: session cleanup failed", "error", err)
 				} else if n > 0 {
+					metrics.WorkerItems("attachments_cleanup", int(n))
 					log.Info("attachments: reaped expired upload sessions", "count", n)
 				}
 			}

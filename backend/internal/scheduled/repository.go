@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"kisy-backend/internal/platform/db"
+	"kisy-backend/internal/platform/metrics"
 )
 
 type PostgresRepository struct{}
@@ -165,16 +166,19 @@ func (s *Service) StartWorker(ctx context.Context, interval time.Duration, log *
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				metrics.WorkerRun("scheduled")
 				// Drain everything due, batch by batch, so a backlog after
 				// downtime clears in one tick.
 				for {
 					n, err := s.ProcessDue(ctx, time.Now(), 50)
 					if err != nil {
 						if ctx.Err() == nil {
+							metrics.WorkerError("scheduled")
 							log.Warn("scheduled: worker pass failed", "error", err)
 						}
 						break
 					}
+					metrics.WorkerItems("scheduled", n)
 					if n > 0 {
 						log.Info("scheduled: processed due messages", "count", n)
 					}
