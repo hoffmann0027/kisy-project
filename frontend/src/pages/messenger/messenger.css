@@ -1026,7 +1026,11 @@
        above it (--safe-bottom is 0 without a home indicator). */
     --rail-h: 58px;
     --msgr-pad: 10px;
-    --rail-total: calc(var(--rail-h) + var(--safe-bottom));
+    /* The rail is lifted onto the keyboard when one is open — and the home
+       indicator is then covered by that keyboard, so its inset would only
+       strand an empty strip above it. Drop the padding as the keyboard grows. */
+    --rail-pad-bottom: max(0px, calc(var(--safe-bottom) - var(--kb-inset)));
+    --rail-total: calc(var(--rail-h) + var(--rail-pad-bottom));
   }
 
   /* The nav rail becomes a fixed horizontal bar along the bottom. */
@@ -1034,7 +1038,9 @@
     position: fixed;
     left: 0;
     right: 0;
-    bottom: 0;
+    /* Ride above the on-screen keyboard instead of hiding behind it: the
+       layout viewport (and so bottom:0) ignores the keyboard entirely. */
+    bottom: var(--kb-inset);
     z-index: 50;
     flex-direction: row;
     align-items: center;
@@ -1042,7 +1048,7 @@
        44px buttons keep their full height and sit entirely above it
        (box-sizing is border-box globally). */
     height: var(--rail-total);
-    padding: 0 calc(8px + var(--safe-right)) var(--safe-bottom) calc(8px + var(--safe-left));
+    padding: 0 calc(8px + var(--safe-right)) var(--rail-pad-bottom) calc(8px + var(--safe-left));
     gap: 4px;
     overflow-x: auto;
     overflow-y: hidden;
@@ -1070,14 +1076,17 @@
   .ui-empty {
     grid-column: 1;
     grid-row: 1;
-    height: calc(100vh - var(--rail-total) - var(--msgr-pad));
+    height: calc(100vh - var(--rail-total) - var(--msgr-pad) - var(--kb-inset));
     min-height: 0;
   }
   @supports (height: 100dvh) {
     .chatlist,
     .conv,
     .ui-empty {
-      height: calc(100dvh - var(--rail-total) - var(--msgr-pad));
+      /* dvh does NOT shrink for the keyboard, so subtract it ourselves — this
+         is what keeps the composer (last child of the .conv flex column)
+         visible instead of resorting to position:fixed. */
+      height: calc(100dvh - var(--rail-total) - var(--msgr-pad) - var(--kb-inset));
     }
   }
   .chatlist {

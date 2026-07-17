@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { cn } from "@shared/lib/cn";
 import { useCallControls } from "@features/call/CallProvider";
 import { formatDay } from "@shared/lib/format";
+import { useVisualViewport } from "@shared/lib/useVisualViewport";
 import { Avatar, Button, Spinner, toast } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import { MediaViewer, type MediaViewerItem } from "@shared/ui/MediaViewer";
@@ -92,6 +93,7 @@ export function Conversation({ target, headerActions, readOnly }: Props) {
   const [forwardOpen, setForwardOpen] = useState(false);
   const [forwardSource, setForwardSource] = useState<Message[] | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const selectionMode = selected.size > 0;
 
   const messages = useMemo(() => flattenMessages(data?.pages), [data]);
@@ -127,6 +129,21 @@ export function Conversation({ target, headerActions, readOnly }: Props) {
     }
     lastCount.current = messages.length;
   }, [messages.length]);
+
+  // Opening the keyboard shrinks .conv by --kb-inset (see messenger.css), which
+  // would slide the newest message up out of view. Re-pin to the bottom — but
+  // only when that is where the reader already was, so someone scrolled back
+  // through history is not yanked forward just for tapping the composer.
+  const keyboardInset = useVisualViewport();
+  const atBottomRef = useRef(true);
+  const trackAtBottom = () => {
+    const el = scrollRef.current;
+    if (el) atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  };
+  useEffect(() => {
+    if (!atBottomRef.current) return;
+    bottomRef.current?.scrollIntoView({ behavior: "auto" });
+  }, [keyboardInset]);
 
   useEffect(() => {
     // Mark the newest server-acked message as read (skip optimistic bubbles,
@@ -400,7 +417,7 @@ export function Conversation({ target, headerActions, readOnly }: Props) {
         </div>
       )}
 
-      <div className="conv__scroll">
+      <div className="conv__scroll" ref={scrollRef} onScroll={trackAtBottom}>
         {isPending && (
           <div style={{ margin: "auto" }}>
             <Spinner size={28} />

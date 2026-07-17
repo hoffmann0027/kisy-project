@@ -192,9 +192,12 @@
   z-index: 100;
   animation: fade-in var(--transition-fast);
   /* Keep the modal clear of the notch and home indicator; the insets are 0
-     where there is no cutout, leaving the original --space-4 gutter. */
+     where there is no cutout, leaving the original --space-4 gutter. The
+     bottom also yields to the keyboard, so the flex centring happens inside
+     the area that is actually visible. */
   padding: calc(var(--space-4) + var(--safe-top)) calc(var(--space-4) + var(--safe-right))
-    calc(var(--space-4) + var(--safe-bottom)) calc(var(--space-4) + var(--safe-left));
+    calc(var(--space-4) + max(var(--safe-bottom), var(--kb-inset)))
+    calc(var(--space-4) + var(--safe-left));
 }
 .ui-modal {
   background: var(--overlay-bg);
@@ -213,7 +216,9 @@
    which pushes the modal's bottom — and its scroll — out of view). */
 @supports (height: 100dvh) {
   .ui-modal {
-    max-height: 88dvh;
+    /* dvh ignores the keyboard, so drop its overlap here too — the body then
+       scrolls within what is left instead of running under it. */
+    max-height: calc(88dvh - var(--kb-inset));
   }
 }
 .ui-modal__header {
