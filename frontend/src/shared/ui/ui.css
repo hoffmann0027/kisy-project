@@ -191,7 +191,10 @@
   justify-content: center;
   z-index: 100;
   animation: fade-in var(--transition-fast);
-  padding: var(--space-4);
+  /* Keep the modal clear of the notch and home indicator; the insets are 0
+     where there is no cutout, leaving the original --space-4 gutter. */
+  padding: calc(var(--space-4) + var(--safe-top)) calc(var(--space-4) + var(--safe-right))
+    calc(var(--space-4) + var(--safe-bottom)) calc(var(--space-4) + var(--safe-left));
 }
 .ui-modal {
   background: var(--overlay-bg);
@@ -234,7 +237,8 @@
 /* Toast */
 .ui-toasts {
   position: fixed;
-  bottom: var(--space-5);
+  /* Lift clear of the home indicator (0 where there is none). */
+  bottom: calc(var(--space-5) + var(--safe-bottom));
   left: 50%;
   transform: translateX(-50%);
   display: flex;

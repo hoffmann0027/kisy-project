@@ -1020,10 +1020,13 @@
     grid-template-columns: 1fr;
     grid-template-rows: 1fr;
     height: 100dvh;
-    /* Shared with the column-height maths below: the fixed rail's height and
-       the .msgr padding the columns start below. */
+    /* Shared with the column-height maths below: the fixed rail's content
+       height, the .msgr padding the columns start below, and the rail's real
+       footprint — it grows by the home-indicator inset so its buttons stay
+       above it (--safe-bottom is 0 without a home indicator). */
     --rail-h: 58px;
     --msgr-pad: 10px;
+    --rail-total: calc(var(--rail-h) + var(--safe-bottom));
   }
 
   /* The nav rail becomes a fixed horizontal bar along the bottom. */
@@ -1035,8 +1038,11 @@
     z-index: 50;
     flex-direction: row;
     align-items: center;
-    height: var(--rail-h);
-    padding: 0 8px;
+    /* Grow the bar by the home-indicator inset and pad the same amount, so the
+       44px buttons keep their full height and sit entirely above it
+       (box-sizing is border-box globally). */
+    height: var(--rail-total);
+    padding: 0 calc(8px + var(--safe-right)) var(--safe-bottom) calc(8px + var(--safe-left));
     gap: 4px;
     overflow-x: auto;
     overflow-y: hidden;
@@ -1064,14 +1070,14 @@
   .ui-empty {
     grid-column: 1;
     grid-row: 1;
-    height: calc(100vh - var(--rail-h) - var(--msgr-pad));
+    height: calc(100vh - var(--rail-total) - var(--msgr-pad));
     min-height: 0;
   }
   @supports (height: 100dvh) {
     .chatlist,
     .conv,
     .ui-empty {
-      height: calc(100dvh - var(--rail-h) - var(--msgr-pad));
+      height: calc(100dvh - var(--rail-total) - var(--msgr-pad));
     }
   }
   .chatlist {
@@ -1096,6 +1102,18 @@
   /* Roomier tap targets and full-width bubbles. */
   .bubble { max-width: 86%; }
   .chatlist__header { padding: var(--space-3) var(--space-4); }
+}
+
+/* Installed PWA on a phone: with apple-mobile-web-app-status-bar-style
+   black-translucent + viewport-fit=cover the webview runs under the status
+   bar/notch, so the top-most header has to pad by the top inset itself. In a
+   normal browser tab the browser chrome already offsets the page and the
+   inset is 0, so this block changes nothing there. */
+@media (display-mode: standalone) and (max-width: 760px) {
+  .chatlist__header,
+  .conv__header {
+    padding-top: calc(var(--space-3) + var(--safe-top));
+  }
 }
 
 /* --- context panel: Медиа / Файлы / Ссылки (stage C) --- */

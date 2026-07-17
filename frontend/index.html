@@ -2,7 +2,10 @@
 <html lang="ru" data-theme="glass">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover lets the page extend into the notch/home-indicator
+         area — and is what makes env(safe-area-inset-*) report real values
+         instead of 0 (see --safe-* in theme.css). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <!-- Apply the persisted theme before first paint to avoid a flash of the
          default theme for returning users (mirrors useThemeStore, key
