@@ -1,6 +1,7 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import "./board.css";
+import { useCardDrag } from "./useCardDrag";
 import { cn } from "@shared/lib/cn";
 import { Avatar, Button, IconButton, Spinner, toast } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
@@ -23,8 +24,18 @@ export function BoardView({ group }: Props) {
   const qc = useQueryClient();
 
   const [editCard, setEditCard] = useState<BoardCard | null>(null);
-  const dragCard = useRef<{ id: string; from: string } | null>(null);
-  const [dropCol, setDropCol] = useState<string | null>(null);
+
+  // Pointer-based dragging: the same code path serves mouse and touch (native
+  // HTML5 drag events never fire on mobile browsers). Called above the early
+  // returns below so the hook order stays stable; the callback may be a fresh
+  // closure each render — useCardDrag re-reads it through a ref.
+  const { drag, begin, consumeClick } = useCardDrag((cardId, columnId, index) => {
+    // Optimistic reorder in the cache, then persist.
+    qc.setQueryData<Board>(boardKeys.board(group.id), (prev) =>
+      prev ? moveInBoard(prev, cardId, columnId, index) : prev,
+    );
+    m.moveCard.mutate({ cardId, columnId, index }, { onError: () => toast.error("Не удалось переместить задачу") });
+  });
 
   // The group founder owns the board structure (create board, add/remove
   // columns). Known from the group DTO even before a board exists.
@@ -75,36 +86,23 @@ export function BoardView({ group }: Props) {
   }
 
   const assigneeOf = (id: string | null) => (id ? memberList.find((u) => u.id === id) : undefined);
-
-  // --- drag & drop ---
-  const onDrop = (columnId: string, index: number) => {
-    const drag = dragCard.current;
-    setDropCol(null);
-    dragCard.current = null;
-    if (!drag) return;
-
-    // Optimistic reorder in the cache, then persist.
-    qc.setQueryData<Board>(boardKeys.board(group.id), (prev) => (prev ? moveInBoard(prev, drag.id, columnId, index) : prev));
-    m.moveCard.mutate(
-      { cardId: drag.id, columnId, index },
-      { onError: () => toast.error("Не удалось переместить задачу") },
-    );
-  };
+  const draggedCard = drag ? board.columns.flatMap((c) => c.cards).find((c) => c.id === drag.cardId) : undefined;
 
   return (
     <div className="board">
-      <div className="board__scroll">
+      <div className="board__scroll" data-board-scroll>
         {board.columns.map((col) => (
           <ColumnView
             key={col.id}
             column={col}
             founder={founder}
-            dropActive={dropCol === col.id}
-            onDragEnterCol={() => setDropCol(col.id)}
-            onDropAtEnd={() => onDrop(col.id, col.cards.length)}
-            onDropBefore={(index) => onDrop(col.id, index)}
-            onDragStartCard={(cardId) => (dragCard.current = { id: cardId, from: col.id })}
-            onOpenCard={setEditCard}
+            dropActive={drag?.overColumnId === col.id}
+            draggingId={drag?.cardId ?? null}
+            onCardPointerDown={(e, cardId) => begin(e, cardId, col.id)}
+            onOpenCard={(card) => {
+              if (consumeClick()) return; // that click ended a drag
+              setEditCard(card);
+            }}
             assigneeOf={assigneeOf}
             onAddCard={(title) => m.createCard.mutate({ columnId: col.id, input: { title } })}
             onRename={(title) => m.renameColumn.mutate({ columnId: col.id, title })}
@@ -118,6 +116,17 @@ export function BoardView({ group }: Props) {
           </div>
         )}
       </div>
+
+      {/* The card following the pointer. pointer-events:none keeps it out of
+          the way of the hit-test under the cursor. */}
+      {drag && draggedCard && (
+        <div className="board-card board-card--ghost" style={{ left: drag.x, top: drag.y, width: drag.width }}>
+          {draggedCard.label && CARD_LABELS[draggedCard.label] && (
+            <div className="board-card__label" style={{ background: CARD_LABELS[draggedCard.label] }} />
+          )}
+          <div className="board-card__title">{draggedCard.title}</div>
+        </div>
+      )}
 
       <CardModal
         key={editCard?.id ?? "none"}
@@ -136,10 +145,8 @@ interface ColumnProps {
   column: BoardColumn;
   founder: boolean;
   dropActive: boolean;
-  onDragEnterCol: () => void;
-  onDropAtEnd: () => void;
-  onDropBefore: (index: number) => void;
-  onDragStartCard: (cardId: string) => void;
+  draggingId: string | null;
+  onCardPointerDown: (e: React.PointerEvent<HTMLElement>, cardId: string) => void;
   onOpenCard: (card: BoardCard) => void;
   assigneeOf: (id: string | null) => User | undefined;
   onAddCard: (title: string) => void;
@@ -160,17 +167,7 @@ function ColumnView(p: ColumnProps) {
   };
 
   return (
-    <div
-      className={cn("board-col", p.dropActive && "board-col--drop")}
-      onDragOver={(e) => {
-        e.preventDefault();
-        p.onDragEnterCol();
-      }}
-      onDrop={(e) => {
-        e.preventDefault();
-        p.onDropAtEnd();
-      }}
-    >
+    <div className={cn("board-col", p.dropActive && "board-col--drop")} data-column-id={p.column.id}>
       <div className="board-col__header">
         {renaming ? (
           <input
@@ -199,22 +196,16 @@ function ColumnView(p: ColumnProps) {
         )}
       </div>
 
-      <div className="board-col__body">
-        {p.column.cards.map((card, i) => (
-          <div
+      <div className="board-col__body" data-column-body>
+        {p.column.cards.map((card) => (
+          <CardView
             key={card.id}
-            onDrop={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              p.onDropBefore(i);
-            }}
-            onDragOver={(e) => {
-              e.preventDefault();
-              p.onDragEnterCol();
-            }}
-          >
-            <CardView card={card} assignee={p.assigneeOf(card.assigneeId)} onOpen={() => p.onOpenCard(card)} onDragStart={() => p.onDragStartCard(card.id)} />
-          </div>
+            card={card}
+            assignee={p.assigneeOf(card.assigneeId)}
+            dragging={p.draggingId === card.id}
+            onPointerDown={(e) => p.onCardPointerDown(e, card.id)}
+            onOpen={() => p.onOpenCard(card)}
+          />
         ))}
       </div>
 
@@ -252,20 +243,27 @@ function ColumnView(p: ColumnProps) {
   );
 }
 
-function CardView({ card, assignee, onOpen, onDragStart }: { card: BoardCard; assignee?: User; onOpen: () => void; onDragStart: () => void }) {
-  const [dragging, setDragging] = useState(false);
+function CardView({
+  card,
+  assignee,
+  dragging,
+  onPointerDown,
+  onOpen,
+}: {
+  card: BoardCard;
+  assignee?: User;
+  dragging: boolean;
+  onPointerDown: (e: React.PointerEvent<HTMLElement>) => void;
+  onOpen: () => void;
+}) {
   const due = card.dueDate ? new Date(card.dueDate) : null;
   const dueClass = due ? (due.getTime() < Date.now() ? "board-card__due--overdue" : due.getTime() - Date.now() < 3 * 86400000 ? "board-card__due--soon" : "") : "";
 
   return (
     <div
       className={cn("board-card", dragging && "board-card--dragging")}
-      draggable
-      onDragStart={() => {
-        setDragging(true);
-        onDragStart();
-      }}
-      onDragEnd={() => setDragging(false)}
+      data-card-id={card.id}
+      onPointerDown={onPointerDown}
       onClick={onOpen}
     >
       {card.label && CARD_LABELS[card.label] && (

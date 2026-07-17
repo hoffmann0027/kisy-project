@@ -116,6 +116,10 @@
   cursor: grab;
   transition: border-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
   animation: pop-in 0.15s ease;
+  /* Splits the touch gesture: a vertical swipe stays with the browser and
+     scrolls the column, a horizontal one is left to us and starts a drag
+     (see useCardDrag). The scroll containers keep their own touch-action. */
+  touch-action: pan-y;
 }
 .board-card:hover {
   border-color: var(--color-border-strong);
@@ -126,6 +130,17 @@
 }
 .board-card--dragging {
   opacity: 0.4;
+}
+/* The card carried under the pointer. Must not intercept hit-testing. */
+.board-card--ghost {
+  position: fixed;
+  z-index: 300;
+  pointer-events: none;
+  cursor: grabbing;
+  animation: none;
+  transform: rotate(1.5deg);
+  box-shadow: var(--shadow-elevated);
+  border-color: var(--color-accent);
 }
 .board-card__label {
   height: 6px;
@@ -198,4 +213,30 @@
 }
 .card-label-swatch--active {
   border-color: var(--color-text-primary);
+}
+
+/* --- Narrow screens (same 760px break as the messenger layout) --- */
+@media (max-width: 760px) {
+  .board__scroll {
+    padding: var(--space-3);
+    gap: var(--space-2);
+  }
+  /* Nearly a screen wide, so a column is readable and the next one peeks out
+     to hint that the board scrolls sideways. Deliberately no scroll-snap: it
+     fights the drag auto-scroll. */
+  .board-col,
+  .board-add-col {
+    flex: 0 0 82vw;
+  }
+  /* Roomier tap targets. */
+  .board-card {
+    padding: 14px;
+  }
+  .board-col__add-btn {
+    padding: 12px;
+  }
+  .card-label-swatch {
+    width: 44px;
+    height: 44px;
+  }
 }
