@@ -452,9 +452,13 @@
 @media (max-width: 760px) {
   .rating-shell {
     height: 100dvh;
+    /* The rail is a fixed bottom bar on mobile, so it no longer occupies a
+       column — drop the 60px rail track. */
+    grid-template-columns: 1fr;
   }
   .rating__scroll {
-    padding: 16px 16px calc(58px + 24px);
+    /* Clear the fixed rail (incl. its safe-area growth) at the bottom. */
+    padding: 16px 16px calc(var(--rail-total) + 24px);
   }
   .rating__topbar {
     flex-wrap: wrap;

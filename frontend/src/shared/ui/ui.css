@@ -239,6 +239,32 @@
   gap: var(--space-4);
 }
 
+/* On phones a centred dialog is cramped and hard to reach one-handed — turn it
+   into a bottom sheet: full width, pinned to the bottom, rounded only on top,
+   its body scrolling within a dvh-bounded height. The backdrop keeps the sheet
+   clear of the notch (top) and the keyboard / home indicator (bottom), reusing
+   the M2/M3 insets, so this composes with safe-area and --kb-inset. */
+@media (max-width: 760px) {
+  .ui-modal__backdrop {
+    align-items: flex-end;
+    padding: calc(var(--space-6) + var(--safe-top)) 0 max(var(--safe-bottom), var(--kb-inset)) 0;
+  }
+  .ui-modal {
+    max-width: none;
+    max-height: 100%;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    animation: sheet-up var(--transition-medium);
+  }
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
 /* Toast */
 .ui-toasts {
   position: fixed;

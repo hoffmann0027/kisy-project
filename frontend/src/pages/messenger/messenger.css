@@ -1020,17 +1020,10 @@
     grid-template-columns: 1fr;
     grid-template-rows: 1fr;
     height: 100dvh;
-    /* Shared with the column-height maths below: the fixed rail's content
-       height, the .msgr padding the columns start below, and the rail's real
-       footprint — it grows by the home-indicator inset so its buttons stay
-       above it (--safe-bottom is 0 without a home indicator). */
-    --rail-h: 58px;
+    /* The offset the columns start below the viewport top (the .msgr padding).
+       Rail geometry (--rail-h / --rail-pad-bottom / --rail-total) is global in
+       theme.css since the rail also renders on the rating page. */
     --msgr-pad: 10px;
-    /* The rail is lifted onto the keyboard when one is open — and the home
-       indicator is then covered by that keyboard, so its inset would only
-       strand an empty strip above it. Drop the padding as the keyboard grows. */
-    --rail-pad-bottom: max(0px, calc(var(--safe-bottom) - var(--kb-inset)));
-    --rail-total: calc(var(--rail-h) + var(--rail-pad-bottom));
   }
 
   /* The nav rail becomes a fixed horizontal bar along the bottom. */

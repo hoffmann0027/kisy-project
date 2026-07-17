@@ -101,3 +101,28 @@
   font-size: 13px;
   color: var(--color-accent);
 }
+
+/* --- Narrow screens --- */
+@media (max-width: 760px) {
+  .admin {
+    padding: var(--space-4);
+    gap: var(--space-3);
+  }
+  .admin__title {
+    font-size: 20px;
+  }
+  /* Tables are wider than a phone; scroll them inside their own pane so the
+     page itself never scrolls sideways. The min-width keeps columns legible
+     instead of crushing them. */
+  .admin__content {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .table {
+    min-width: 560px;
+  }
+  /* The invite string is long and monospaced — let it wrap in its box. */
+  .invite-box {
+    flex-wrap: wrap;
+  }
+}

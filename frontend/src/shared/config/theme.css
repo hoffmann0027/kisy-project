@@ -31,6 +31,14 @@
      hydration, so every calc() using it collapses to the keyboard-less value. */
   --kb-inset: 0px;
 
+  /* Bottom nav rail geometry, defined globally because the rail renders on the
+     messenger AND the rating page. --rail-h is the button strip; the rail grows
+     by --rail-pad-bottom to clear the home indicator, except when a keyboard
+     covers it. Only consumed inside mobile media queries. */
+  --rail-h: 58px;
+  --rail-pad-bottom: max(0px, calc(var(--safe-bottom) - var(--kb-inset)));
+  --rail-total: calc(var(--rail-h) + var(--rail-pad-bottom));
+
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;

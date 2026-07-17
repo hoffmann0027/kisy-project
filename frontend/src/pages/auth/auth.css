@@ -66,3 +66,15 @@
 .auth-link:hover {
   text-decoration: underline;
 }
+
+@media (max-width: 760px) {
+  .auth-screen {
+    /* Centre within the space left above the keyboard, so the focused field
+       stays visible instead of hiding behind it (--kb-inset is 0 otherwise). */
+    padding: max(var(--space-5), var(--safe-top)) var(--space-4)
+      calc(var(--space-5) + var(--kb-inset) + var(--safe-bottom));
+  }
+  .auth-card {
+    padding: var(--space-5);
+  }
+}

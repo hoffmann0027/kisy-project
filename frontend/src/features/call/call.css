@@ -146,6 +146,19 @@
   cursor: default;
 }
 
+@media (max-width: 760px) {
+  /* Bigger tap target for the header call button. */
+  .conv__call {
+    width: 44px;
+    height: 44px;
+  }
+  /* Roomier call card and controls on a phone. */
+  .call-card {
+    width: min(360px, calc(100vw - 24px));
+    padding: 40px 20px 28px;
+  }
+}
+
 /* brief "call ended" pill */
 .call-ended {
   position: fixed;
