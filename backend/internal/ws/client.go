@@ -73,6 +73,9 @@ func (c *Client) writePump() {
 				return
 			}
 		case <-ticker.C:
+			// Keep this user's presence key alive while the socket is up; it
+			// expires on its own if the process dies (see presenceTTL).
+			c.hub.touchPresence(c.userID)
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return

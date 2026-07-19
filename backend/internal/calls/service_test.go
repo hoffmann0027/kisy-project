@@ -258,9 +258,21 @@ func TestInviteDeniedForNonParticipant(t *testing.T) {
 	}
 }
 
+// markOnCall puts the user on a genuine in-flight call (busy marker plus the
+// live state it points at), as opposed to an orphaned marker.
+func (h *harness) markOnCall(user uuid.UUID) uuid.UUID {
+	cid := uuid.New()
+	h.store.calls[cid] = CallState{
+		ID: cid, Caller: user, Callee: uuid.New(), ChatID: h.chatID,
+		Phase: phaseRinging, StartedAt: h.clock,
+	}
+	h.store.busy[user] = cid
+	return cid
+}
+
 func TestInviteBusyCallee(t *testing.T) {
 	h := newHarness(t)
-	h.store.busy[h.bob] = uuid.New() // Bob already on another call
+	h.markOnCall(h.bob) // Bob already on another call
 	callID := uuid.New()
 	if err := h.invite(t, h.alice, h.bob, callID); err != nil {
 		t.Fatalf("invite: %v", err)
@@ -270,6 +282,41 @@ func TestInviteBusyCallee(t *testing.T) {
 	}
 	if _, ok := h.store.calls[callID]; ok {
 		t.Fatal("no live state should be created for a busy callee")
+	}
+}
+
+// A busy marker can outlive its call when the process dies mid-conversation
+// (crash/redeploy), so HandleDisconnect never runs. Such an orphan must not
+// block calling: the caller's own stale marker used to end every new attempt
+// instantly with "busy", and a callee's stale marker made them permanently
+// unreachable.
+func TestInviteReapsOrphanBusyMarkerOnCaller(t *testing.T) {
+	h := newHarness(t)
+	h.store.busy[h.alice] = uuid.New() // marker pointing at a call that is gone
+	callID := uuid.New()
+	if err := h.invite(t, h.alice, h.bob, callID); err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	if h.pub.has("ended", h.alice) {
+		t.Fatal("an orphaned marker must not end the call as busy")
+	}
+	if !h.pub.has("incoming", h.bob) {
+		t.Fatal("expected the call to ring the callee")
+	}
+}
+
+func TestInviteReapsOrphanBusyMarkerOnCallee(t *testing.T) {
+	h := newHarness(t)
+	h.store.busy[h.bob] = uuid.New() // marker pointing at a call that is gone
+	callID := uuid.New()
+	if err := h.invite(t, h.alice, h.bob, callID); err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	if h.pub.has("busy", h.alice) {
+		t.Fatal("an orphaned marker must not report the callee busy")
+	}
+	if !h.pub.has("incoming", h.bob) {
+		t.Fatal("expected the call to ring the callee")
 	}
 }
 

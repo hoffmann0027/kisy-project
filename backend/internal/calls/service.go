@@ -108,14 +108,14 @@ func (s *Service) onInvite(ctx context.Context, actor Actor, data json.RawMessag
 		return err
 	}
 
-	if busy, _ := s.store.UserBusy(ctx, actor.UserID); busy {
-		// The caller is already marked busy (a parallel or stale call). End this
-		// new attempt gracefully on the caller instead of a raw error frame, so
+	if s.busyOnLiveCall(ctx, actor.UserID) {
+		// The caller is already marked busy (a parallel call). End this new
+		// attempt gracefully on the caller instead of a raw error frame, so
 		// their UI never gets stuck "dialing".
 		s.pub.Ended(actor.UserID, p.CallID, "busy")
 		return nil
 	}
-	if busy, _ := s.store.UserBusy(ctx, p.ToUserID); busy {
+	if s.busyOnLiveCall(ctx, p.ToUserID) {
 		s.logInstant(ctx, actor.UserID, p, StatusMissed)
 		s.pub.Busy(actor.UserID, p.CallID)
 		s.auditCall(ctx, actor.UserID, p.CallID, "call.busy")
@@ -151,6 +151,24 @@ func (s *Service) onInvite(ctx context.Context, actor Actor, data json.RawMessag
 	callID := p.CallID
 	s.afterFunc(s.ringTimeout, func() { s.onRingTimeout(context.Background(), callID) })
 	return nil
+}
+
+// busyOnLiveCall reports whether the user is genuinely on a call. A busy
+// marker whose call state no longer exists is an orphan — it outlives the call
+// when the process dies mid-conversation (crash, redeploy) so HandleDisconnect
+// never runs, and it would then reject every future call with "busy" until its
+// own TTL lapses. Reap it and let the call through.
+func (s *Service) busyOnLiveCall(ctx context.Context, userID uuid.UUID) bool {
+	callID, marked, err := s.store.CallIDForUser(ctx, userID)
+	if err != nil || !marked {
+		return false
+	}
+	st, found, err := s.store.Get(ctx, callID)
+	if err == nil && found && st.involves(userID) {
+		return true
+	}
+	_ = s.store.ClearUserBusy(ctx, userID)
+	return false
 }
 
 func (s *Service) onAnswer(ctx context.Context, actor Actor, data json.RawMessage) error {

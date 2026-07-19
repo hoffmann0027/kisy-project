@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -200,7 +201,22 @@ func (h *Hub) subscribePresence(c *Client, targets []uuid.UUID) {
 
 // --- presence ---
 
+// presenceTTL bounds how long a presence counter can outlive the connections
+// it counts. Without it an unclean shutdown (crash, redeploy, killed
+// container) leaves the key set forever: the user reads as "online" with no
+// socket behind them, so call invites are accepted and then delivered to
+// nobody — the caller rings until timeout. Every live connection refreshes the
+// key from its ping tick (pingPeriod 54s), so a real session never expires
+// while a stale one is reaped within this window.
+const presenceTTL = 150 * time.Second
+
 func presenceKey(u uuid.UUID) string { return "kisy:presence:" + u.String() }
+
+// touchPresence extends the presence key for a still-connected user. Called
+// from each client's ping tick; a no-op if the key is already gone.
+func (h *Hub) touchPresence(userID uuid.UUID) {
+	h.rdb.Expire(context.Background(), presenceKey(userID), presenceTTL)
+}
 
 // markPresence maintains a cross-instance connection counter and publishes
 // online/offline transitions on the first/last connection.
@@ -214,6 +230,9 @@ func (h *Hub) markPresence(userID uuid.UUID, online bool) {
 			h.log.Warn("presence incr failed", "error", err)
 			return
 		}
+		// Bound the key's lifetime so it cannot survive the process that owns
+		// the connections (see presenceTTL); refreshed by touchPresence.
+		h.rdb.Expire(ctx, key, presenceTTL)
 		if n == 1 {
 			h.publishPresence(userID, true)
 		}
