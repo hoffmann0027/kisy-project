@@ -46,6 +46,13 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_SSLMODE: ${POSTGRES_SSLMODE}
+      # Connection-pool tuning (see .env.example); unset falls back to the
+      # defaults in internal/config.
+      DB_POOL_MAX_CONNS: ${DB_POOL_MAX_CONNS:-}
+      DB_POOL_MIN_CONNS: ${DB_POOL_MIN_CONNS:-}
+      DB_POOL_MAX_CONN_LIFETIME: ${DB_POOL_MAX_CONN_LIFETIME:-}
+      DB_POOL_MAX_CONN_IDLE_TIME: ${DB_POOL_MAX_CONN_IDLE_TIME:-}
+      DB_POOL_HEALTHCHECK_PERIOD: ${DB_POOL_HEALTHCHECK_PERIOD:-}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}

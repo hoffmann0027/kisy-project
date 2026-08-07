@@ -7,7 +7,7 @@ MON := $(COMPOSE) -f docker-compose.yml -f docker-compose.monitoring.yml
 
 .PHONY: help up down logs ps rebuild \
         backend-test backend-lint frontend-build frontend-lint test lint \
-        vuln certs prod monitoring backup restore migrate-down
+        vuln certs prod monitoring loadtest backup restore migrate-down
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -56,6 +56,15 @@ prod: ## Start the TLS production stack (needs certs)
 
 monitoring: ## Start the stack with Prometheus + Grafana
 	$(MON) up -d --build
+
+loadtest: ## Run the k6 load scenarios (SCENARIO=rest|ws, BASE_URL=…, VUS=…, DURATION=…)
+	@test -n "$(CEO_PASSWORD)" || { echo "set CEO_PASSWORD=… (the bootstrap CEO password of the target stack)"; exit 1; }
+	docker run --rm -i --add-host=host.docker.internal:host-gateway \
+	  -v $(CURDIR)/tests/load:/scripts -w /scripts \
+	  -e BASE_URL="$(or $(BASE_URL),http://host.docker.internal:8081)" \
+	  -e CEO_USER="$(or $(CEO_USER),ceo)" -e CEO_PASSWORD="$(CEO_PASSWORD)" \
+	  -e VUS="$(VUS)" -e DURATION="$(DURATION)" -e USERS="$(USERS)" \
+	  grafana/k6:latest run /scripts/$(or $(SCENARIO),rest).js
 
 backup: ## Dump the database to backups/
 	bash scripts/backup.sh
