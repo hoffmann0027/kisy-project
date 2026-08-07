@@ -39,3 +39,8 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Database backups (contain user data — never commit)
+backups/
+*.sql.gz
+*.sql.gz.gpg

@@ -1,0 +1,98 @@
+# Scheduled off-site backup of the production Postgres (Neon) with an automatic
+# restore-drill. Runs on GitHub's infrastructure — no always-on server needed —
+# and, because the drill fails the workflow on a bad backup, GitHub emails the
+# repo owner (free alerting). See docs/runbook.md.
+#
+# Required repository secret:
+#   DATABASE_URL            Neon DIRECT connection string (…?sslmode=require)
+# Optional:
+#   BACKUP_GPG_PASSPHRASE   symmetric-encrypt the dump (AES-256) at rest
+#   S3_BUCKET, S3_ENDPOINT, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY
+#                           also copy the dump to S3-compatible storage
+#                           (Backblaze B2 / Cloudflare R2 / AWS S3)
+name: DB backup
+
+on:
+  schedule:
+    - cron: "17 3 * * *" # daily, 03:17 UTC
+  workflow_dispatch: {}
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      BACKUP_GPG_PASSPHRASE: ${{ secrets.BACKUP_GPG_PASSPHRASE }}
+      S3_BUCKET: ${{ secrets.S3_BUCKET }}
+      S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dump the database (Postgres 18 client, optional GPG)
+        run: |
+          test -n "$DATABASE_URL" || { echo "::error::DATABASE_URL secret is not set"; exit 1; }
+          bash scripts/db-backup.sh backups
+
+      - name: Copy to off-site object storage (optional)
+        if: ${{ env.S3_BUCKET != '' }}
+        run: |
+          files=(backups/kisy-*); file="${files[0]}"
+          dest="s3://$S3_BUCKET/$(basename "$file")"
+          if [ -n "$S3_ENDPOINT" ]; then
+            aws s3 cp "$file" "$dest" --endpoint-url "$S3_ENDPOINT"
+          else
+            aws s3 cp "$file" "$dest"
+          fi
+          echo "uploaded $(basename "$file") to s3://$S3_BUCKET"
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup
+          path: backups/kisy-*
+          retention-days: 30
+          if-no-files-found: error
+
+  # Restore-drill: prove the backup we just took actually restores and the
+  # schema is intact. A broken backup fails here → the workflow fails → email.
+  verify:
+    needs: backup
+    runs-on: ubuntu-latest
+    env:
+      BACKUP_GPG_PASSPHRASE: ${{ secrets.BACKUP_GPG_PASSPHRASE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download the backup that was just taken
+        uses: actions/download-artifact@v4
+        with:
+          name: db-backup
+          path: backups
+
+      - name: Restore into a throwaway Postgres 18 and smoke-check
+        run: |
+          docker run -d --name verifydb -e POSTGRES_PASSWORD=pw postgres:18-alpine >/dev/null
+          for _ in $(seq 1 30); do
+            docker exec verifydb pg_isready -U postgres >/dev/null 2>&1 && break
+            sleep 1
+          done
+
+          files=(backups/kisy-*); file="${files[0]}"
+          echo "restoring $file"
+          case "$file" in
+            *.gpg)
+              test -n "$BACKUP_GPG_PASSPHRASE" || { echo "::error::encrypted backup but BACKUP_GPG_PASSPHRASE unset"; exit 1; }
+              gpg --batch --yes --decrypt --passphrase "$BACKUP_GPG_PASSPHRASE" "$file" | gzip -dc > dump.sql ;;
+            *.gz) gzip -dc "$file" > dump.sql ;;
+            *)    cp "$file" dump.sql ;;
+          esac
+
+          docker exec -i verifydb psql -v ON_ERROR_STOP=1 -U postgres -d postgres < dump.sql
+          docker exec -i verifydb psql -v ON_ERROR_STOP=1 -U postgres -d postgres < scripts/backup-smoke-check.sql
+          echo "restore-drill passed"
