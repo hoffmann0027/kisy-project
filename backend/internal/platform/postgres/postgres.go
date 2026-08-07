@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
@@ -13,11 +14,44 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// PoolSettings bounds the connection pool. Left at their zero values, pgx
+// applies its own defaults (MaxConns = max(4, NumCPU), no idle timeout), which
+// is why the server passes explicit values from configuration — an unbounded
+// pool per replica can exhaust a managed Postgres' connection limit.
+type PoolSettings struct {
+	MaxConns          int32
+	MinConns          int32
+	MaxConnLifetime   time.Duration
+	MaxConnIdleTime   time.Duration
+	HealthCheckPeriod time.Duration
+}
+
 // NewPool creates a connection pool from a DSN and verifies connectivity
 // with a ping, so startup fails fast if the database is unreachable rather
-// than surfacing the error on the first request.
-func NewPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, dsn)
+// than surfacing the error on the first request. Zero-valued settings fall
+// back to the pgx defaults, so callers may pass a partially filled struct.
+func NewPool(ctx context.Context, dsn string, s PoolSettings) (*pgxpool.Pool, error) {
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: parse config: %w", err)
+	}
+	if s.MaxConns > 0 {
+		cfg.MaxConns = s.MaxConns
+	}
+	if s.MinConns > 0 {
+		cfg.MinConns = s.MinConns
+	}
+	if s.MaxConnLifetime > 0 {
+		cfg.MaxConnLifetime = s.MaxConnLifetime
+	}
+	if s.MaxConnIdleTime > 0 {
+		cfg.MaxConnIdleTime = s.MaxConnIdleTime
+	}
+	if s.HealthCheckPeriod > 0 {
+		cfg.HealthCheckPeriod = s.HealthCheckPeriod
+	}
+
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: create pool: %w", err)
 	}

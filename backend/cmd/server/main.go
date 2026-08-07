@@ -55,12 +55,21 @@ func run() error {
 		log.Info("migrations applied")
 	}
 
-	pgPool, err := postgres.NewPool(ctx, cfg.PostgresDSN())
+	pgPool, err := postgres.NewPool(ctx, cfg.PostgresDSN(), postgres.PoolSettings{
+		MaxConns:          cfg.DBPool.MaxConns,
+		MinConns:          cfg.DBPool.MinConns,
+		MaxConnLifetime:   cfg.DBPool.MaxConnLifetime,
+		MaxConnIdleTime:   cfg.DBPool.MaxConnIdleTime,
+		HealthCheckPeriod: cfg.DBPool.HealthCheckPeriod,
+	})
 	if err != nil {
 		return err
 	}
 	defer pgPool.Close()
-	log.Info("connected to postgres")
+	log.Info("connected to postgres",
+		"pool_max_conns", cfg.DBPool.MaxConns,
+		"pool_min_conns", cfg.DBPool.MinConns,
+	)
 
 	// Expose pool saturation to Prometheus for the O1 alert rules.
 	metrics.RegisterDBPool(pgPool)

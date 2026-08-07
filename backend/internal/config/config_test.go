@@ -137,3 +137,53 @@ func TestProductionRejectsBurnedSecrets(t *testing.T) {
 		t.Fatalf("want known-compromised error, got %v", err)
 	}
 }
+
+func TestDBPoolDefaults(t *testing.T) {
+	setBaseEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	// Explicit defaults matter: pgx would otherwise size the pool from the
+	// CPU count, which can exhaust a managed Postgres once replicas multiply.
+	if cfg.DBPool.MaxConns != 10 || cfg.DBPool.MinConns != 2 {
+		t.Fatalf("unexpected pool sizing: max=%d min=%d", cfg.DBPool.MaxConns, cfg.DBPool.MinConns)
+	}
+	if cfg.DBPool.MaxConnIdleTime == 0 || cfg.DBPool.MaxConnLifetime == 0 || cfg.DBPool.HealthCheckPeriod == 0 {
+		t.Fatal("pool lifetimes must have non-zero defaults")
+	}
+}
+
+func TestDBPoolOverrides(t *testing.T) {
+	setBaseEnv(t)
+	t.Setenv("DB_POOL_MAX_CONNS", "25")
+	t.Setenv("DB_POOL_MIN_CONNS", "5")
+	t.Setenv("DB_POOL_MAX_CONN_IDLE_TIME", "90s")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.DBPool.MaxConns != 25 || cfg.DBPool.MinConns != 5 {
+		t.Fatalf("overrides ignored: max=%d min=%d", cfg.DBPool.MaxConns, cfg.DBPool.MinConns)
+	}
+	if cfg.DBPool.MaxConnIdleTime.String() != "1m30s" {
+		t.Fatalf("idle override ignored: %s", cfg.DBPool.MaxConnIdleTime)
+	}
+}
+
+func TestDBPoolRejectsInvalidSizing(t *testing.T) {
+	// MinConns above MaxConns would make pgx fail deep inside pool creation;
+	// catch it at config load with a clear message instead.
+	setBaseEnv(t)
+	t.Setenv("DB_POOL_MAX_CONNS", "4")
+	t.Setenv("DB_POOL_MIN_CONNS", "9")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected an error when MinConns exceeds MaxConns")
+	}
+
+	setBaseEnv(t)
+	t.Setenv("DB_POOL_MAX_CONNS", "0")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected an error when MaxConns is zero")
+	}
+}

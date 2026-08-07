@@ -118,6 +118,25 @@ Actions** (`.github/workflows/db-backup.yml`) — сервер держать н
 > docker-стека** (дампят контейнер `postgres`); для прода используй
 > `db-backup.sh` / `db-restore.sh`, которые работают против внешнего URL.
 
+## Пул соединений к БД (O3)
+
+Пул pgx настраивается через env (дефолты в `.env.example`): `DB_POOL_MAX_CONNS`
+(10), `DB_POOL_MIN_CONNS` (2), `DB_POOL_MAX_CONN_LIFETIME` (30m),
+`DB_POOL_MAX_CONN_IDLE_TIME` (5m), `DB_POOL_HEALTHCHECK_PERIOD` (1m).
+
+- **Главное правило:** `(число инстансов бэкенда) × DB_POOL_MAX_CONNS` должно
+  оставаться заметно ниже `max_connections` сервера (Neon free ≈ 100), с
+  запасом на админ-сессии и миграции. Это же ограничение действует при
+  переходе на несколько реплик (O6).
+- На serverless-Postgres (Neon) важны idle/lifetime: простаивающие соединения
+  иначе держат compute «проснувшимся» или молча рвутся на стороне сервера.
+- **Метрики** (уже отдаются с O1): `kisy_db_pool_acquired_conns`,
+  `…_idle_conns`, `…_total_conns`, `…_max_conns`, `…_empty_acquire_count_total`.
+  Алерт `DBPoolSaturation` срабатывает при >80% занятых соединений 5 минут.
+- Признак нехватки пула: растёт `empty_acquire_count` и p95 латентности при
+  спокойной БД → поднимай `DB_POOL_MAX_CONNS` (сверившись с лимитом сервера).
+- Стартовые значения видны в логе: `connected to postgres pool_max_conns=… `.
+
 ## Деплой / failover
 
 Rolling-деплой нескольких инстансов — этап **O6**; HA данных и failover

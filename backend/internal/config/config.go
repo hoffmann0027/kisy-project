@@ -21,6 +21,7 @@ type Config struct {
 	HTTPPort int
 
 	Postgres PostgresConfig
+	DBPool   DBPoolConfig
 	Redis    RedisConfig
 
 	JWTAccessSecret  string
@@ -124,6 +125,19 @@ type PostgresConfig struct {
 	SSLMode  string
 }
 
+// DBPoolConfig tunes the pgx connection pool. Defaults are sized for a single
+// small instance against a managed Postgres: MaxConns must leave headroom under
+// the server's max_connections once every backend replica is counted (see O6),
+// and MaxConnIdleTime keeps idle connections from pinning a serverless
+// compute (Neon) awake — or from being severed server-side without our notice.
+type DBPoolConfig struct {
+	MaxConns          int32
+	MinConns          int32
+	MaxConnLifetime   time.Duration
+	MaxConnIdleTime   time.Duration
+	HealthCheckPeriod time.Duration
+}
+
 func (p PostgresConfig) DSN() string {
 	return fmt.Sprintf(
 		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
@@ -181,6 +195,10 @@ func Load() (*Config, error) {
 	// A discrete password is only required when no full DATABASE_URL is set.
 	if cfg.DatabaseURL == "" && cfg.Postgres.Password == "" {
 		return nil, fmt.Errorf("config: set DATABASE_URL or POSTGRES_PASSWORD")
+	}
+
+	if cfg.DBPool, err = loadDBPool(); err != nil {
+		return nil, err
 	}
 
 	redisPort, err := getEnvInt("REDIS_PORT", 6379)
@@ -295,6 +313,51 @@ var knownCompromisedDigests = map[string]string{
 	"332ebc8c4d084d42fe6405fdc6a4bd323073d254253ced28c9917dcd0b08c9e8": "BOOTSTRAP_CEO_PASSWORD (July 2026 audit bundle)",
 	"6c31a12221c3e378d89d4824a5fc7d87f11bebe6486b21ad0788f5336a0f12a9": "TURN_SECRET (July 2026 audit bundle)",
 	"c56b5c4f856a1beb62b0c658b5f34f76d0590e2e183fba32b9761e8d90c6f1af": "VAPID_PRIVATE_KEY (dev pair committed in .env.example history)",
+}
+
+// loadDBPool reads the pgx pool knobs from the environment.
+//
+// Defaults: 10 connections is comfortably under a managed Postgres' limit
+// (Neon free allows ~100) while leaving room for a second replica plus admin
+// sessions; 2 idle connections keep the common path warm without holding a
+// serverless compute open; a 30-minute lifetime recycles connections so a
+// rotated credential or a moved endpoint cannot pin a stale one forever.
+func loadDBPool() (DBPoolConfig, error) {
+	maxConns, err := getEnvInt("DB_POOL_MAX_CONNS", 10)
+	if err != nil {
+		return DBPoolConfig{}, err
+	}
+	minConns, err := getEnvInt("DB_POOL_MIN_CONNS", 2)
+	if err != nil {
+		return DBPoolConfig{}, err
+	}
+	lifetime, err := getEnvDuration("DB_POOL_MAX_CONN_LIFETIME", 30*time.Minute)
+	if err != nil {
+		return DBPoolConfig{}, err
+	}
+	idle, err := getEnvDuration("DB_POOL_MAX_CONN_IDLE_TIME", 5*time.Minute)
+	if err != nil {
+		return DBPoolConfig{}, err
+	}
+	health, err := getEnvDuration("DB_POOL_HEALTHCHECK_PERIOD", time.Minute)
+	if err != nil {
+		return DBPoolConfig{}, err
+	}
+
+	if maxConns < 1 {
+		return DBPoolConfig{}, fmt.Errorf("config: DB_POOL_MAX_CONNS must be >= 1")
+	}
+	if minConns < 0 || minConns > maxConns {
+		return DBPoolConfig{}, fmt.Errorf("config: DB_POOL_MIN_CONNS must be between 0 and DB_POOL_MAX_CONNS")
+	}
+
+	return DBPoolConfig{
+		MaxConns:          int32(maxConns),
+		MinConns:          int32(minConns),
+		MaxConnLifetime:   lifetime,
+		MaxConnIdleTime:   idle,
+		HealthCheckPeriod: health,
+	}, nil
 }
 
 func sha256Hex(s string) string {
