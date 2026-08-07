@@ -78,10 +78,17 @@ jobs:
       - name: Restore into a throwaway Postgres 18 and smoke-check
         run: |
           docker run -d --name verifydb -e POSTGRES_PASSWORD=pw postgres:18-alpine >/dev/null
-          for _ in $(seq 1 30); do
-            docker exec verifydb pg_isready -U postgres >/dev/null 2>&1 && break
+          # The postgres image runs a temporary unix-socket-only server while it
+          # initialises; only the FINAL server listens on TCP. Poll over TCP so
+          # we never restore into the transient one (which then disappears).
+          ready=""
+          for _ in $(seq 1 60); do
+            if docker exec verifydb pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then
+              ready=1; break
+            fi
             sleep 1
           done
+          test -n "$ready" || { echo "::error::verify Postgres never became ready"; docker logs verifydb; exit 1; }
 
           files=(backups/kisy-*); file="${files[0]}"
           echo "restoring $file"
