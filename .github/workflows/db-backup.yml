@@ -24,6 +24,7 @@ concurrency:
 jobs:
   backup:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       BACKUP_GPG_PASSPHRASE: ${{ secrets.BACKUP_GPG_PASSPHRASE }}
@@ -64,6 +65,7 @@ jobs:
   verify:
     needs: backup
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       BACKUP_GPG_PASSPHRASE: ${{ secrets.BACKUP_GPG_PASSPHRASE }}
     steps:
@@ -100,6 +102,6 @@ jobs:
             *)    cp "$file" dump.sql ;;
           esac
 
-          docker exec -i verifydb psql -v ON_ERROR_STOP=1 -U postgres -d postgres < dump.sql
-          docker exec -i verifydb psql -v ON_ERROR_STOP=1 -U postgres -d postgres < scripts/backup-smoke-check.sql
+          timeout 300 docker exec -i verifydb psql -v ON_ERROR_STOP=1 -U postgres -d postgres < dump.sql
+          timeout 60 docker exec -i verifydb psql -v ON_ERROR_STOP=1 -U postgres -d postgres < scripts/backup-smoke-check.sql
           echo "restore-drill passed"
