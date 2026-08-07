@@ -1,15 +1,19 @@
-# Render Blueprint — one-click deploy of the whole app on the free tier.
+# Render Blueprint — deploys the web service (backend + SPA) in Frankfurt.
 # In the Render dashboard: New → Blueprint → connect this repo. Render reads
-# this file and provisions the web service, a PostgreSQL database and a
-# Redis (Key Value) instance, wiring them together automatically.
+# this file, creates the service and prompts for the sync:false secrets below.
 #
-# You only set BOOTSTRAP_CEO_PASSWORD (marked sync:false) in the dashboard
-# during the first deploy. See docs/deploy-render.md.
+# Data lives on EXTERNAL, non-expiring free services (Render's own free
+# Postgres/Redis are deleted after 30 days — that is why they are not used
+# here): PostgreSQL on Neon, Redis on Upstash, both in an EU region next to
+# this service. You paste their connection strings into DATABASE_URL /
+# REDIS_URL (and BOOTSTRAP_CEO_PASSWORD) in the dashboard on first deploy.
+# See docs/deploy-render.md.
 
 services:
   - type: web
     name: kisy
     runtime: docker
+    region: frankfurt
     dockerfilePath: ./Dockerfile
     dockerContext: .
     plan: free
@@ -35,16 +39,14 @@ services:
         generateValue: true
       - key: IP_HASH_SALT
         generateValue: true
-      # Managed add-ons wired automatically.
+      # External data stores — paste the connection strings in the dashboard.
+      # DATABASE_URL: Neon (postgresql://…?sslmode=require, DIRECT/non-pooled
+      # endpoint — pgx keeps a long-lived pool and prepared statements, which
+      # Neon's pgbouncer pooler breaks). REDIS_URL: Upstash (rediss://…).
       - key: DATABASE_URL
-        fromDatabase:
-          name: kisy-db
-          property: connectionString
+        sync: false
       - key: REDIS_URL
-        fromService:
-          type: redis
-          name: kisy-redis
-          property: connectionString
+        sync: false
       # First CEO account, created when the users table is empty.
       - key: BOOTSTRAP_CEO_USERNAME
         value: ceo
@@ -56,15 +58,3 @@ services:
       # in the dashboard. See docs/deploy-render.md.
       - key: STUN_URLS
         value: stun:stun.l.google.com:19302
-
-  - type: redis
-    name: kisy-redis
-    plan: free
-    ipAllowList: [] # reachable only from Render services (no public access)
-    maxmemoryPolicy: noeviction
-
-databases:
-  - name: kisy-db
-    plan: free
-    databaseName: kisy
-    user: kisy
