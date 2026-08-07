@@ -13,6 +13,17 @@
 set -euo pipefail
 
 : "${DATABASE_URL:?set DATABASE_URL (Neon direct connection string)}"
+# A bare dbname or truncated value makes pg_dump silently fall back to a local
+# unix socket ("connection to server on socket … No such file"); catch that
+# early with a clear message instead.
+case "$DATABASE_URL" in
+  postgres://* | postgresql://*) ;;
+  *)
+    echo "ERROR: DATABASE_URL must be a full postgresql:// connection string" >&2
+    echo "       (with host), e.g. postgresql://user:pass@host/db?sslmode=require" >&2
+    exit 1
+    ;;
+esac
 OUT_DIR="${1:-backups}"
 PG_IMAGE="${PG_IMAGE:-postgres:18-alpine}"
 
