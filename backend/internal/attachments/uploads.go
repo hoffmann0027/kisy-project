@@ -178,8 +178,22 @@ func (s *Service) CompleteUpload(ctx context.Context, uploader, id uuid.UUID) (D
 	if name == "" {
 		name = "file"
 	}
-	attID, err := s.repo.Create(ctx, tx, name, mime, int64(len(raw)), raw, uploader, meta)
+	// Same split as the single-shot path: bytes to the object store (if
+	// configured), only the key into the row. Written before the row so a
+	// failure can never leave a row whose bytes are missing.
+	data, path := raw, ""
+	if s.blobs != nil {
+		path = newObjectKey()
+		if err := s.blobs.Put(ctx, path, raw, mime); err != nil {
+			return DTO{}, err
+		}
+		data = nil
+	}
+	attID, err := s.repo.Create(ctx, tx, name, mime, int64(len(raw)), data, path, uploader, meta)
 	if err != nil {
+		if path != "" {
+			_ = s.blobs.Delete(ctx, path)
+		}
 		return DTO{}, err
 	}
 	if err := s.repo.DeleteSession(ctx, tx, id); err != nil {

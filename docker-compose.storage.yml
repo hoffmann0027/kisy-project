@@ -1,0 +1,42 @@
+# Self-hosted object storage (MinIO) for uploaded file bytes — the S3-compatible
+# backend behind BLOB_S3_*. Apply alongside the base stack:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.storage.yml up -d
+#
+# and set in .env:
+#   BLOB_S3_ENDPOINT=minio:9000
+#   BLOB_S3_BUCKET=kisy-files
+#   BLOB_S3_ACCESS_KEY=${MINIO_ROOT_USER}
+#   BLOB_S3_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+#
+# The backend creates the bucket on first start. Managed S3 (Backblaze B2,
+# Cloudflare R2, AWS) needs no service here — just point BLOB_S3_* at it.
+services:
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+    volumes:
+      - minio-data:/data
+    ports:
+      # Console only on loopback; the API is reached over the compose network,
+      # so it is never published to the internet.
+      - "127.0.0.1:9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - kisy-net
+
+  backend:
+    depends_on:
+      minio:
+        condition: service_healthy
+
+volumes:
+  minio-data:

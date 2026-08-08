@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"kisy-backend/internal/platform/blobstore"
 	"kisy-backend/internal/platform/db"
 )
 
@@ -203,18 +204,24 @@ func toDTO(id uuid.UUID, name, mime string, size int64, meta Meta) DTO {
 	}
 }
 
-// Blob is a stored file's bytes and metadata (for serving).
+// Blob is a stored file's bytes and metadata (for serving). Data is empty when
+// the bytes live in object storage; StoragePath then names the object and the
+// service loads it (see Service.load).
 type Blob struct {
-	MimeType   string
-	FileName   string
-	Data       []byte
-	MessageID  *uuid.UUID
-	UploadedBy *uuid.UUID
+	MimeType    string
+	FileName    string
+	Data        []byte
+	StoragePath string
+	MessageID   *uuid.UUID
+	UploadedBy  *uuid.UUID
 }
 
 // Repository is the persistence port.
 type Repository interface {
-	Create(ctx context.Context, q db.DBTX, name, mime string, size int64, data []byte, uploadedBy uuid.UUID, meta Meta) (uuid.UUID, error)
+	// Create records a file. Exactly one of data/storagePath carries the
+	// bytes: data for the legacy in-database path, storagePath for object
+	// storage (data is then NULL, which is what keeps the database small).
+	Create(ctx context.Context, q db.DBTX, name, mime string, size int64, data []byte, storagePath string, uploadedBy uuid.UUID, meta Meta) (uuid.UUID, error)
 	Link(ctx context.Context, q db.DBTX, ids []uuid.UUID, messageID, uploader uuid.UUID) error
 	Get(ctx context.Context, q db.DBTX, id uuid.UUID) (Blob, error)
 	ForMessages(ctx context.Context, q db.DBTX, messageIDs []uuid.UUID) (map[uuid.UUID][]DTO, error)
@@ -237,14 +244,14 @@ type PostgresRepository struct{}
 
 func NewPostgresRepository() *PostgresRepository { return &PostgresRepository{} }
 
-func (r *PostgresRepository) Create(ctx context.Context, q db.DBTX, name, mime string, size int64, data []byte, uploadedBy uuid.UUID, meta Meta) (uuid.UUID, error) {
+func (r *PostgresRepository) Create(ctx context.Context, q db.DBTX, name, mime string, size int64, data []byte, storagePath string, uploadedBy uuid.UUID, meta Meta) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := q.QueryRow(ctx, `
 		INSERT INTO attachments (message_id, file_name, mime_type, size_bytes, storage_path, scan_status, data, uploaded_by,
 		                         kind, duration_ms, waveform, width, height)
-		VALUES (NULL, $1, $2, $3, '', 'clean', $4, $5, $6, $7, $8, $9, $10)
+		VALUES (NULL, $1, $2, $3, $4, 'clean', $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id`,
-		name, mime, size, data, uploadedBy,
+		name, mime, size, storagePath, data, uploadedBy,
 		meta.Kind, meta.DurationMs, meta.Waveform, meta.Width, meta.Height).Scan(&id)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("attachments: create: %w", err)
@@ -268,8 +275,8 @@ func (r *PostgresRepository) Link(ctx context.Context, q db.DBTX, ids []uuid.UUI
 
 func (r *PostgresRepository) Get(ctx context.Context, q db.DBTX, id uuid.UUID) (Blob, error) {
 	var b Blob
-	err := q.QueryRow(ctx, `SELECT mime_type, file_name, data, message_id, uploaded_by FROM attachments WHERE id = $1`, id).
-		Scan(&b.MimeType, &b.FileName, &b.Data, &b.MessageID, &b.UploadedBy)
+	err := q.QueryRow(ctx, `SELECT mime_type, file_name, data, storage_path, message_id, uploaded_by FROM attachments WHERE id = $1`, id).
+		Scan(&b.MimeType, &b.FileName, &b.Data, &b.StoragePath, &b.MessageID, &b.UploadedBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Blob{}, ErrNotFound
 	}
@@ -309,7 +316,7 @@ func (r *PostgresRepository) CopyToMessage(ctx context.Context, q db.DBTX, sourc
 	rows, err := q.Query(ctx, `
 		INSERT INTO attachments (message_id, file_name, mime_type, size_bytes, storage_path, scan_status, data, uploaded_by,
 		                         kind, duration_ms, waveform, width, height)
-		SELECT $2, file_name, mime_type, size_bytes, '', 'clean', data, $3,
+		SELECT $2, file_name, mime_type, size_bytes, storage_path, 'clean', data, $3,
 		       kind, duration_ms, waveform, width, height
 		FROM attachments WHERE message_id = $1
 		ORDER BY created_at
@@ -343,10 +350,30 @@ type Service struct {
 	repo   Repository
 	access MessageAccess
 	limits Limits
+	// blobs, when set, receives the bytes of every new upload; the database
+	// row then keeps only the object key. Nil = legacy in-database storage.
+	blobs blobstore.Store
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository, limits Limits) *Service {
 	return &Service{pool: pool, repo: repo, limits: limits}
+}
+
+// SetBlobStore routes new uploads to object storage. Reads stay dual-path
+// regardless: a row with a storage_path is fetched from the store, one with
+// inline bytes is served from the database, so previously stored files keep
+// working before (and during) a migration.
+func (s *Service) SetBlobStore(b blobstore.Store) { s.blobs = b }
+
+// newObjectKey mints a random object name. It is generated before the row
+// exists (the bytes must land in the store first, so a failed upload never
+// leaves a row pointing at nothing) and deliberately carries no user id or
+// file name — object keys surface in storage-side logs, metadata belongs in
+// the database.
+func newObjectKey() string {
+	k := uuid.NewString()
+	// Shard by the first byte so a bucket listing stays manageable.
+	return "attachments/" + k[:2] + "/" + k
 }
 
 // SetMessageAccess wires the access check used when serving linked files.
@@ -383,8 +410,26 @@ func (s *Service) store(ctx context.Context, fileName string, raw []byte, upload
 	if name == "" {
 		name = "file"
 	}
-	id, err := s.repo.Create(ctx, s.pool, name, mime, int64(len(raw)), raw, uploader, normalized)
+
+	// With object storage configured the bytes go to the store first and the
+	// row keeps only the key; the database never sees the payload. Order
+	// matters: an orphaned object is harmless (reaped by lifecycle policy),
+	// an orphaned row would be a broken download.
+	data, path := raw, ""
+	if s.blobs != nil {
+		path = newObjectKey()
+		if err := s.blobs.Put(ctx, path, raw, mime); err != nil {
+			return DTO{}, err
+		}
+		data = nil
+	}
+
+	id, err := s.repo.Create(ctx, s.pool, name, mime, int64(len(raw)), data, path, uploader, normalized)
 	if err != nil {
+		if path != "" {
+			// Best-effort: don't leave the object behind if the row failed.
+			_ = s.blobs.Delete(ctx, path)
+		}
 		return DTO{}, err
 	}
 	return toDTO(id, name, mime, int64(len(raw)), normalized), nil
@@ -451,14 +496,40 @@ func (s *Service) Fetch(ctx context.Context, id, actorID uuid.UUID, actorLevel i
 	if err != nil {
 		return Blob{}, err
 	}
+	// Authorize BEFORE touching the bytes: moving storage must not widen who
+	// can read a file. The clearance/membership rules are unchanged, and the
+	// object store is never exposed to the client — we stream it ourselves.
 	if b.MessageID != nil {
 		if s.access == nil || !s.access(ctx, *b.MessageID, actorID, actorLevel) {
 			return Blob{}, ErrNotFound
 		}
-		return b, nil
-	}
-	if b.UploadedBy == nil || *b.UploadedBy != actorID {
+	} else if b.UploadedBy == nil || *b.UploadedBy != actorID {
 		return Blob{}, ErrNotFound
 	}
+	return s.load(ctx, b)
+}
+
+// load resolves a blob's bytes: from object storage when the row carries a
+// key, otherwise the inline column. This dual read is what lets the migration
+// run gradually — rows move one at a time and both shapes stay readable.
+func (s *Service) load(ctx context.Context, b Blob) (Blob, error) {
+	if b.StoragePath == "" {
+		return b, nil
+	}
+	if s.blobs == nil {
+		// The row was written by an instance with object storage configured,
+		// but this one has none — surfacing that plainly beats a 404.
+		return Blob{}, fmt.Errorf("attachments: %w", errStoreUnavailable)
+	}
+	data, err := s.blobs.Get(ctx, b.StoragePath)
+	if err != nil {
+		if errors.Is(err, blobstore.ErrNotFound) {
+			return Blob{}, ErrNotFound
+		}
+		return Blob{}, err
+	}
+	b.Data = data
 	return b, nil
 }
+
+var errStoreUnavailable = errors.New("object storage is not configured on this instance")

@@ -53,6 +53,14 @@ services:
       DB_POOL_MAX_CONN_LIFETIME: ${DB_POOL_MAX_CONN_LIFETIME:-}
       DB_POOL_MAX_CONN_IDLE_TIME: ${DB_POOL_MAX_CONN_IDLE_TIME:-}
       DB_POOL_HEALTHCHECK_PERIOD: ${DB_POOL_HEALTHCHECK_PERIOD:-}
+      # Object storage for uploaded bytes (O5). Empty endpoint/bucket keeps
+      # files in Postgres; point it at the minio service below to switch.
+      BLOB_S3_ENDPOINT: ${BLOB_S3_ENDPOINT:-}
+      BLOB_S3_BUCKET: ${BLOB_S3_BUCKET:-}
+      BLOB_S3_ACCESS_KEY: ${BLOB_S3_ACCESS_KEY:-}
+      BLOB_S3_SECRET_KEY: ${BLOB_S3_SECRET_KEY:-}
+      BLOB_S3_REGION: ${BLOB_S3_REGION:-}
+      BLOB_S3_USE_SSL: ${BLOB_S3_USE_SSL:-}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}

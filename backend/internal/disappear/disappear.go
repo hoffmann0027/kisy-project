@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"kisy-backend/internal/audit"
+	"kisy-backend/internal/platform/blobstore"
 	"kisy-backend/internal/platform/db"
 	"kisy-backend/internal/platform/metrics"
 )
@@ -81,6 +82,10 @@ type Repository interface {
 	// DeleteMessages hard-deletes the rows; attachments/reactions/mentions
 	// go with them via ON DELETE CASCADE.
 	DeleteMessages(ctx context.Context, q db.DBTX, ids []uuid.UUID) error
+	// AttachmentObjectKeys returns the object-storage keys of the messages'
+	// attachments, so those bytes can be purged too — a cascade only removes
+	// the rows, and a disappearing message must not leave its file behind.
+	AttachmentObjectKeys(ctx context.Context, q db.DBTX, messageIDs []uuid.UUID) ([]string, error)
 }
 
 // ExpiredRef locates one reaped message for the client fan-out.
@@ -153,6 +158,38 @@ func (r *PostgresRepository) ClaimExpired(ctx context.Context, q db.DBTX, now ti
 	return out, rows.Err()
 }
 
+func (r *PostgresRepository) AttachmentObjectKeys(ctx context.Context, q db.DBTX, messageIDs []uuid.UUID) ([]string, error) {
+	if len(messageIDs) == 0 {
+		return nil, nil
+	}
+	// Forwarding copies the row but reuses the object key, so a key may be
+	// shared. Only return keys whose every referencing row is among the
+	// messages being deleted — otherwise purging would break a forwarded copy
+	// that is still live.
+	rows, err := q.Query(ctx, `
+		SELECT a.storage_path
+		FROM attachments a
+		WHERE a.message_id = ANY($1) AND a.storage_path <> ''
+		GROUP BY a.storage_path
+		HAVING COUNT(*) = (
+			SELECT COUNT(*) FROM attachments b WHERE b.storage_path = a.storage_path
+		)`, messageIDs)
+	if err != nil {
+		return nil, fmt.Errorf("disappear: attachment keys: %w", err)
+	}
+	defer rows.Close()
+
+	var keys []string
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			return nil, fmt.Errorf("disappear: scan attachment key: %w", err)
+		}
+		keys = append(keys, k)
+	}
+	return keys, rows.Err()
+}
+
 func (r *PostgresRepository) DeleteMessages(ctx context.Context, q db.DBTX, ids []uuid.UUID) error {
 	if len(ids) == 0 {
 		return nil
@@ -185,11 +222,22 @@ type Service struct {
 	audit     audit.Recorder
 	pub       Publisher
 	indexer   Indexer
+	// blobs purges attachment bytes that live in object storage; nil when
+	// files are stored in the database (the cascade already removes them).
+	blobs blobstore.Store
+	log   *slog.Logger
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository, authorize ChatAuthorizer, rec audit.Recorder) *Service {
-	return &Service{pool: pool, repo: repo, authorize: authorize, audit: rec}
+	return &Service{
+		pool: pool, repo: repo, authorize: authorize, audit: rec,
+		log: slog.Default(),
+	}
 }
+
+// SetBlobStore wires object storage so expired attachments' bytes are purged
+// from the bucket, not just unlinked in the database.
+func (s *Service) SetBlobStore(b blobstore.Store) { s.blobs = b }
 
 // SetPublisher wires the real-time fan-out (constructed together at startup).
 func (s *Service) SetPublisher(p Publisher) { s.pub = p }
@@ -285,11 +333,31 @@ func (s *Service) ProcessExpired(ctx context.Context, now time.Time, batch int) 
 	for i, ref := range refs {
 		ids[i] = ref.ID
 	}
+
+	// Attachment rows cascade with the message, but bytes held in object
+	// storage would outlive them — and "disappearing" must mean the file is
+	// really gone, not just unreferenced. Collect the object keys while the
+	// rows still exist; they are purged after the commit.
+	var objectKeys []string
+	if s.blobs != nil {
+		if objectKeys, err = s.repo.AttachmentObjectKeys(ctx, tx, ids); err != nil {
+			return 0, err
+		}
+	}
+
 	if err := s.repo.DeleteMessages(ctx, tx, ids); err != nil {
 		return 0, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return 0, fmt.Errorf("disappear: commit: %w", err)
+	}
+
+	for _, key := range objectKeys {
+		if err := s.blobs.Delete(ctx, key); err != nil {
+			// The row is already gone, so the file is unreachable either way;
+			// log loudly because it means bytes lingered in the bucket.
+			s.log.Warn("disappear: could not purge stored object", "error", err)
+		}
 	}
 
 	for _, ref := range refs {

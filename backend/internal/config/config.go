@@ -47,6 +47,9 @@ type Config struct {
 	// ICE configures WebRTC connectivity for 1:1 audio calls (STUN/TURN).
 	ICE ICEConfig
 
+	// Blob selects where uploaded file bytes live (O5). Empty = Postgres.
+	Blob BlobConfig
+
 	// Upload bounds attachment uploads (stage A: chunked uploads with
 	// clearance-differentiated limits — no hardcoded 10 MiB).
 	Upload UploadConfig
@@ -115,6 +118,22 @@ func (u UploadConfig) MaxBytesFor(roleLevel int) int64 {
 	}
 	return u.MaxBytesStaff
 }
+
+// BlobConfig points at the S3-compatible object store that holds uploaded file
+// bytes (attachments, avatars). Leave Endpoint/Bucket empty to keep storing
+// bytes in Postgres — reads always fall back to the database, so switching it
+// on is safe before any migration has run.
+type BlobConfig struct {
+	Endpoint  string
+	Bucket    string
+	AccessKey string
+	SecretKey string
+	Region    string
+	UseSSL    bool
+}
+
+// Enabled reports whether uploads should go to object storage.
+func (b BlobConfig) Enabled() bool { return b.Endpoint != "" && b.Bucket != "" }
 
 type PostgresConfig struct {
 	Host     string
@@ -281,6 +300,16 @@ func Load() (*Config, error) {
 	}
 	if cfg.Upload.SessionTTL, err = getEnvDuration("UPLOAD_SESSION_TTL", 24*time.Hour); err != nil {
 		return nil, err
+	}
+
+	// Object storage for uploaded bytes (O5). Unset → bytes stay in Postgres.
+	cfg.Blob = BlobConfig{
+		Endpoint:  os.Getenv("BLOB_S3_ENDPOINT"),
+		Bucket:    os.Getenv("BLOB_S3_BUCKET"),
+		AccessKey: os.Getenv("BLOB_S3_ACCESS_KEY"),
+		SecretKey: os.Getenv("BLOB_S3_SECRET_KEY"),
+		Region:    os.Getenv("BLOB_S3_REGION"),
+		UseSSL:    os.Getenv("BLOB_S3_USE_SSL") == "true",
 	}
 
 	cfg.WebDir = os.Getenv("WEB_DIR")

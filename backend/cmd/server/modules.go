@@ -39,6 +39,7 @@ import (
 	"kisy-backend/internal/notes"
 	"kisy-backend/internal/notifications"
 	"kisy-backend/internal/notifprefs"
+	"kisy-backend/internal/platform/blobstore"
 	"kisy-backend/internal/platform/db"
 	"kisy-backend/internal/platform/ratelimit"
 	"kisy-backend/internal/push"
@@ -106,8 +107,31 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		return nil, err
 	}
 
+	// Object storage for uploaded bytes (O5). When unconfigured every service
+	// keeps its bytes in Postgres; reads are dual-path either way, so turning
+	// this on does not strand files written earlier.
+	var blobs blobstore.Store
+	if cfg.Blob.Enabled() {
+		store, err := blobstore.NewS3(ctx, blobstore.Config{
+			Endpoint:  cfg.Blob.Endpoint,
+			Bucket:    cfg.Blob.Bucket,
+			AccessKey: cfg.Blob.AccessKey,
+			SecretKey: cfg.Blob.SecretKey,
+			Region:    cfg.Blob.Region,
+			UseSSL:    cfg.Blob.UseSSL,
+		})
+		if err != nil {
+			return nil, err
+		}
+		blobs = store
+		log.Info("object storage enabled", "bucket", cfg.Blob.Bucket)
+	}
+
 	// Avatar storage (used by both the users and groups handlers).
 	avatarsSvc := avatars.NewService(pool, avatars.NewPostgresRepository())
+	if blobs != nil {
+		avatarsSvc.SetBlobStore(blobs)
+	}
 	avatarsHandler := avatars.NewHandler(avatarsSvc)
 
 	tokens := token.NewManager(cfg.JWTAccessSecret, cfg.JWTAccessTTL)
@@ -279,7 +303,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		return chatmedia.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
 	})
 
-	// --- attachments (files/images stored in the DB) ---
+	// --- attachments (bytes in object storage when configured, else the DB) ---
 	attachmentsSvc := attachments.NewService(pool, attachments.NewPostgresRepository(), attachments.Limits{
 		MaxBytesLeadership: cfg.Upload.MaxBytesLeadership,
 		MaxBytesStaff:      cfg.Upload.MaxBytesStaff,
@@ -287,6 +311,9 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		ChunkBytes:         cfg.Upload.ChunkBytes,
 		SessionTTL:         cfg.Upload.SessionTTL,
 	})
+	if blobs != nil {
+		attachmentsSvc.SetBlobStore(blobs)
+	}
 	// Reap abandoned chunked-upload sessions hourly (chunks cascade).
 	attachmentsSvc.StartSessionCleanup(ctx, time.Hour, log)
 	attachmentsSvc.SetMessageAccess(func(ctx context.Context, messageID, actorID uuid.UUID, actorLevel int) bool {
@@ -501,6 +528,11 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		disappear.ChatAuthorizer(chatAuthorizer), auditRec)
 	disappearSvc.SetPublisher(wsPublisher)
 	disappearSvc.SetIndexer(searchSvc)
+	if blobs != nil {
+		// So an expired message's file really leaves the bucket, not just the
+		// database (the cascade cannot reach object storage).
+		disappearSvc.SetBlobStore(blobs)
+	}
 	// New messages of a chat with a timer get expires_at stamped on send.
 	messagesSvc.SetDisappearTTL(disappearSvc.TTLFor)
 	// The reaper hard-deletes expired rows (attachments cascade) and tells
