@@ -40,6 +40,17 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     deploy:
+      # Two instances so a crash or a deploy never means downtime: nginx
+      # resolves the service name per request and simply stops handing traffic
+      # to an instance that is gone. Nothing in the process is single-instance
+      # state — sockets are per-instance but bridged over Redis pub/sub, upload
+      # sessions live in Postgres, call/presence/rate-limit state in Redis, and
+      # the background workers claim rows with FOR UPDATE SKIP LOCKED.
+      #
+      # Mind the database: every replica opens its own pool, so
+      # replicas x DB_POOL_MAX_CONNS must stay well under the server's
+      # max_connections (see O3 in docs/runbook.md).
+      replicas: 2
       resources:
         limits: { cpus: '1.0', memory: 512M }
 

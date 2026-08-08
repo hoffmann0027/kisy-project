@@ -223,6 +223,62 @@ CEO_PASSWORD='…'`, `make loadtest SCENARIO=ws VUS=100 …`. **Только п�
    поэтому сидинг нагрузочных пользователей держим ≤ 5, а VU делят сессии.
    Повторные прогоны подряд надо разносить на минуту.
 
+## Несколько инстансов и деплой без простоя (O6)
+
+Прод-оверлей поднимает **2 инстанса бэкенда** (`deploy.replicas: 2` в
+`docker-compose.prod.yml`). nginx резолвит имя сервиса `backend` **на каждый
+запрос** (`resolver 127.0.0.11 valid=5s` + переменная в `proxy_pass`), поэтому
+остановленный или заменённый контейнер перестаёт получать трафик без
+перезагрузки nginx — обычный `upstream { server backend:8080; }` запомнил бы
+адреса на старте и продолжил бить в мёртвый IP.
+
+**Почему мультиинстанс безопасен** (проверено по коду):
+
+| Состояние | Где живёт | Вывод |
+|---|---|---|
+| WebSocket-соединения | карта в памяти инстанса + мост Redis pub/sub | ок: сокет «липнет» к принявшему инстансу, события разносит Redis |
+| Presence, состояние звонков, rate-limit | Redis | ок |
+| Сессии чанковой загрузки | Postgres | ок |
+| Воркеры (scheduled, disappear) | claim строк через `FOR UPDATE SKIP LOCKED` | ок: реплики не дублируют работу |
+| Пакетные `map` в Go | только read-only справочники | ок |
+
+Sticky-сессии не нужны: WS держится за свой инстанс сам, а REST не хранит
+состояния между запросами.
+
+**Масштабирование**
+
+```bash
+docker compose -f docker-compose.yml up -d --scale backend=2   # dev
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d  # prod (replicas: 2)
+```
+
+⚠️ Каждая реплика открывает **свой** пул к БД: `реплики × DB_POOL_MAX_CONNS`
+должно с запасом влезать в `max_connections` сервера (см. раздел про пул).
+При 2 репликах и дефолте 10 это 20 соединений.
+
+**Rolling-деплой без простоя**
+
+```bash
+# 1. Собрать новый образ, не трогая работающие контейнеры
+docker compose -f docker-compose.yml -f docker-compose.prod.yml build backend
+
+# 2. Поднять на одну реплику больше — новая встаёт рядом со старыми
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d \
+  --no-deps --scale backend=3 backend
+
+# 3. Дождаться готовности новой (healthcheck бьёт в /health; убедись, что
+#    /ready отвечает 200 — он проверяет Postgres и Redis)
+docker compose -f docker-compose.yml -f docker-compose.prod.yml ps backend
+
+# 4. Свернуть обратно до 2 — compose убирает самый старый контейнер
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d \
+  --no-deps --scale backend=2 backend
+```
+
+Клиенты убитого инстанса теряют WebSocket и переподключаются автоматически
+(фронтенд реконнектится), попадая на живую реплику; сообщения не теряются —
+они уже в Postgres, а фан-аут идёт через Redis.
+
 ## Деплой / failover
 
 Rolling-деплой нескольких инстансов — этап **O6**; HA данных и failover
