@@ -1,7 +1,18 @@
 name: kisy
 
+# Container logs are capped so they cannot quietly fill the disk — a full disk
+# takes Postgres (and with it the whole site) down, which is exactly the
+# failure mode the LowDisk alert in docs/runbook.md watches for. 30 MB per
+# service is plenty for debugging a recent incident.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
+    logging: *default-logging
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
@@ -19,9 +30,32 @@ services:
       - kisy-net
 
   redis:
+    logging: *default-logging
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    # Redis holds only reconstructible state: presence counters, the WebSocket
+    # fan-out channels, in-flight call state and rate-limit counters. Nothing
+    # here is a source of truth — that is Postgres — so persistence is switched
+    # OFF deliberately (`--save ""`, appendonly no): a restart simply starts
+    # empty, clients reconnect and presence re-registers, which is preferable
+    # to reloading a stale snapshot of who was online an hour ago.
+    #
+    # maxmemory must be set explicitly: without it Redis ignores the container
+    # limit and gets OOM-killed instead of evicting. allkeys-lru degrades
+    # gracefully under pressure (every key is rebuildable); noeviction would
+    # make Redis start refusing writes, breaking presence and calls outright.
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD}
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-192mb}
+      - --maxmemory-policy
+      - allkeys-lru
     volumes:
       - redis-data:/data
     healthcheck:
@@ -33,6 +67,7 @@ services:
       - kisy-net
 
   backend:
+    logging: *default-logging
     build:
       context: ./backend
     restart: unless-stopped
@@ -93,6 +128,7 @@ services:
       - kisy-net
 
   frontend:
+    logging: *default-logging
     build:
       context: ./frontend
       args:
@@ -111,6 +147,7 @@ services:
       - kisy-net
 
   coturn:
+    logging: *default-logging
     image: coturn/coturn:4.6-alpine
     restart: unless-stopped
     # The shared secret and realm are injected here so they stay out of the
@@ -126,6 +163,7 @@ services:
       - kisy-net
 
   nginx:
+    logging: *default-logging
     image: nginx:1.27-alpine
     restart: unless-stopped
     ports:
