@@ -804,7 +804,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 			return ws.Authenticated{}, false
 		}
 		return ws.Authenticated{UserID: claims.UserID, SessionID: claims.SessionID, RoleLevel: claims.RoleLevel}, true
-	}, cfg.WSAllowedOrigin)
+	}, cfg.WSAllowedOrigin, cfg.NativeAppOrigins...)
 
 	return &modules{
 		authHandler:          authHandler,

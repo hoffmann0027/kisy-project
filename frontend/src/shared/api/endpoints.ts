@@ -1,3 +1,4 @@
+import { isNative, loadTokens, saveTokens, type NativeTokens } from "@shared/lib/native";
 import { apiClient } from "./client";
 import type {
   Attachment,
@@ -41,14 +42,38 @@ import type {
   User,
 } from "./types";
 
+// On native the backend also returns the raw tokens (the app has no cookie
+// jar the API can reach). Persist them so later requests can present a Bearer
+// token; on the web `tokens` is absent and these calls are no-ops.
+type WithTokens<T> = T & { tokens?: NativeTokens };
+
+function keepTokens<T>(res: WithTokens<T>): T {
+  if (res.tokens) saveTokens(res.tokens);
+  return res;
+}
+
 export const authApi = {
   login: (username: string, password: string) =>
-    apiClient.post<{ user: User }>("/auth/login", { username, password }),
+    apiClient
+      .post<WithTokens<{ user: User }>>("/auth/login", { username, password })
+      .then(keepTokens),
   register: (inviteToken: string, username: string, password: string) =>
-    apiClient.post<{ user: User }>("/auth/register", { inviteToken, username, password }),
-  logout: () => apiClient.post<{ loggedOut: boolean }>("/auth/logout"),
-  logoutAll: () => apiClient.post<{ revokedSessions: number }>("/auth/logout-all"),
-  refresh: () => apiClient.post<{ accessExpiresAt: string }>("/auth/refresh"),
+    apiClient
+      .post<WithTokens<{ user: User }>>("/auth/register", { inviteToken, username, password })
+      .then(keepTokens),
+  logout: () =>
+    apiClient.post<{ loggedOut: boolean }>("/auth/logout").finally(() => saveTokens(null)),
+  logoutAll: () =>
+    apiClient.post<{ revokedSessions: number }>("/auth/logout-all").finally(() => saveTokens(null)),
+  // Native clients send the refresh token back in the body; browsers rely on
+  // the HttpOnly cookie and send nothing.
+  refresh: () =>
+    apiClient
+      .post<WithTokens<{ accessExpiresAt: string }>>(
+        "/auth/refresh",
+        isNative() ? { refreshToken: loadTokens()?.refreshToken ?? "" } : undefined,
+      )
+      .then(keepTokens),
   changePassword: (currentPassword: string, newPassword: string) =>
     apiClient.post<{ passwordChanged: boolean }>("/auth/password", { currentPassword, newPassword }),
 };

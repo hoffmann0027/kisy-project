@@ -1,12 +1,20 @@
 import { ApiError, type ApiEnvelope } from "./envelope";
+import { apiOrigin, nativeAuthHeaders } from "@shared/lib/native";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  // In the mobile shell the API sits on another origin, so the path is
+  // absolutised and the session travels as a Bearer token; in the browser both
+  // helpers are no-ops and the cookie keeps doing the work.
+  const response = await fetch(`${apiOrigin()}${API_BASE_URL}${path}`, {
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...init?.headers },
     ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...nativeAuthHeaders(),
+      ...init?.headers,
+    },
   });
 
   // 204 or empty bodies still return a valid (empty) result.

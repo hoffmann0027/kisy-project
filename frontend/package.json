@@ -12,6 +12,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@capacitor/android": "8.5.0",
+    "@capacitor/core": "8.5.0",
     "@hookform/resolvers": "^3.9.1",
     "@hpke/chacha20poly1305": "^1.7.1",
     "@noble/ciphers": "^2.1.1",
@@ -29,6 +31,7 @@
     "zustand": "^5.0.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.5.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@types/libsodium-wrappers-sumo": "^0.7.8",

@@ -16,7 +16,7 @@ import (
 // Origin header on non-GET fetch/XHR, so a cross-site forgery is rejected
 // here. Non-browser API clients (which cannot be driven by CSRF) omit
 // Origin and are allowed through.
-func CSRF(allowedOrigin string) func(http.Handler) http.Handler {
+func CSRF(allowedOrigin string, extraAllowed ...string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if isSafeMethod(r.Method) {
@@ -34,7 +34,7 @@ func CSRF(allowedOrigin string) func(http.Handler) http.Handler {
 				return
 			}
 
-			if OriginAllowed(origin, r, allowedOrigin) {
+			if OriginAllowed(origin, r, allowedOrigin, extraAllowed...) {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -70,9 +70,19 @@ func originOf(rawURL string) string {
 // behind the edge proxy the Host header carries the public host). It is shared
 // by the CSRF middleware and the WebSocket handshake check so both enforce the
 // same fail-closed policy.
-func OriginAllowed(origin string, r *http.Request, allowedOrigin string) bool {
+// extraAllowed lists additional exact origins (the mobile shell's WebView
+// origin, e.g. https://localhost) that may talk to this API. Those clients
+// authenticate with a Bearer token rather than cookies, so admitting their
+// origin does not widen the CSRF surface: a cross-site page cannot make the
+// browser attach a token it does not hold, and the cookies stay SameSite=Strict.
+func OriginAllowed(origin string, r *http.Request, allowedOrigin string, extraAllowed ...string) bool {
 	if allowedOrigin != "" && strings.EqualFold(origin, allowedOrigin) {
 		return true
+	}
+	for _, a := range extraAllowed {
+		if a != "" && strings.EqualFold(origin, a) {
+			return true
+		}
 	}
 	if u, err := url.Parse(origin); err == nil && strings.EqualFold(u.Host, r.Host) {
 		return true

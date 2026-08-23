@@ -1,3 +1,4 @@
+import { apiOrigin, isNative, loadTokens } from "@shared/lib/native";
 import type { ClientFrame, ServerEvent } from "./events";
 
 const WS_BASE = import.meta.env.VITE_WS_BASE_URL ?? "/ws";
@@ -58,6 +59,14 @@ class WsClient {
   }
 
   private resolveUrl(): string {
+    // Native builds: the socket is cross-origin and carries no cookie, so it
+    // authenticates with the access token as a query parameter (the handshake
+    // cannot set headers). The backend accepts either.
+    if (isNative()) {
+      const origin = apiOrigin().replace(/^http/, "ws");
+      const token = loadTokens()?.accessToken ?? "";
+      return `${origin}${WS_BASE}?access_token=${encodeURIComponent(token)}`;
+    }
     // WS_BASE may be an absolute ws(s):// URL or a same-origin path.
     if (WS_BASE.startsWith("ws")) return WS_BASE;
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";

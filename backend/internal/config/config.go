@@ -34,6 +34,13 @@ type Config struct {
 	// IPHashSalt salts IP digests stored in sessions and audit logs.
 	IPHashSalt string
 
+	// NativeAppOrigins are the WebView origins of the packaged mobile apps
+	// (Capacitor serves the bundle from https://localhost on Android and
+	// capacitor://localhost on iOS). They are allowed through the CSRF and
+	// WebSocket origin checks; those clients use Bearer tokens, not cookies.
+	// Set NATIVE_APP_ORIGINS="" to refuse them entirely.
+	NativeAppOrigins []string
+
 	// WSAllowedOrigin restricts WebSocket handshake origins in production.
 	// Empty (development) allows any origin.
 	WSAllowedOrigin string
@@ -259,6 +266,7 @@ func Load() (*Config, error) {
 	cfg.BootstrapCEOPassword = os.Getenv("BOOTSTRAP_CEO_PASSWORD")
 
 	cfg.WSAllowedOrigin = os.Getenv("WS_ALLOWED_ORIGIN")
+	cfg.NativeAppOrigins = splitList(getEnvDefault("NATIVE_APP_ORIGINS", "https://localhost,capacitor://localhost"))
 	cfg.VAPIDPublicKey = os.Getenv("VAPID_PUBLIC_KEY")
 	cfg.VAPIDPrivateKey = os.Getenv("VAPID_PRIVATE_KEY")
 	cfg.VAPIDSubject = getEnv("VAPID_SUBJECT", "mailto:admin@kisy.local")
@@ -548,4 +556,24 @@ func getEnvDuration(key string, fallback time.Duration) (time.Duration, error) {
 		return 0, fmt.Errorf("config: %s must be a valid duration: %w", key, err)
 	}
 	return d, nil
+}
+
+// getEnvDefault returns the environment value, or fallback when the variable
+// is not set at all. An explicitly empty value is honoured (it means "none").
+func getEnvDefault(key, fallback string) string {
+	if v, ok := os.LookupEnv(key); ok {
+		return v
+	}
+	return fallback
+}
+
+// splitList parses a comma-separated env value into trimmed, non-empty items.
+func splitList(v string) []string {
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		if s := strings.TrimSpace(part); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }

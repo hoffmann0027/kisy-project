@@ -95,6 +95,7 @@ func run() error {
 		rdb:           redisClient,
 		mods:          mods,
 		allowedOrigin: cfg.WSAllowedOrigin,
+		nativeOrigins: cfg.NativeAppOrigins,
 		webDir:        cfg.WebDir,
 	})
 
@@ -135,6 +136,7 @@ type routerDeps struct {
 	rdb           *goredis.Client
 	mods          *modules
 	allowedOrigin string
+	nativeOrigins []string
 	webDir        string
 }
 
@@ -180,7 +182,7 @@ func newRouter(d routerDeps) http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		// CSRF protection on every state-changing API request
 		// (defense-in-depth alongside SameSite=Strict cookies).
-		r.Use(security.CSRF(d.allowedOrigin))
+		r.Use(security.CSRF(d.allowedOrigin, d.nativeOrigins...))
 
 		r.Route("/auth", func(r chi.Router) {
 			// Brute-force protection on unauthenticated entry points.

@@ -28,14 +28,14 @@ type Handler struct {
 	upgrader websocket.Upgrader
 }
 
-func NewHandler(hub *Hub, auth Authenticator, allowedOrigin string) *Handler {
+func NewHandler(hub *Hub, auth Authenticator, allowedOrigin string, extraAllowed ...string) *Handler {
 	return &Handler{
 		hub:  hub,
 		auth: auth,
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
-			CheckOrigin:     originChecker(allowedOrigin),
+			CheckOrigin:     originChecker(allowedOrigin, extraAllowed...),
 		},
 	}
 }
@@ -78,12 +78,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // WebSocket hijacking (CSWSH) from any page the user visits. Requests without
 // an Origin header (non-browser clients) are allowed: browsers always send
 // Origin on cross-site WebSocket handshakes, so those cannot be CSWSH.
-func originChecker(allowedOrigin string) func(*http.Request) bool {
+func originChecker(allowedOrigin string, extraAllowed ...string) func(*http.Request) bool {
 	return func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
 		if origin == "" {
 			return true
 		}
-		return security.OriginAllowed(origin, r, allowedOrigin)
+		return security.OriginAllowed(origin, r, allowedOrigin, extraAllowed...)
 	}
 }
