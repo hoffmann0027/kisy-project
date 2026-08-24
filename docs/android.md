@@ -84,7 +84,15 @@ Push API нет, поэтому приложение получает их че�
 **2. Секрет с конфигом приложения**
 
 Файл содержит идентификаторы проекта, в репозиторий он не кладётся
-(`frontend/android/.gitignore`). Кодируем в base64 и кладём в секреты:
+(`frontend/android/.gitignore`). Кодируем в base64 и кладём в секреты.
+
+Windows (PowerShell) — команда кладёт результат в буфер обмена:
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("$HOME\Downloads\google-services.json")) | Set-Clipboard
+```
+
+Linux/macOS:
 
 ```bash
 base64 -w0 google-services.json
@@ -100,7 +108,15 @@ private key**. Скачается JSON — это полноценный клю�
 имени всего проекта, обращаться с ним как с паролем БД.
 
 Кодируем и кладём в переменную окружения бэкенда `FCM_SERVICE_ACCOUNT`
-(на Render — Environment → Add secret; локально — в `.env`):
+(на Render — Environment → Add secret; локально — в `.env`).
+
+Windows (PowerShell):
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("$HOME\Downloads\kisy-firebase-adminsdk.json")) | Set-Clipboard
+```
+
+Linux/macOS:
 
 ```bash
 base64 -w0 kisy-firebase-adminsdk-xxxxx.json
@@ -139,7 +155,7 @@ keytool -genkey -v -keystore kisy-upload.jks -keyalg RSA -keysize 4096 -validity
 
 | Секрет | Значение |
 | --- | --- |
-| `ANDROID_KEYSTORE_BASE64` | `base64 -w0 kisy-upload.jks` |
+| `ANDROID_KEYSTORE_BASE64` | файл в base64 (PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("kisy-upload.jks")) \| Set-Clipboard`) |
 | `ANDROID_KEYSTORE_PASSWORD` | пароль хранилища |
 | `ANDROID_KEY_ALIAS` | `kisy-upload` |
 | `ANDROID_KEY_PASSWORD` | пароль ключа (если отличается от пароля хранилища) |
