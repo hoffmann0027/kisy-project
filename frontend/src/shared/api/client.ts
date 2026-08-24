@@ -1,5 +1,5 @@
 import { ApiError, type ApiEnvelope } from "./envelope";
-import { apiOrigin, nativeAuthHeaders } from "@shared/lib/native";
+import { apiOrigin, isNative, nativeAuthHeaders } from "@shared/lib/native";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
@@ -8,7 +8,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // absolutised and the session travels as a Bearer token; in the browser both
   // helpers are no-ops and the cookie keeps doing the work.
   const response = await fetch(`${apiOrigin()}${API_BASE_URL}${path}`, {
-    credentials: "include",
+    // Native carries the session in a Bearer header, so no cookie should ride
+    // along cross-site — the server likewise refuses credentialed CORS.
+    credentials: isNative() ? "omit" : "include",
     ...init,
     headers: {
       "Content-Type": "application/json",

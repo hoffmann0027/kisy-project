@@ -180,6 +180,10 @@ func newRouter(d routerDeps) http.Handler {
 	m := d.mods
 
 	r.Route("/api/v1", func(r chi.Router) {
+		// CORS first: a preflight must be answered before anything else can
+		// reject it (CSRF would see an OPTIONS with no session and refuse).
+		r.Use(security.CORS(d.nativeOrigins))
+
 		// CSRF protection on every state-changing API request
 		// (defense-in-depth alongside SameSite=Strict cookies).
 		r.Use(security.CSRF(d.allowedOrigin, d.nativeOrigins...))
