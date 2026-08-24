@@ -24,10 +24,18 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Get("/vapid-public-key", h.publicKey)
 	r.Post("/subscribe", h.subscribe)
 	r.Post("/unsubscribe", h.unsubscribe)
+	r.Post("/device", h.registerDevice)
+	r.Post("/device/unregister", h.unregisterDevice)
 }
 
 func (h *Handler) publicKey(w http.ResponseWriter, r *http.Request) {
-	httpresponse.OK(w, r, http.StatusOK, map[string]any{"publicKey": h.svc.PublicKey(), "enabled": h.svc.Enabled()})
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{
+		"publicKey": h.svc.PublicKey(),
+		"enabled":   h.svc.Enabled(),
+		// Lets the mobile app skip asking for the notification permission when
+		// the server could not deliver anything anyway.
+		"mobileEnabled": h.svc.MobileEnabled(),
+	})
 }
 
 type subscribeRequest struct {
@@ -72,4 +80,51 @@ func (h *Handler) unsubscribe(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = h.svc.Unsubscribe(r.Context(), req.Endpoint)
 	httpresponse.OK(w, r, http.StatusOK, map[string]any{"unsubscribed": true})
+}
+
+type deviceRequest struct {
+	Token    string `json:"token"`
+	Platform string `json:"platform"`
+}
+
+// maxDeviceTokenLen bounds what is stored: real FCM tokens are ~160-200 chars.
+const maxDeviceTokenLen = 1024
+
+func (h *Handler) registerDevice(w http.ResponseWriter, r *http.Request) {
+	uid, ok := h.userID(r)
+	if !ok {
+		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
+		return
+	}
+	var req deviceRequest
+	if err := httpjson.Decode(w, r, &req); err != nil {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "invalid device registration")
+		return
+	}
+	if req.Platform == "" {
+		req.Platform = "android"
+	}
+	if req.Token == "" || len(req.Token) > maxDeviceTokenLen || (req.Platform != "android" && req.Platform != "ios") {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "invalid device registration")
+		return
+	}
+	if err := h.svc.RegisterDevice(r.Context(), uid, Device{Token: req.Token, Platform: req.Platform}); err != nil {
+		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "failed to register device")
+		return
+	}
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"registered": true})
+}
+
+func (h *Handler) unregisterDevice(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.userID(r); !ok {
+		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
+		return
+	}
+	var req deviceRequest
+	if err := httpjson.Decode(w, r, &req); err != nil || req.Token == "" || len(req.Token) > maxDeviceTokenLen {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "invalid request")
+		return
+	}
+	_ = h.svc.UnregisterDevice(r.Context(), req.Token)
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"unregistered": true})
 }

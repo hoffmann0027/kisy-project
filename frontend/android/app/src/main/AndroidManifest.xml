@@ -39,6 +39,10 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Android 13+ asks the user before any notification is shown. The app
+         requests it on first sign-in; denying it only costs push, not chat. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- 1:1 voice calls: the WebView needs the mic for getUserMedia, and
          MODIFY_AUDIO_SETTINGS lets WebRTC switch to the call audio mode. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />

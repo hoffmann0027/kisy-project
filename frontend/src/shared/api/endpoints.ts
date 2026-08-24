@@ -430,10 +430,16 @@ export const attachmentsApi = {
 };
 
 export const pushApi = {
-  vapidKey: () => apiClient.get<{ publicKey: string; enabled: boolean }>("/push/vapid-public-key"),
+  vapidKey: () =>
+    apiClient.get<{ publicKey: string; enabled: boolean; mobileEnabled: boolean }>("/push/vapid-public-key"),
   subscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
     apiClient.post<{ subscribed: boolean }>("/push/subscribe", sub),
   unsubscribe: (endpoint: string) => apiClient.post<{ unsubscribed: boolean }>("/push/unsubscribe", { endpoint }),
+  // Mobile app: Firebase registration token instead of a browser endpoint.
+  registerDevice: (token: string, platform: "android" | "ios") =>
+    apiClient.post<{ registered: boolean }>("/push/device", { token, platform }),
+  unregisterDevice: (token: string) =>
+    apiClient.post<{ unregistered: boolean }>("/push/device/unregister", { token }),
 };
 
 export const favoritesApi = {

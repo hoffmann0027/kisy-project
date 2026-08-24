@@ -2200,6 +2200,11 @@ paths:
                         properties:
                           publicKey: { type: string }
                           enabled: { type: boolean }
+                          mobileEnabled:
+                            type: boolean
+                            description: >
+                              True when Firebase credentials are configured, i.e.
+                              the packaged mobile app can receive pushes.
         '401': { $ref: '#/components/responses/Unauthorized' }
   /push/subscribe:
     post:
@@ -2234,6 +2239,41 @@ paths:
             schema: { type: object, required: [endpoint], properties: { endpoint: { type: string } } }
       responses:
         '200': { description: Unsubscribed, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /push/device:
+    post:
+      tags: [notifications]
+      summary: Register this phone's FCM token
+      description: >
+        Called by the packaged mobile app after Firebase hands it a
+        registration token. Re-registering the same token rebinds it to the
+        current user, so a shared phone never delivers to the previous account.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string, maxLength: 1024 }
+                platform: { type: string, enum: [android, ios], default: android }
+      responses:
+        '200': { description: Registered, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /push/device/unregister:
+    post:
+      tags: [notifications]
+      summary: Forget a phone's FCM token (sign-out)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [token], properties: { token: { type: string, maxLength: 1024 } } }
+      responses:
+        '200': { description: Unregistered, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   /ws:

@@ -1,0 +1,124 @@
+# Builds a SIGNED release of the Android app: an .aab to upload to Google Play
+# and an .apk for direct installation.
+#
+# Prerequisites, all stored as repository secrets (see docs/android.md):
+#   ANDROID_KEYSTORE_BASE64    — the upload keystore, base64-encoded
+#   ANDROID_KEYSTORE_PASSWORD  — its store password
+#   ANDROID_KEY_ALIAS          — the key alias inside the keystore
+#   ANDROID_KEY_PASSWORD       — the key password (optional if same as store)
+#   GOOGLE_SERVICES_JSON       — Firebase config, base64 (optional; no push without it)
+#
+# The keystore is the app's identity on Play: lose it and the listing can never
+# be updated again. Back it up outside GitHub as well.
+name: Android release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: "Version shown to users (e.g. 1.0.0)"
+        required: true
+        default: "1.0.0"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # Capacitor 8 needs JDK 21.
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Check the signing secrets are present
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          missing=""
+          [ -n "$KEYSTORE" ] || missing="$missing ANDROID_KEYSTORE_BASE64"
+          [ -n "$STORE_PASSWORD" ] || missing="$missing ANDROID_KEYSTORE_PASSWORD"
+          [ -n "$KEY_ALIAS" ] || missing="$missing ANDROID_KEY_ALIAS"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing — see docs/android.md" >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build the web bundle
+        env:
+          # Baked into the bundle: the native app is cross-origin, so it needs
+          # the absolute API origin (relative paths would hit the WebView).
+          VITE_NATIVE_API_ORIGIN: ${{ vars.NATIVE_API_ORIGIN || 'https://kisy.onrender.com' }}
+        run: npm run build
+
+      - name: Add the Firebase config
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -z "$GOOGLE_SERVICES_JSON" ]; then
+            echo "::warning::GOOGLE_SERVICES_JSON is not set — this build cannot receive push notifications"
+            exit 0
+          fi
+          printf '%s' "$GOOGLE_SERVICES_JSON" | base64 -d > android/app/google-services.json
+          # Fail loudly rather than shipping a build with a mangled config.
+          node -e "JSON.parse(require('fs').readFileSync('android/app/google-services.json','utf8'))"
+
+      - name: Sync the bundle into the Android project
+        run: npx cap sync android
+
+      - name: Unpack the upload keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+
+      - name: Build the signed bundle and APK
+        working-directory: frontend/android
+        env:
+          KISY_KEYSTORE_FILE: ${{ runner.temp }}/upload.jks
+          KISY_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KISY_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KISY_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          # Play refuses a versionCode it has seen before; the run number only
+          # ever grows.
+          KISY_VERSION_CODE: ${{ github.run_number }}
+          KISY_VERSION_NAME: ${{ inputs.version_name }}
+        run: ./gradlew --no-daemon bundleRelease assembleRelease
+
+      - name: Verify the artifacts are actually signed
+        working-directory: frontend/android
+        run: |
+          apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort | tail -1)
+          "$apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk
+          # An unsigned bundle would carry no META-INF signature block.
+          unzip -l app/build/outputs/bundle/release/app-release.aab | grep -q 'META-INF/.*\.RSA\|META-INF/.*\.EC' \
+            || { echo "::error::the .aab is not signed" >&2; exit 1; }
+
+      - name: Remove the keystore from the runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/upload.jks"
+
+      - name: Upload the release artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: kisy-android-release-${{ inputs.version_name }}
+          path: |
+            frontend/android/app/build/outputs/bundle/release/*.aab
+            frontend/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 90

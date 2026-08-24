@@ -606,8 +606,18 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		return claims.UserID, true
 	})
 
-	// --- web push ---
+	// --- push (browsers over Web Push, phones over FCM) ---
 	pushSvc := push.NewService(pool, push.NewPostgresRepository(), log, cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, cfg.VAPIDSubject)
+	if len(cfg.FCMServiceAccount) > 0 {
+		fcm, err := push.NewFCM(cfg.FCMServiceAccount)
+		if err != nil {
+			// Someone deliberately configured mobile push; silently dropping
+			// every notification would be worse than refusing to start.
+			return nil, err
+		}
+		pushSvc.SetFCM(fcm)
+		log.Info("mobile push enabled", "firebase_project", fcm.ProjectID())
+	}
 	notificationsSvc.SetPusher(pushSvc)
 	pushHandler := push.NewHandler(pushSvc, func(r *http.Request) (uuid.UUID, bool) {
 		claims, ok := auth.ClaimsFromContext(r.Context())

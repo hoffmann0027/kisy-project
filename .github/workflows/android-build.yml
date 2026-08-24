@@ -3,8 +3,8 @@
 # needed, GitHub's runners already ship both.
 #
 # The debug APK is for testing on your own phone (install it directly).
-# A signed release build for Google Play is a separate step: it needs the
-# upload keystore, which must never live in the repository.
+# The signed build for Google Play is the "Android release" workflow, which
+# needs the upload keystore — see docs/android.md.
 name: Android build
 
 on:
@@ -23,16 +23,16 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       # Capacitor 8 needs JDK 21.
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
@@ -47,6 +47,19 @@ jobs:
           VITE_NATIVE_API_ORIGIN: ${{ vars.NATIVE_API_ORIGIN || 'https://kisy.onrender.com' }}
         run: npm run build
 
+      # Optional: without it the app still works, it just cannot receive push
+      # notifications (see docs/android.md).
+      - name: Add the Firebase config
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -z "$GOOGLE_SERVICES_JSON" ]; then
+            echo "::warning::GOOGLE_SERVICES_JSON is not set — this build cannot receive push notifications"
+            exit 0
+          fi
+          printf '%s' "$GOOGLE_SERVICES_JSON" | base64 -d > android/app/google-services.json
+          node -e "JSON.parse(require('fs').readFileSync('android/app/google-services.json','utf8'))"
+
       - name: Sync the bundle into the Android project
         run: npx cap sync android
 
@@ -55,7 +68,7 @@ jobs:
         working-directory: frontend/android
 
       - name: Upload APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: kisy-android-debug
           path: frontend/android/app/build/outputs/apk/debug/*.apk

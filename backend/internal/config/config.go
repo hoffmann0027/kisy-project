@@ -5,6 +5,7 @@ package config
 
 import (
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"net/url"
@@ -50,6 +51,11 @@ type Config struct {
 	VAPIDPublicKey  string
 	VAPIDPrivateKey string
 	VAPIDSubject    string
+
+	// FCMServiceAccount is a Firebase service-account key file (the raw JSON,
+	// or the same JSON base64-encoded for environments that dislike newlines).
+	// Empty disables push to the packaged mobile app.
+	FCMServiceAccount []byte
 
 	// ICE configures WebRTC connectivity for 1:1 audio calls (STUN/TURN).
 	ICE ICEConfig
@@ -270,6 +276,7 @@ func Load() (*Config, error) {
 	cfg.VAPIDPublicKey = os.Getenv("VAPID_PUBLIC_KEY")
 	cfg.VAPIDPrivateKey = os.Getenv("VAPID_PRIVATE_KEY")
 	cfg.VAPIDSubject = getEnv("VAPID_SUBJECT", "mailto:admin@kisy.local")
+	cfg.FCMServiceAccount = decodeServiceAccount(os.Getenv("FCM_SERVICE_ACCOUNT"))
 
 	// ICE / WebRTC (audio calls). All optional: with no TURN configured the
 	// client still gets STUN and works on non-symmetric NATs.
@@ -568,6 +575,25 @@ func getEnvDefault(key, fallback string) string {
 }
 
 // splitList parses a comma-separated env value into trimmed, non-empty items.
+// decodeServiceAccount accepts the Firebase key either as raw JSON or as
+// base64. Hosting dashboards mangle multi-line values often enough that the
+// encoded form is the practical one, but a pasted file should work too.
+func decodeServiceAccount(v string) []byte {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return nil
+	}
+	if strings.HasPrefix(v, "{") {
+		return []byte(v)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(v)
+	if err != nil {
+		// Hand the raw bytes on: push.NewFCM reports precisely what is wrong.
+		return []byte(v)
+	}
+	return decoded
+}
+
 func splitList(v string) []string {
 	var out []string
 	for _, part := range strings.Split(v, ",") {

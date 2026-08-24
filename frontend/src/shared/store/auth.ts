@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { authApi, usersApi } from "@shared/api/endpoints";
+import { forgetNativePushDevice } from "@shared/lib/nativePush";
 import type { User } from "@shared/api/types";
 
 type Status = "loading" | "authenticated" | "anonymous";
@@ -40,6 +41,11 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async () => {
     try {
+      // A phone must stop showing notifications for an account that is no
+      // longer signed in on it. Done first, while the session still authorises
+      // the request; the permission itself is kept, so signing back in
+      // re-registers without another prompt.
+      await forgetNativePushDevice();
       await authApi.logout();
     } finally {
       set({ user: null, status: "anonymous" });

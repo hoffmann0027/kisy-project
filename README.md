@@ -74,6 +74,9 @@ add-on'ы. Пошаговая инструкция: [docs/deploy-render.md](docs
 - [docs/developer-guide.md](docs/developer-guide.md) — архитектура и разработка.
 - [docs/security.md](docs/security.md) — модель угроз (STRIDE) и контроли.
 - [docs/devops.md](docs/devops.md) — деплой, CI/CD, мониторинг, бэкапы.
+- [docs/android.md](docs/android.md) — Android-приложение: сборка APK, push
+  через Firebase, подписанный релиз для Google Play.
+- [docs/mobile.md](docs/mobile.md) — адаптив под телефон.
 - [docs/spec](docs/spec) — исходная спецификация.
 
 ## Статус
