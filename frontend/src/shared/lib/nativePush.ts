@@ -169,14 +169,21 @@ export async function forgetNativePushDevice(): Promise<void> {
   });
 }
 
+// Guards against a second listener — a remount (StrictMode in development)
+// would otherwise navigate twice per tap.
+let navigationWired = false;
+
 /**
  * Wires the notification tap. Called once at startup; `navigate` receives the
  * in-app path the backend attached to the push.
  */
 export function initNativePushNavigation(navigate: (path: string) => void): void {
-  if (!nativePushSupported()) return;
+  if (!nativePushSupported() || navigationWired) return;
+  navigationWired = true;
   void PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
     const url = action.notification.data?.url;
-    if (typeof url === "string" && url.startsWith("/")) navigate(url);
+    // Only in-app paths. "//host" is excluded too: it looks relative but
+    // resolves to another origin.
+    if (typeof url === "string" && url.startsWith("/") && !url.startsWith("//")) navigate(url);
   });
 }

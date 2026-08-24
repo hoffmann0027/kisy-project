@@ -169,9 +169,11 @@ describe("native push", () => {
     plugin.emit("pushNotificationActionPerformed", { notification: { data: { url: "/chat/42" } } });
     expect(navigate).toHaveBeenCalledWith("/chat/42");
 
-    // A payload that is not an in-app path must not drive navigation.
+    // A payload that is not an in-app path must not drive navigation —
+    // including "//host", which looks relative but is not.
     navigate.mockClear();
     plugin.emit("pushNotificationActionPerformed", { notification: { data: { url: "https://evil.example" } } });
+    plugin.emit("pushNotificationActionPerformed", { notification: { data: { url: "//evil.example/x" } } });
     plugin.emit("pushNotificationActionPerformed", { notification: { data: {} } });
     expect(navigate).not.toHaveBeenCalled();
   });
