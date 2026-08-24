@@ -75,9 +75,15 @@ jobs:
             echo "::warning::GOOGLE_SERVICES_JSON is not set — this build cannot receive push notifications"
             exit 0
           fi
-          printf '%s' "$GOOGLE_SERVICES_JSON" | base64 -d > android/app/google-services.json
-          # Fail loudly rather than shipping a build with a mangled config.
-          node -e "JSON.parse(require('fs').readFileSync('android/app/google-services.json','utf8'))"
+          # Fail loudly, and legibly, rather than shipping a mangled config.
+          printf '%s' "$GOOGLE_SERVICES_JSON" | base64 -d > android/app/google-services.json || {
+            echo "::error::GOOGLE_SERVICES_JSON is not valid base64 — re-encode google-services.json and update the secret (docs/android.md)" >&2
+            exit 1
+          }
+          node -e "JSON.parse(require('fs').readFileSync('android/app/google-services.json','utf8'))" || {
+            echo "::error::GOOGLE_SERVICES_JSON decoded to something that is not the google-services.json file (docs/android.md)" >&2
+            exit 1
+          }
 
       - name: Sync the bundle into the Android project
         run: npx cap sync android
