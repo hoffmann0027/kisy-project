@@ -6,12 +6,12 @@ package ratelimit
 import (
 	"context"
 	"log/slog"
-	"net"
 	"net/http"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 
+	"kisy-backend/internal/platform/clientip"
 	"kisy-backend/pkg/httpresponse"
 )
 
@@ -90,9 +90,4 @@ func (l *Limiter) count(ctx context.Context, scope, key string, max int, window 
 	return c <= int64(max), true
 }
 
-func clientIP(r *http.Request) string {
-	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		return host
-	}
-	return r.RemoteAddr
-}
+func clientIP(r *http.Request) string { return clientip.From(r) }

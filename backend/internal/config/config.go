@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"net/netip"
 	"net/url"
 	"os"
 	"strconv"
@@ -45,6 +46,14 @@ type Config struct {
 	// WSAllowedOrigin restricts WebSocket handshake origins in production.
 	// Empty (development) allows any origin.
 	WSAllowedOrigin string
+
+	// TrustedProxyCIDRs lists the networks our own reverse proxies live in.
+	// Only when a hop's address falls inside one of them is its
+	// X-Forwarded-For entry believed; empty (the default) means no header is
+	// trusted at all and the TCP peer address is the client. Getting this
+	// wrong in the permissive direction lets a caller forge its own IP and
+	// escape every per-IP rate limit, so it is opt-in and explicit.
+	TrustedProxyCIDRs []string
 
 	// VAPID keys enable Web Push. When the public/private pair is empty, push
 	// is disabled. Subject is a mailto: or https: contact URL.
@@ -273,6 +282,16 @@ func Load() (*Config, error) {
 
 	cfg.WSAllowedOrigin = os.Getenv("WS_ALLOWED_ORIGIN")
 	cfg.NativeAppOrigins = splitList(getEnvDefault("NATIVE_APP_ORIGINS", "https://localhost,capacitor://localhost"))
+
+	// Validated here rather than at first use: the router would otherwise
+	// panic mid-startup on a typo, and a silently dropped prefix would mean
+	// silently trusting nobody (or, worse, the wrong hop).
+	cfg.TrustedProxyCIDRs = getEnvList("TRUSTED_PROXY_CIDRS")
+	for _, c := range cfg.TrustedProxyCIDRs {
+		if _, err := netip.ParsePrefix(c); err != nil {
+			return nil, fmt.Errorf("config: TRUSTED_PROXY_CIDRS entry %q is not a CIDR prefix (e.g. 172.16.0.0/12)", c)
+		}
+	}
 	cfg.VAPIDPublicKey = os.Getenv("VAPID_PUBLIC_KEY")
 	cfg.VAPIDPrivateKey = os.Getenv("VAPID_PRIVATE_KEY")
 	cfg.VAPIDSubject = getEnv("VAPID_SUBJECT", "mailto:admin@kisy.local")

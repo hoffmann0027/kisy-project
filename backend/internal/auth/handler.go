@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/platform/clientip"
 	"kisy-backend/internal/users"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
@@ -91,14 +91,7 @@ func (h *Handler) HashIP(ip string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func clientIP(r *http.Request) string {
-	// chi middleware.RealIP has already resolved X-Forwarded-For into
-	// RemoteAddr; it may or may not carry a port.
-	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		return host
-	}
-	return r.RemoteAddr
-}
+func clientIP(r *http.Request) string { return clientip.From(r) }
 
 type registerRequest struct {
 	InviteToken string `json:"inviteToken"`

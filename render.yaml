@@ -32,6 +32,13 @@ services:
       # domain.
       - key: WS_ALLOWED_ORIGIN
         value: https://kisy.onrender.com
+      # Render terminates TLS at its own edge and reaches this service over
+      # its internal network, so the rightmost X-Forwarded-For entry is the
+      # address that edge observed. Trusting the private ranges lets us read
+      # it; without this every visitor collapses into one rate-limit bucket.
+      # A forged leading entry is ignored — the walk is right-to-left.
+      - key: TRUSTED_PROXY_CIDRS
+        value: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
       # WebView origins of the packaged mobile apps. They authenticate with a
       # Bearer token (no cookies), so admitting the origin does not widen CSRF.
       - key: NATIVE_APP_ORIGINS

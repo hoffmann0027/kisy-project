@@ -107,6 +107,14 @@ services:
       INVITATION_TOKEN_TTL: ${INVITATION_TOKEN_TTL}
       IP_HASH_SALT: ${IP_HASH_SALT:-}
       WS_ALLOWED_ORIGIN: ${WS_ALLOWED_ORIGIN:-}
+      # Our nginx is the only hop and it lives on the compose bridge network
+      # (Docker allocates these from 172.16/12). Without this the backend sees
+      # every request as coming from nginx and all clients share one
+      # rate-limit bucket. Deliberately NOT listing 10/8 and 192.168/16: on an
+      # on-prem install the users themselves sit there, and a trusted range is
+      # skipped when walking X-Forwarded-For — their real addresses would
+      # collapse into nginx's.
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-172.16.0.0/12}
       BOOTSTRAP_CEO_USERNAME: ${BOOTSTRAP_CEO_USERNAME:-}
       BOOTSTRAP_CEO_PASSWORD: ${BOOTSTRAP_CEO_PASSWORD:-}
       STUN_URLS: ${STUN_URLS:-}

@@ -97,6 +97,8 @@ func run() error {
 		allowedOrigin: cfg.WSAllowedOrigin,
 		nativeOrigins: cfg.NativeAppOrigins,
 		webDir:        cfg.WebDir,
+
+		trustedProxyCIDRs: cfg.TrustedProxyCIDRs,
 	})
 
 	srv := &http.Server{
@@ -138,13 +140,27 @@ type routerDeps struct {
 	allowedOrigin string
 	nativeOrigins []string
 	webDir        string
+	// Networks our own reverse proxies live in; empty means no
+	// X-Forwarded-For entry is believed (see the middleware note below).
+	trustedProxyCIDRs []string
 }
 
 func newRouter(d routerDeps) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	// Client IP, in order of increasing trust. RealIP is deliberately NOT
+	// used: it honours True-Client-IP and X-Real-IP from any caller, so a
+	// request could pick its own rate-limit bucket and its own audit trail
+	// (GHSA-3fxj-6jh8-hvhx). The baseline is the TCP peer — always true, if
+	// coarse behind a proxy. Only when TRUSTED_PROXY_CIDRS names the networks
+	// our proxies actually live in does X-Forwarded-For get a say, and even
+	// then chi walks it right-to-left and stops at the first hop outside
+	// those networks. When that walk finds nothing the baseline stands.
+	r.Use(middleware.ClientIPFromRemoteAddr)
+	if len(d.trustedProxyCIDRs) > 0 {
+		r.Use(middleware.ClientIPFromXFF(d.trustedProxyCIDRs...))
+	}
 	r.Use(middleware.Recoverer)
 	r.Use(security.Headers)
 	r.Use(metrics.Middleware)
