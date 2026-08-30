@@ -351,8 +351,13 @@ func newRouter(d routerDeps) http.Handler {
 // perRouteLimits applies scoped rate limits inside /auth: login and
 // register are the brute-force targets, refresh is chattier by design.
 func perRouteLimits(l *ratelimit.Limiter) func(http.Handler) http.Handler {
-	login := l.Limit("auth-login", 10, time.Minute)
-	register := l.Limit("auth-register", 5, time.Minute)
+	// Login and register fail closed: on these two the ceiling IS the
+	// brute-force control, so a Redis outage must not turn into unlimited
+	// guesses. Refresh stays fail-open — it needs a valid refresh token
+	// already, so it is not a guessing surface, and locking people out of
+	// their sessions during an outage costs more than it buys.
+	login := l.LimitStrict("auth-login", 10, time.Minute)
+	register := l.LimitStrict("auth-register", 5, time.Minute)
 	refresh := l.Limit("auth-refresh", 60, time.Minute)
 
 	return func(next http.Handler) http.Handler {
