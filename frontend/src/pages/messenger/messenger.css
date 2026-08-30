@@ -398,7 +398,10 @@
   cursor: zoom-in;
 }
 .bubble__att-img img {
-  max-width: 280px;
+  /* Bounded by the bubble, not by a fixed number: 280px is wider than the
+     whole bubble on a 360px phone, and the picture then dragged the entire
+     conversation into a sideways scroll. */
+  max-width: min(280px, 100%);
   max-height: 320px;
   border-radius: var(--radius-md);
   display: block;
@@ -460,9 +463,12 @@
 /* --- voice messages (stage B) --- */
 .voice {
   display: flex;
+  /* Never wider than the bubble it sits in: on a narrow phone a fixed width
+     here pushed the whole conversation into a sideways scroll. */
+  max-width: 100%;
   align-items: center;
   gap: 8px;
-  min-width: 220px;
+  min-width: min(220px, 100%);
   padding: 4px 2px;
 }
 .voice__play {
@@ -486,6 +492,10 @@
 }
 .voice__wave {
   flex: 1;
+  /* Shrinkable, so a narrow bubble squeezes the bars instead of shoving the
+     duration past the edge. */
+  min-width: 0;
+  overflow: hidden;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -1110,6 +1120,47 @@
   .conv__header {
     padding-top: calc(var(--space-3) + var(--safe-top));
   }
+}
+
+/* Scroll bars: quiet by default. --scroll-thumb is declared by every theme
+   and was never consumed, so the browser drew its own heavy bar — which on
+   the phone reads as a stray UI element sitting on top of the chat. */
+.conv__scroll,
+.chatlist__scroll,
+.cpanel__body,
+.hub__scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
+.conv__scroll::-webkit-scrollbar,
+.chatlist__scroll::-webkit-scrollbar,
+.cpanel__body::-webkit-scrollbar,
+.hub__scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.conv__scroll::-webkit-scrollbar-thumb,
+.chatlist__scroll::-webkit-scrollbar-thumb,
+.cpanel__body::-webkit-scrollbar-thumb,
+.hub__scroll::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 999px;
+}
+.conv__scroll::-webkit-scrollbar-track,
+.chatlist__scroll::-webkit-scrollbar-track,
+.cpanel__body::-webkit-scrollbar-track,
+.hub__scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Secondary header controls. display:contents means the wrapper adds no box
+   of its own, so on desktop the buttons lay out exactly as if it were not
+   there; the phone rules below turn it into a panel. */
+.conv__actions {
+  display: contents;
+}
+.conv__more {
+  display: none;
 }
 
 /* --- context panel: Медиа / Файлы / Ссылки (stage C) --- */
@@ -2321,32 +2372,83 @@
     flex: none;
   }
 
-  /* The header keeps only what identifies the chat on its first line — back,
-     avatar, name, call — and drops the secondary keys onto a second line.
-     Otherwise four 44px keys leave the name ~50px on a 375px screen. ::after
-     is a forced flex break between the two orders; browsers without :has()
-     fall back to the old single crowded row. */
+  .conv__scroll,
+  .chatlist__scroll,
+  .cpanel__body,
+  .hub__scroll {
+    scrollbar-width: none;
+  }
+  .conv__scroll::-webkit-scrollbar,
+  .chatlist__scroll::-webkit-scrollbar,
+  .cpanel__body::-webkit-scrollbar,
+  .hub__scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* One row, always: back, avatar, name, call, "…". The secondary controls
+     live in the panel below instead — six 44px keys plus the name never fit
+     360px, and giving them a second row ate a fifth of a landscape screen. */
+  .conv__actions {
+    display: none;
+  }
+  .conv__actions--open {
+    display: flex;
+    gap: 6px;
+    position: absolute;
+    top: calc(100% - 4px);
+    right: 12px;
+    z-index: 30;
+    padding: 6px;
+    border-radius: 14px;
+    background: var(--overlay-bg);
+    /* 94% alpha alone is not enough over a bright bubble — blur what is
+       behind so the controls stay readable. */
+    backdrop-filter: blur(var(--blur-glass));
+    -webkit-backdrop-filter: blur(var(--blur-glass));
+    border: 1px solid var(--panel-brd);
+    box-shadow: var(--elev-shadow);
+    animation: kisy-rise 0.16s ease-out;
+  }
+  .mutemenu__dropdown {
+    backdrop-filter: blur(var(--blur-glass));
+    -webkit-backdrop-filter: blur(var(--blur-glass));
+  }
+  .conv__more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid var(--divider);
+    border-radius: 12px;
+    background: var(--field-bg);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .conv__more--active {
+    background: var(--acc-soft);
+    color: var(--acc);
+  }
+  /* The panel is positioned against the header. */
   .conv__header {
+    position: relative;
+  }
+  /* Only the group screen wraps: its section tabs are navigation, not chrome,
+     and need their own line. The empty ::after is a forced flex break between
+     the header keys (order 0) and the tab row (order 2). A private chat has no
+     .group-tabs, stays nowrap, and is exactly one row — which is the point of
+     moving its secondary keys into the "…" panel. */
+  .conv__header:has(.group-tabs) {
     flex-wrap: wrap;
     row-gap: 10px;
   }
-  .conv__header::after {
+  .conv__header:has(.group-tabs)::after {
     content: "";
     order: 1;
     flex: 0 0 100%;
     height: 0;
-  }
-  /* Private chat: timer, mute and media form a right-aligned strip below
-     (the ::before is the spacer that pushes them to the edge). */
-  .conv__header:not(:has(.group-tabs))::before {
-    content: "";
-    order: 2;
-    flex: 1 1 auto;
-    height: 0;
-  }
-  .conv__header:not(:has(.group-tabs)) .mutemenu,
-  .conv__header:not(:has(.group-tabs)) .conv__panel-toggle {
-    order: 3;
   }
   .group-tabs {
     order: 2;
@@ -2357,11 +2459,6 @@
   }
   .group-tabs::-webkit-scrollbar {
     display: none;
-  }
-  .conv__header:has(.group-tabs) .conv__panel-toggle {
-    order: 3;
-    /* Sections on the left, the media key on the right edge. */
-    margin-left: auto;
   }
   .group-tabs .group-tab {
     flex: none;

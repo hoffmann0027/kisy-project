@@ -85,6 +85,8 @@ export function Conversation({ target, headerActions, readOnly }: Props) {
 
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  // Phone only: the "…" panel holding the secondary header controls.
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [viewer, setViewer] = useState<{ items: MediaViewerItem[]; index: number } | null>(null);
   // Reply jump (stage F): the message briefly highlighted after a jump.
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -345,6 +347,7 @@ export function Conversation({ target, headerActions, readOnly }: Props) {
 
   let lastDay = "";
 
+
   return (
     <section className="conv">
       <header className="conv__header">
@@ -381,18 +384,37 @@ export function Conversation({ target, headerActions, readOnly }: Props) {
             <Icon.Phone size={20} />
           </button>
         )}
-        <DisappearMenu chatType={chatType} chatId={chatId} />
-        <MuteMenu chatType={chatType} chatId={chatId} />
+        {/* Timer, mute and the media panel. On desktop this wrapper is
+            display:contents, so the buttons sit in the header row exactly as
+            before; on a phone they collapse behind the "…" key — six 44px
+            controls plus the name do not fit 360px, and the previous fix
+            (a second header row) cost too much of a short screen. */}
+        <div className={cn("conv__actions", actionsOpen && "conv__actions--open")}>
+          <DisappearMenu chatType={chatType} chatId={chatId} />
+          <MuteMenu chatType={chatType} chatId={chatId} />
+          <button
+            className={cn("conv__panel-toggle", panelOpen && "conv__panel-toggle--active")}
+            title="Медиа, файлы и ссылки"
+            onClick={() => {
+              setPanelOpen((v) => !v);
+              setActionsOpen(false);
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <path d="m21 15-5-5L5 21" />
+            </svg>
+          </button>
+        </div>
         <button
-          className={cn("conv__panel-toggle", panelOpen && "conv__panel-toggle--active")}
-          title="Медиа, файлы и ссылки"
-          onClick={() => setPanelOpen((v) => !v)}
+          className={cn("conv__more", actionsOpen && "conv__more--active")}
+          title="Ещё"
+          aria-label="Ещё"
+          aria-expanded={actionsOpen}
+          onClick={() => setActionsOpen((v) => !v)}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <circle cx="8.5" cy="8.5" r="1.5" />
-            <path d="m21 15-5-5L5 21" />
-          </svg>
+          <Icon.Dots size={20} />
         </button>
         {headerActions}
       </header>

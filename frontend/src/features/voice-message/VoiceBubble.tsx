@@ -79,9 +79,14 @@ export function VoiceBubble({ attachment, mine }: Props) {
         {unlistened && <span className="voice__dot" title="Не прослушано" />}
       </div>
 
-      <button className="voice__rate" onClick={cycleRate} title="Скорость воспроизведения">
-        ×{rate}
-      </button>
+      {/* Speed belongs to playback, so it appears only on the note actually
+          loaded. Shown on every bubble it pushed the row past the screen edge
+          on a 360px phone and just sat there being clipped. */}
+      {isActive && (
+        <button className="voice__rate" onClick={cycleRate} title="Скорость воспроизведения">
+          ×{rate}
+        </button>
+      )}
     </div>
   );
 }
