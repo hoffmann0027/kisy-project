@@ -184,6 +184,11 @@
 }
 
 /* group tabs in the conversation header */
+.group-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
 .group-tab {
   display: inline-flex;
   align-items: center;
@@ -240,13 +245,21 @@
   flex: 1;
   min-width: 0;
 }
+/* Both lines stay on one line and truncate: a long group name must not push
+   the header's keys off the row (or wrap it into three lines on a phone). */
 .conv__title {
   font-weight: 640;
   font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .conv__status {
   font-size: 13px;
   color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .conv__status--online {
   color: var(--color-success);
@@ -2263,7 +2276,9 @@
   }
 
   .conv__header {
-    gap: 10px;
+    /* 8px between the keys: on 375px every pixel here is a pixel the group
+       name does not get. */
+    gap: 8px;
     padding: calc(4px + var(--safe-top)) 12px 12px;
     background: transparent;
     backdrop-filter: none;
@@ -2283,14 +2298,99 @@
     font-size: 12px;
     color: var(--dim);
   }
-  /* Header keys (call, menu) match the Messages header. */
-  .conv__call {
-    width: 36px;
-    height: 36px;
+  /* Header keys (call, timer, mute, media): the handoff draws them 36px, but
+     docs/mobile.md requires ≥44px tap targets on a phone and call.css already
+     enlarges the call key — so the whole row is 44px and merely borrows the
+     handoff's chrome. */
+  .conv__call,
+  .conv__panel-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    padding: 0;
     border-radius: 12px;
     background: var(--field-bg);
     border: 1px solid var(--divider);
     color: var(--ink);
+  }
+  .conv__header .ui-avatar {
+    flex: none;
+  }
+
+  /* The header keeps only what identifies the chat on its first line — back,
+     avatar, name, call — and drops the secondary keys onto a second line.
+     Otherwise four 44px keys leave the name ~50px on a 375px screen. ::after
+     is a forced flex break between the two orders; browsers without :has()
+     fall back to the old single crowded row. */
+  .conv__header {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+  .conv__header::after {
+    content: "";
+    order: 1;
+    flex: 0 0 100%;
+    height: 0;
+  }
+  /* Private chat: timer, mute and media form a right-aligned strip below
+     (the ::before is the spacer that pushes them to the edge). */
+  .conv__header:not(:has(.group-tabs))::before {
+    content: "";
+    order: 2;
+    flex: 1 1 auto;
+    height: 0;
+  }
+  .conv__header:not(:has(.group-tabs)) .mutemenu,
+  .conv__header:not(:has(.group-tabs)) .conv__panel-toggle {
+    order: 3;
+  }
+  .group-tabs {
+    order: 2;
+    min-width: 0;
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .group-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .conv__header:has(.group-tabs) .conv__panel-toggle {
+    order: 3;
+    /* Sections on the left, the media key on the right edge. */
+    margin-left: auto;
+  }
+  .group-tabs .group-tab {
+    flex: none;
+    height: 34px;
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 500;
+    background: var(--field-bg);
+    border-color: var(--divider);
+    color: var(--dim);
+  }
+  /* Text-only chips: the icons would cost the row its last free pixels. */
+  .group-tabs .group-tab svg {
+    display: none;
+  }
+  /* …except the members key, which is icon-only. */
+  .group-tabs .group-tab:last-child {
+    width: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+  .group-tabs .group-tab:last-child svg {
+    display: block;
+  }
+  .group-tabs .group-tab--active {
+    background: var(--acc-grad);
+    border-color: transparent;
+    color: #fff;
+    font-weight: 600;
+    box-shadow: 0 4px 16px rgba(124, 92, 255, 0.4);
   }
 
   .conv__scroll {

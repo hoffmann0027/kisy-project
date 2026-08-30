@@ -23,8 +23,10 @@ export function GroupView({ group }: { group: Group }) {
   // Group's clearance, shown in the header so the level is visible in-chat.
   const levelLabel = `Группа · от ${roleLabel(group.minRoleLevel)} и выше`;
 
+  // On a phone this row wraps onto its own line under the header (see
+  // .group-tabs in messenger.css), so the group name keeps the first line.
   const tabs = (
-    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+    <div className="group-tabs">
       <button
         className={cn("group-tab", tab === "chat" && "group-tab--active")}
         onClick={() => setTab("chat")}
