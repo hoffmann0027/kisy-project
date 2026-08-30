@@ -2,6 +2,7 @@
 // note stops whatever was playing, exactly like TG/WA. Playback rate and the
 // listened-set persist in localStorage (non-secret UI state).
 import { create } from "zustand";
+import { isObjectUrl, mediaSrcSync, resolveMediaSrc } from "@shared/lib/mediaSrc";
 
 export type PlaybackRate = 1 | 1.5 | 2;
 
@@ -39,6 +40,9 @@ interface VoicePlayerState {
 
 // Lazy singleton — created on first playback, reused forever.
 let audio: HTMLAudioElement | null = null;
+// Blob URL backing the note currently loaded, when the shell had to fetch the
+// bytes itself; revoked as soon as another note takes over.
+let currentObjectUrl: string | null = null;
 
 function ensureAudio(get: () => VoicePlayerState, set: (p: Partial<VoicePlayerState>) => void): HTMLAudioElement {
   if (audio) return audio;
@@ -76,7 +80,12 @@ export const useVoicePlayer = create<VoicePlayerState>((set, get) => ({
     }
 
     // Switching notes: the singleton guarantees the previous one stops.
-    a.src = url;
+    // The note lives behind the authenticated API, which an <audio> element
+    // cannot reach in the mobile shell, so resolve it first (a no-op on web).
+    if (currentObjectUrl) {
+      URL.revokeObjectURL(currentObjectUrl);
+      currentObjectUrl = null;
+    }
     a.playbackRate = get().rate;
     a.currentTime = 0;
     const nextListened = listened.includes(attachmentId)
@@ -84,7 +93,27 @@ export const useVoicePlayer = create<VoicePlayerState>((set, get) => ({
       : [...listened, attachmentId].slice(-LISTENED_CAP);
     localStorage.setItem(LISTENED_KEY, JSON.stringify(nextListened));
     set({ activeId: attachmentId, progress: 0, listened: nextListened });
-    void a.play();
+
+    // Web: play in the same task as the click, or the autoplay policy may
+    // refuse it. Only the mobile shell, which has to fetch the bytes with the
+    // session token, takes the asynchronous path.
+    const direct = mediaSrcSync(url);
+    if (direct !== null) {
+      a.src = direct;
+      void a.play();
+      return;
+    }
+
+    void resolveMediaSrc(url).then((src) => {
+      // A newer note may have been started while this one resolved.
+      if (get().activeId !== attachmentId) {
+        if (isObjectUrl(src)) URL.revokeObjectURL(src);
+        return;
+      }
+      if (isObjectUrl(src)) currentObjectUrl = src;
+      a.src = src;
+      void a.play();
+    });
   },
 
   seek: (fraction) => {

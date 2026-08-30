@@ -1,3 +1,4 @@
+import { refreshSession } from "@shared/api/client";
 import { apiOrigin, isNative, loadTokens } from "@shared/lib/native";
 import type { ClientFrame, ServerEvent } from "./events";
 
@@ -15,10 +16,33 @@ class WsClient {
   private openHandlers = new Set<() => void>();
   private reconnectDelay = 1000;
   private shouldRun = false;
+  /** A socket that closed without ever opening points at a rejected handshake. */
+  private closedBeforeOpen = true;
   private queue: string[] = [];
 
   connect() {
     this.shouldRun = true;
+    this.open();
+  }
+
+  /**
+   * Reconnect immediately unless the socket is demonstrably alive.
+   *
+   * Android freezes the WebView in the background and the socket often comes
+   * back half-open: no close event fires, so the backoff loop never runs and
+   * the app sits there with stale data until it is restarted. On resume we
+   * stop trusting the old socket and dial again from a clean backoff.
+   */
+  ensureConnected() {
+    if (!this.shouldRun) return;
+    if (this.socket?.readyState === WebSocket.OPEN) return;
+    this.reconnectDelay = 1000;
+    if (this.socket) {
+      const stale = this.socket;
+      this.socket = null;
+      stale.onclose = null;
+      stale.close();
+    }
     this.open();
   }
 
@@ -31,6 +55,7 @@ class WsClient {
 
     socket.onopen = () => {
       this.reconnectDelay = 1000;
+      this.closedBeforeOpen = false;
       for (const frame of this.queue) socket.send(frame);
       this.queue = [];
       // Notify subscribers on every (re)connect so they can re-establish
@@ -49,10 +74,20 @@ class WsClient {
 
     socket.onclose = () => {
       this.socket = null;
-      if (this.shouldRun) {
-        setTimeout(() => this.open(), this.reconnectDelay);
-        this.reconnectDelay = Math.min(this.reconnectDelay * 2, 15000);
-      }
+      if (!this.shouldRun) return;
+      // The native client authenticates the handshake with the access token in
+      // the URL. Once that token expires the server refuses every reconnect,
+      // and retrying the same dead credential just walks the backoff up to 15s
+      // of silence. A handshake that never reached "open" is the signal to
+      // renew first — the next attempt then carries a fresh token.
+      const renewFirst = this.closedBeforeOpen && isNative();
+      this.closedBeforeOpen = true;
+      const delay = this.reconnectDelay;
+      this.reconnectDelay = Math.min(this.reconnectDelay * 2, 15000);
+      setTimeout(() => {
+        if (renewFirst) void refreshSession().then(() => this.open());
+        else this.open();
+      }, delay);
     };
 
     socket.onerror = () => socket.close();

@@ -1,4 +1,5 @@
 import { colorFromString, initials } from "@shared/lib/format";
+import { useMediaSrc } from "@shared/lib/mediaSrc";
 
 interface Props {
   name: string;
@@ -8,6 +9,9 @@ interface Props {
 }
 
 export function Avatar({ name, url, size = 44, presence }: Props) {
+  // Avatars are served by the API behind auth: inside the mobile shell an
+  // <img> cannot reach them on its own (see mediaSrc).
+  const src = useMediaSrc(url);
   return (
     <span
       className="ui-avatar"
@@ -15,10 +19,10 @@ export function Avatar({ name, url, size = 44, presence }: Props) {
         width: size,
         height: size,
         fontSize: size * 0.4,
-        background: url ? undefined : colorFromString(name),
+        background: src ? undefined : colorFromString(name),
       }}
     >
-      {url ? <img src={url} alt={name} /> : initials(name)}
+      {src ? <img src={src} alt={name} /> : initials(name)}
       {presence === "online" && <span className="ui-avatar__presence" />}
     </span>
   );

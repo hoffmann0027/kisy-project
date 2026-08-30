@@ -1,9 +1,51 @@
 import { ApiError, type ApiEnvelope } from "./envelope";
-import { apiOrigin, isNative, nativeAuthHeaders } from "@shared/lib/native";
+import { apiOrigin, isNative, loadTokens, nativeAuthHeaders, saveTokens, type NativeTokens } from "@shared/lib/native";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+// The access token lives 15 minutes; the refresh token 30 days. Without the
+// exchange below the app simply stopped working a quarter of an hour after
+// sign-in — every request 401ed, the bootstrap fell back to "anonymous" and
+// the user was thrown back to the password screen. The refresh call existed
+// but nothing ever invoked it.
+//
+// Renewal is reactive: a 401 triggers one refresh and one retry of the
+// original request. Concurrent 401s share a single in-flight refresh, so a
+// screen firing five queries does not spend five refresh tokens — and, since
+// refresh rotates the token, does not race itself into a reuse-detection
+// logout.
+let refreshInFlight: Promise<boolean> | null = null;
+
+export function refreshSession(): Promise<boolean> {
+  refreshInFlight ??= (async () => {
+    try {
+      const response = await fetch(`${apiOrigin()}${API_BASE_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: isNative() ? "omit" : "include",
+        headers: { "Content-Type": "application/json", ...nativeAuthHeaders() },
+        // Native holds the refresh token itself; the browser has it as an
+        // HttpOnly cookie and must send nothing.
+        body: isNative() ? JSON.stringify({ refreshToken: loadTokens()?.refreshToken ?? "" }) : undefined,
+      });
+      if (!response.ok) {
+        // The refresh token is spent or revoked: drop it so the app stops
+        // retrying with a credential the server has already rejected.
+        if (isNative()) saveTokens(null);
+        return false;
+      }
+      const envelope = (await response.json()) as ApiEnvelope<{ tokens?: NativeTokens }>;
+      if (envelope.data?.tokens) saveTokens(envelope.data.tokens);
+      return true;
+    } catch {
+      return false; // offline: keep the tokens, the next attempt may succeed
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
+}
+
+async function request<T>(path: string, init?: RequestInit, allowRefresh = true): Promise<T> {
   // In the mobile shell the API sits on another origin, so the path is
   // absolutised and the session travels as a Bearer token; in the browser both
   // helpers are no-ops and the cookie keeps doing the work.
@@ -18,6 +60,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init?.headers,
     },
   });
+
+  // An expired access token is recoverable, so spend the refresh token and
+  // replay the request once. /auth/* is excluded: a failed login must surface
+  // as a failed login, and refreshing inside refresh would recurse.
+  if (response.status === 401 && allowRefresh && !path.startsWith("/auth/")) {
+    if (await refreshSession()) return request<T>(path, init, false);
+  }
 
   // 204 or empty bodies still return a valid (empty) result.
   const text = await response.text();

@@ -1,6 +1,7 @@
 import { memo, useState } from "react";
 import { cn } from "@shared/lib/cn";
 import { formatTime } from "@shared/lib/format";
+import { ApiImage } from "@shared/ui/ApiImage";
 import { Icon } from "@shared/ui/icons";
 import { EmojiPicker } from "@shared/ui";
 import { VoiceBubble } from "@features/voice-message/VoiceBubble";
@@ -265,7 +266,7 @@ export const MessageBubble = memo(function MessageBubble({
                 <VoiceBubble key={a.id} attachment={a} mine={mine} />
               ) : a.isImage ? (
                 <button key={a.id} className="bubble__att-img" onClick={() => onOpenImage(a)} title={a.fileName}>
-                  <img src={a.url} alt={a.fileName} loading="lazy" />
+                  <ApiImage src={a.url} alt={a.fileName} loading="lazy" />
                 </button>
               ) : (
                 <a key={a.id} href={a.url} target="_blank" rel="noreferrer" className="bubble__att-file" download={a.fileName}>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@shared/lib/cn";
+import { ApiImage } from "@shared/ui/ApiImage";
 import { Icon } from "@shared/ui/icons";
 import { EmojiPicker, IconButton, toast } from "@shared/ui";
 import type { Attachment, Message } from "@shared/api/types";
@@ -249,7 +250,7 @@ export function Composer({
           {attachments.map((a) => (
             <div key={a.id} className="composer__chip">
               {a.isImage ? (
-                <img src={a.url} alt="" className="composer__chip-img" />
+                <ApiImage src={a.url} alt="" className="composer__chip-img" />
               ) : (
                 <span className="composer__chip-type">{fileTypeLabel(a.fileName)}</span>
               )}

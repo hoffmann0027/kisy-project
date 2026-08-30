@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { cn } from "@shared/lib/cn";
 import { Button } from "@shared/ui";
+import { ApiImage } from "@shared/ui/ApiImage";
 import { Icon } from "@shared/ui/icons";
 import { formatBytes, fileTypeLabel } from "@entities/attachment/upload";
 import { useChatLinks, useChatMedia } from "@entities/chatmedia/queries";
@@ -84,7 +85,7 @@ export function ChatPanel({ chatType, chatId, onClose, onOpenMedia }: Props) {
                   onClick={() => onOpenMedia(mediaItems, i)}
                   title={it.attachment.fileName}
                 >
-                  <img src={it.attachment.url} alt={it.attachment.fileName} loading="lazy" />
+                  <ApiImage src={it.attachment.url} alt={it.attachment.fileName} loading="lazy" />
                 </button>
               ))}
             </div>

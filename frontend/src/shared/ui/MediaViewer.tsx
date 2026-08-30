@@ -3,6 +3,7 @@
 // images no longer open in a new tab.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@shared/lib/cn";
+import { ApiImage } from "./ApiImage";
 
 export interface MediaViewerItem {
   id: string;
@@ -104,7 +105,7 @@ export function MediaViewer({ items, index, onClose, onIndexChange }: Props) {
           ‹
         </button>
       )}
-      <img
+      <ApiImage
         className={cn("mviewer__img", zoomed && "mviewer__img--zoomed")}
         src={item.url}
         alt={item.fileName}

@@ -84,6 +84,18 @@ export function useRealtime() {
     });
     resubscribe();
 
+    // Returning from the background is its own kind of reconnect: the socket
+    // may be half-open (no close event, so no backfill) and everything on
+    // screen can be minutes stale. Ask for a live socket and refetch — this is
+    // what made the phone need a restart to show anything new.
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      wsClient.ensureConnected();
+      void qc.invalidateQueries({ queryKey: ["messages"] });
+      void qc.invalidateQueries({ queryKey: chatKeys.list });
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
     const unsub = wsClient.subscribe((ev: ServerEvent) => {
       switch (ev.event) {
         case "message.created":
@@ -199,6 +211,7 @@ export function useRealtime() {
     return () => {
       unsub();
       unsubOpen();
+      document.removeEventListener("visibilitychange", onVisible);
       window.clearInterval(sweepTimer);
       wsClient.disconnect();
     };
