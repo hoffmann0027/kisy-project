@@ -146,7 +146,7 @@
   cursor: default;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-height: 500px) {
   /* Bigger tap target for the header call button. */
   .conv__call {
     width: 44px;

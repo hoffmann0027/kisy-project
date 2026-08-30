@@ -103,7 +103,7 @@
 }
 
 /* --- Narrow screens --- */
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-height: 500px) {
   .admin {
     padding: var(--space-4);
     gap: var(--space-3);

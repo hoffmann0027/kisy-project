@@ -1029,7 +1029,7 @@
 }
 
 /* --- Mobile layout (single column, bottom nav) --- */
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-height: 500px) {
   .msgr,
   .msgr--with-panel {
     grid-template-columns: 1fr;
@@ -1104,7 +1104,8 @@
    bar/notch, so the top-most header has to pad by the top inset itself. In a
    normal browser tab the browser chrome already offsets the page and the
    inset is 0, so this block changes nothing there. */
-@media (display-mode: standalone) and (max-width: 760px) {
+@media (display-mode: standalone) and (max-width: 760px),
+  (display-mode: standalone) and (max-height: 500px) {
   .chatlist__header,
   .conv__header {
     padding-top: calc(var(--space-3) + var(--safe-top));
@@ -2149,7 +2150,7 @@
    The phone gets a flat, full-bleed list on the app underlay instead of the
    floating glass panel the desktop uses. Everything here is inside the 760px
    break, so the desktop layout is untouched. */
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-height: 500px) {
   .chatlist,
   .conv,
   .ui-empty {
@@ -2268,7 +2269,7 @@
 }
 
 /* ===== Mobile redesign: Chat screen (design_handoff_kisy_mobile §4) ===== */
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-height: 500px) {
   /* The chat fills the screen: the tab bar hides itself on this route, so the
      column reclaims the space reserved for it elsewhere. */
   .msgr--chat-open .conv {
@@ -2570,7 +2571,7 @@
 }
 
 /* ===== Mobile redesign: phone-only rules for the blocks above ===== */
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-height: 500px) {
   .chatskel {
     padding: 2px 10px 0;
   }
@@ -2742,6 +2743,19 @@
     left: auto;
     right: 0;
     width: min(300px, calc(100vw - 32px));
+  }
+}
+
+/* A landscape phone has ~412px of height: the 200x180 illustration plus its
+   margin would push the empty state's own call to action below the fold. The
+   art is decorative — the title, the hint and the button are not. */
+@media (max-height: 500px) {
+  .empty-art {
+    display: none;
+  }
+  .chatlist__empty {
+    min-height: 0;
+    padding: 16px 24px 24px;
   }
 }
 

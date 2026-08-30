@@ -588,10 +588,18 @@ textarea {
    must reserve that room. Colours stay with the theme — the phone wears
    whichever of the seven skins is selected.
 
+   The phone breakpoint is `(max-width: 760px), (max-height: 500px)` and every
+   phone-shaped block in the app repeats it verbatim — a landscape phone is
+   WIDE (≈915px) and SHORT (≈412px), so a width-only query would hand it the
+   desktop layout, whose columns then run past the bottom of a viewport that
+   does not scroll. 500px sits between a landscape phone (≤430px) and a
+   landscape tablet (≥768px). breakpoints.test.ts fails if a new block forgets
+   the second arm.
+
    Specificity note: a media query adds none, and every theme is declared as
    `:root[data-theme="…"]` (0,1,1). A bare `:root` here would lose, so the
    override matches that specificity and simply comes later in the file. */
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-height: 500px) {
   :root[data-theme] {
     --rail-h: 64px;
     --tabbar-gap: 22px;

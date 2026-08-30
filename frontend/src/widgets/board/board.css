@@ -216,7 +216,7 @@
 }
 
 /* --- Narrow screens (same 760px break as the messenger layout) --- */
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-height: 500px) {
   .board__scroll {
     padding: var(--space-3);
     gap: var(--space-2);

@@ -449,7 +449,7 @@
 
 /* On mobile the nav rail is a fixed bottom bar (see messenger.css), so give the
    rating content room above it and let the shell use the dynamic viewport. */
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-height: 500px) {
   .rating-shell {
     height: 100dvh;
     /* The rail is a fixed bottom bar on mobile, so it no longer occupies a

@@ -67,7 +67,7 @@
   text-decoration: underline;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-height: 500px) {
   .auth-screen {
     /* Centre within the space left above the keyboard, so the focused field
        stays visible instead of hiding behind it (--kb-inset is 0 otherwise). */
