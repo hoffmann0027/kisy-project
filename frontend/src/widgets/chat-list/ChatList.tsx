@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@shared/lib/cn";
 import { formatRelative } from "@shared/lib/format";
-import { Avatar, Badge, IconButton, Spinner } from "@shared/ui";
+import { Avatar, Badge, IconButton } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import { roleLabel, type Chat, type ChatType, type Group } from "@shared/api/types";
 import { useChats } from "@entities/chat/queries";
@@ -13,6 +13,9 @@ import { chatKey, folderChatSet, isArchived, useArchived, useFolders } from "@en
 import { ChatContextMenu, type MenuTarget } from "@features/chat-folders/ChatContextMenu";
 import { FolderManager } from "@features/chat-folders/FolderManager";
 import { FindGroupModal } from "@features/new-chat/FindGroupModal";
+import { useNotifications } from "@entities/notification/queries";
+import { ChatListEmpty } from "./ChatListEmpty";
+import { ChatListSkeleton } from "./ChatListSkeleton";
 import { usePresenceStore } from "@shared/store/presence";
 import { useAuthStore } from "@shared/store/auth";
 
@@ -28,8 +31,8 @@ interface Props {
   onNewGroup: () => void;
 }
 
-/** Chat-list tab: the fixed "all"/"unread" pseudo-tabs or a folder id. */
-type Tab = "all" | "unread" | string;
+/** Chat-list tab: the fixed "all"/"unread"/"mentions" pseudo-tabs or a folder id. */
+type Tab = "all" | "unread" | "mentions" | string;
 
 export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, onNewGroup, onOpenDrawer }: Props) {
   const communities = view === "communities";
@@ -43,6 +46,22 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
   const { mutedSet } = useMutes();
   const { folders } = useFolders();
   const { archivedSet } = useArchived();
+  const { data: notif } = useNotifications();
+
+  // Chats the user was @mentioned in and has not read yet — the source for the
+  // "Упоминания" filter. Mention notifications carry the chat they came from.
+  const mentionSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const n of notif?.notifications ?? []) {
+      if (n.type !== "mention" || n.isRead) continue;
+      const chatType = n.payload?.chatType;
+      const id = n.payload?.chatId;
+      if (typeof chatType === "string" && typeof id === "string") {
+        set.add(chatKey(chatType === "group" ? "group" : "private", id));
+      }
+    }
+    return set;
+  }, [notif]);
 
   const [tab, setTab] = useState<Tab>("all");
   const [showArchive, setShowArchive] = useState(false);
@@ -65,6 +84,7 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
     if (searching) return true;
     if (isArchived(archivedSet, chatType, chatId)) return false;
     if (tab === "unread") return unread > 0;
+    if (tab === "mentions") return mentionSet.has(chatKey(chatType, chatId));
     if (folderSet) return folderSet.has(chatKey(chatType, chatId));
     return true;
   };
@@ -78,7 +98,7 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
       : list;
     return byQuery.filter((c) => visible("private", c.id, c.unreadCount));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chats, q, tab, archivedSet, folderSet, searching]);
+  }, [chats, q, tab, archivedSet, folderSet, searching, mentionSet]);
 
   const filteredGroups = useMemo(() => {
     const list = groups ?? [];
@@ -86,7 +106,7 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
     // Groups have no unread counter yet — the "unread" tab is private-only.
     return byQuery.filter((g) => (tab === "unread" && !searching ? false : visible("group", g.id, 0)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groups, q, tab, archivedSet, folderSet, searching]);
+  }, [groups, q, tab, archivedSet, folderSet, searching, mentionSet]);
 
   const archivedChats = useMemo(
     () => (chats ?? []).filter((c) => isArchived(archivedSet, "private", c.id)),
@@ -161,15 +181,33 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
     );
   };
 
-  const emptyLabel = query
+  // A filtered-out list gets a one-line note; a genuinely empty account gets
+  // the full empty state with the illustration (handoff §2).
+  const filteredLabel = query
     ? "Ничего не найдено"
-    : communities
-      ? "Пока нет сообществ. Создайте группу или найдите существующую."
-      : tab === "unread"
-        ? "Нет непрочитанных чатов"
+    : tab === "unread"
+      ? "Нет непрочитанных чатов"
+      : tab === "mentions"
+        ? "Упоминаний нет"
         : activeFolder
           ? "В папке пока нет чатов. Добавьте чат через правый клик по нему."
-          : "Пока нет чатов. Начните новый диалог.";
+          : null;
+
+  const emptyState = (
+    <ChatListEmpty
+      title={communities ? "Пока нет сообществ" : "Пока нет сообщений"}
+      hint={
+        communities
+          ? "Создайте группу или найдите существующую по названию"
+          : "Начните диалог с коллегой или создайте групповой чат"
+      }
+      actionLabel={communities ? "Новая группа" : "Новый чат"}
+      onAction={communities ? onNewGroup : onNewChat}
+    />
+  );
+
+  const emptyBlock =
+    filteredLabel !== null ? <div className="chatlist__empty-note">{filteredLabel}</div> : emptyState;
 
   return (
     <aside className="chatlist">
@@ -235,6 +273,13 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
           >
             Непрочитанные
           </button>
+          <button
+            className={cn("chatlist__tab", tab === "mentions" && "chatlist__tab--active")}
+            role="tab"
+            onClick={() => setTab("mentions")}
+          >
+            Упоминания
+          </button>
           {folders.map((f) => (
             <button
               key={f.id}
@@ -249,11 +294,7 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
       )}
 
       <div className="chatlist__scroll">
-        {isPending && (
-          <div style={{ display: "flex", justifyContent: "center", padding: 24 }}>
-            <Spinner />
-          </div>
-        )}
+        {isPending && <ChatListSkeleton />}
 
         {communities && (
           <>
@@ -268,22 +309,14 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
               </button>
             </div>
             {filteredGroups.map(groupRow)}
-            {!isPending && filteredGroups.length === 0 && (
-              <div style={{ padding: 24, textAlign: "center", color: "var(--color-text-secondary)", fontSize: 14 }}>
-                {emptyLabel}
-              </div>
-            )}
+            {!isPending && filteredGroups.length === 0 && emptyBlock}
           </>
         )}
 
         {!communities && (
           <>
             {filtered.length > 0 && <div className="chatlist__section">Личные чаты</div>}
-            {!isPending && filtered.length === 0 && (
-              <div style={{ padding: 24, textAlign: "center", color: "var(--color-text-secondary)", fontSize: 14 }}>
-                {emptyLabel}
-              </div>
-            )}
+            {!isPending && filtered.length === 0 && emptyBlock}
             {filtered.map(chatRow)}
           </>
         )}

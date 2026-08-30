@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { cn } from "@shared/lib/cn";
 import { Icon } from "@shared/ui/icons";
 import { EmojiPicker, IconButton, toast } from "@shared/ui";
 import type { Attachment, Message } from "@shared/api/types";
@@ -54,6 +55,10 @@ export function Composer({
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [sendingVoice, setSendingVoice] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  // Phone layout: the formatting keys live behind the "Aa" toggle and rise
+  // above the field (handoff §4). On desktop the toolbar is always in the row
+  // and the toggle is hidden, so this flag has no effect there.
+  const [fmtOpen, setFmtOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const { data: limit } = useUploadLimit();
   const recorder = useVoiceRecorder();
@@ -130,6 +135,7 @@ export function Composer({
     setAttachments([]);
     clearDraft(dKey);
     onClearReply();
+    setFmtOpen(false);
     typingSent.current = false;
     wsClient.send({ type: "typing.stop", data: { chatType, chatId } });
   };
@@ -317,7 +323,11 @@ export function Composer({
           <IconButton label="Прикрепить файл" onClick={() => fileRef.current?.click()}>
             <Icon.Paperclip size={20} />
           </IconButton>
-          <div className="composer__format" role="toolbar" aria-label="Форматирование">
+          <div
+            className={cn("composer__format", fmtOpen && "composer__format--open")}
+            role="toolbar"
+            aria-label="Форматирование"
+          >
             <button className="composer__fmt" title="Жирный (Ctrl+B)" onClick={() => wrapSelection("**")}>
               <b>B</b>
             </button>
@@ -344,24 +354,36 @@ export function Composer({
               )}
             </div>
           </div>
-          <textarea
-            ref={areaRef}
-            className="composer__input"
-            placeholder="Написать сообщение…"
-            rows={1}
-            value={text}
-            onChange={(e) => {
-              updateText(e.target.value);
-              signalTyping();
-            }}
-            onKeyDown={(e) => {
-              if (onFormatKey(e)) return;
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                submit();
-              }
-            }}
-          />
+          <div className="composer__field">
+            <textarea
+              ref={areaRef}
+              className="composer__input"
+              placeholder="Написать сообщение…"
+              rows={1}
+              value={text}
+              onChange={(e) => {
+                updateText(e.target.value);
+                signalTyping();
+              }}
+              onKeyDown={(e) => {
+                if (onFormatKey(e)) return;
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  submit();
+                }
+              }}
+            />
+            {/* Phone only (CSS hides it on desktop): opens the formatting keys. */}
+            <button
+              type="button"
+              className={cn("composer__aa", fmtOpen && "composer__aa--on")}
+              aria-label="Форматирование"
+              aria-pressed={fmtOpen}
+              onClick={() => setFmtOpen((v) => !v)}
+            >
+              Aa
+            </button>
+          </div>
           {onSchedule && (text.trim() || attachments.length > 0) && (
             <div className="composer__schedule-wrap">
               <button

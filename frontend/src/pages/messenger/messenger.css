@@ -267,13 +267,15 @@
 }
 .conv__day {
   align-self: center;
+  /* Also centres inside a plain block parent (the group view's message list). */
+  width: fit-content;
   font-size: 12px;
   color: var(--dim);
   background: var(--chip-bg);
   border: 1px solid var(--divider);
   padding: 4px 12px;
   border-radius: var(--radius-round);
-  margin: var(--space-3) 0;
+  margin: var(--space-3) auto;
 }
 
 /* --- Message bubble --- */
@@ -2328,5 +2330,322 @@
     background: var(--field-bg);
     border: 1px solid var(--divider);
     font-size: 15px;
+  }
+  /* Send and mic are the same accent circle here (§4), glow included. */
+  .composer__send,
+  .composer__send--mic {
+    box-shadow: 0 6px 22px rgba(124, 92, 255, 0.45);
+  }
+  /* The day separator is centred even when its parent is not a flex column. */
+  .conv__day {
+    padding: 5px 12px;
+  }
+}
+
+/* ===== Mobile redesign: loading, empty state, formatting panel =====
+   (design_handoff_kisy_mobile §2–§4). The animations below are the three the
+   handoff defines; they are disabled under prefers-reduced-motion at the end
+   of this file. */
+@keyframes kisy-shimmer {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+@keyframes kisy-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+@keyframes kisy-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- chat-list skeleton (replaces the spinner; no spinners anywhere) --- */
+.chatskel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 6px 0;
+}
+.chatskel__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  animation: kisy-shimmer 1.6s ease-in-out infinite;
+}
+.chatskel__avatar {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-round);
+  background: var(--hover);
+}
+.chatskel__lines {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chatskel__line {
+  border-radius: 6px;
+}
+.chatskel__line--name {
+  height: 11px;
+  width: 44%;
+  background: var(--hover);
+}
+.chatskel__line--preview {
+  height: 9px;
+  width: 72%;
+  background: var(--field-bg);
+}
+
+/* --- empty state --- */
+.chatlist__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 32px 24px 40px;
+}
+/* A filtered-out list (search, unread, mentions, folder) keeps the plain note. */
+.chatlist__empty-note {
+  padding: 24px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+.chatlist__empty-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 8px;
+}
+.chatlist__empty-hint {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--dim);
+  text-wrap: pretty;
+  margin: 0 0 24px;
+  max-width: 320px;
+}
+/* The 3D composition is a phone element: on desktop only the text block
+   remains (the desktop panels keep their existing plain look). */
+.empty-art {
+  display: none;
+}
+.empty-art__img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* --- composer: field wrapper for the phone "Aa" key --- */
+.composer__field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  position: relative;
+}
+.composer__aa {
+  display: none;
+}
+
+/* ===== Mobile redesign: phone-only rules for the blocks above ===== */
+@media (max-width: 760px) {
+  .chatskel {
+    padding: 2px 10px 0;
+  }
+  .chatskel__avatar {
+    width: 48px;
+    height: 48px;
+  }
+
+  .chatlist__empty {
+    min-height: 55dvh;
+    padding: 0 40px 90px;
+  }
+  /* 200 × 180 box: the final render drops in as <img>, the CSS composition
+     below is the fallback while the artwork is missing. */
+  .empty-art {
+    display: block;
+    position: relative;
+    width: 200px;
+    height: 180px;
+    margin-bottom: 26px;
+    animation: kisy-float 6s ease-in-out infinite;
+  }
+  .empty-art__orbit {
+    position: absolute;
+    left: 50%;
+    top: 52%;
+    transform: translate(-50%, -50%);
+    width: 170px;
+    height: 60px;
+    border-radius: 50%;
+    border: 2px solid rgba(138, 107, 255, 0.45);
+    box-shadow: 0 0 30px rgba(124, 92, 255, 0.45);
+  }
+  .empty-art__ball {
+    position: absolute;
+    border-radius: 50%;
+  }
+  .empty-art__ball--lg {
+    left: 38px;
+    top: 16px;
+    width: 112px;
+    height: 112px;
+    background: radial-gradient(circle at 32% 26%, #d8c9ff 0%, #9e80ff 32%, #6b49e8 62%, #3a2394 100%);
+    box-shadow: 0 0 70px rgba(124, 92, 255, 0.5);
+  }
+  .empty-art__ball--md {
+    left: 104px;
+    top: 56px;
+    width: 72px;
+    height: 72px;
+    opacity: 0.92;
+    background: radial-gradient(circle at 34% 28%, #eadfff 0%, #a98bff 40%, #5b3fe0 100%);
+    box-shadow: 0 0 40px rgba(124, 92, 255, 0.4);
+  }
+  .empty-art__ball--sm {
+    left: 74px;
+    top: 96px;
+    width: 52px;
+    height: 52px;
+    background: radial-gradient(circle at 34% 30%, #ffe0ae 0%, #ff9b45 45%, #e63e1f 100%);
+    box-shadow: 0 0 44px rgba(255, 106, 42, 0.55);
+  }
+  .empty-art__shadow {
+    position: absolute;
+    left: 50%;
+    bottom: 6px;
+    transform: translateX(-50%);
+    width: 150px;
+    height: 22px;
+    background: radial-gradient(50% 50% at 50% 50%, rgba(124, 92, 255, 0.35), rgba(11, 12, 20, 0) 70%);
+  }
+  .chatlist__empty-cta {
+    height: 48px;
+    padding: 0 26px;
+    font-size: 15px;
+    font-weight: 590;
+    box-shadow: 0 8px 28px rgba(124, 92, 255, 0.35);
+  }
+
+  /* The formatting keys hide behind "Aa" and rise above the field: the open
+     panel is a full-width line of the composer's own flex row (order: -1), so
+     it sits above the field in normal flow instead of overlaying it. */
+  .composer {
+    flex-wrap: wrap;
+  }
+  .composer__field {
+    min-height: 44px;
+    padding-right: 6px;
+    border-radius: 14px;
+    background: var(--field-bg);
+    border: 1px solid var(--divider);
+  }
+  .composer__field:focus-within {
+    border-color: var(--acc);
+  }
+  /* The field chrome moved to the wrapper, so the textarea itself is bare. */
+  .composer__input {
+    min-height: 0;
+    padding: 11px 0 11px 14px;
+    background: none;
+    border: none;
+    border-radius: 0;
+  }
+  .composer__input:focus {
+    border-color: transparent;
+  }
+  .composer__aa {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 38px;
+    height: 34px;
+    margin-bottom: 4px;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--dim2);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .composer__aa--on {
+    background: var(--acc-soft);
+    color: var(--acc);
+  }
+  .composer__format {
+    display: none;
+  }
+  .composer__format--open {
+    display: flex;
+    order: -1;
+    /* +2px on each side over the composer's own 14px padding = 16px margins. */
+    flex: 0 0 calc(100% - 4px);
+    margin: 0 2px 8px;
+    gap: 4px;
+    padding: 6px;
+    border-radius: 14px;
+    /* Literal, like the composer's own background above: the phone palette is
+       the same dark violet in every theme. */
+    background: rgba(20, 20, 32, 0.9);
+    border: 1px solid var(--divider);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+    animation: kisy-rise 0.18s ease-out;
+  }
+  .composer__format--open .composer__fmt,
+  .composer__format--open .composer__emoji-wrap {
+    flex: 1;
+  }
+  .composer__format--open .composer__fmt {
+    width: auto;
+    height: 38px;
+    border-radius: 10px;
+    background: var(--field-bg);
+    font-size: 15px;
+  }
+  /* The emoji key now sits at the right edge of the panel: pin its picker to
+     that edge and let it shrink so it cannot run off the screen. */
+  .composer__format--open .emojipick {
+    left: auto;
+    right: 0;
+    width: min(300px, calc(100vw - 32px));
+  }
+}
+
+/* The two infinite animations must not run when the user asks for less
+   motion; the one-shot rise is stopped too, like the drawer's. */
+@media (prefers-reduced-motion: reduce) {
+  .empty-art,
+  .chatskel__row,
+  .composer__format--open {
+    animation: none;
+  }
+  .chatskel__row {
+    opacity: 0.55;
   }
 }

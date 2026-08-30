@@ -539,6 +539,28 @@ textarea {
         rgba(11, 12, 20, 0) 70%),
       #0b0c14;
 
+    /* Chrome tokens the redesign paints dark on the phone in every theme.
+       Without them a light desktop theme (glass is the default) leaks white
+       surfaces into the phone: modal sheets, day chips, the mic key. */
+    --side-bg: rgba(11, 12, 20, 0.6);
+    --conv-bg: transparent;
+    --head-bg: rgba(11, 12, 20, 0.7);
+    --overlay-bg: rgba(20, 20, 32, 0.94);
+    --panel-brd: rgba(255, 255, 255, 0.08);
+    --chip-bg: rgba(255, 255, 255, 0.04);
+    --scroll-thumb: rgba(255, 255, 255, 0.18);
+
+    /* Physical keys flatten out: on the phone they are the same soft glass
+       tiles as the fields. Send and mic both carry the accent gradient. */
+    --key-bg: rgba(255, 255, 255, 0.04);
+    --key-ink: #f2f2f7;
+    --key-sh: none;
+    --send-bg: linear-gradient(180deg, #8a6bff, #5b3fe0);
+    --mic-bg: linear-gradient(180deg, #8a6bff, #5b3fe0);
+    --klogo-bg: linear-gradient(180deg, #8a6bff, #5b3fe0);
+    --bubin-sh: none;
+    --bubout-sh: 0 6px 22px rgba(124, 92, 255, 0.32);
+
     /* The rail becomes a floating capsule (64px) that clears the bottom edge;
        scrolling columns must reserve that room. */
     --rail-h: 64px;
