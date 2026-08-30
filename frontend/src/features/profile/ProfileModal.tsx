@@ -167,14 +167,17 @@ export function ProfileModal({ open, onClose }: Props) {
 
 // Theme switcher (design handoff): a physical rotary knob ("manettino")
 // centered between two columns of labels. The indicator rests at 3 o'clock and
-// the knob rotates to point at the active label — the left column (Стекло /
-// Luce / Аврора) is pointed at by rotating left, the right column (Cyber /
-// Windows 95 / Matrix) by rotating right. Clicking the knob cycles through all
-// six; clicking a label selects it directly.
+// the knob rotates to point at the active label — the left column (Орбита /
+// Стекло / Luce / Аврора) is pointed at by rotating left, the right column
+// (Cyber / Windows 95 / Matrix) by rotating right. Clicking the knob cycles
+// through all seven; clicking a label selects it directly. The angles follow
+// the label rows, so the left column's four seats sit closer together than the
+// right column's three.
 type ThemeOption = { id: Theme; label: string; angle: number; col: "left" | "right" };
 const THEME_OPTIONS: ThemeOption[] = [
-  { id: "glass", label: "Стекло", angle: -150, col: "left" },
-  { id: "luce", label: "Luce", angle: 180, col: "left" },
+  { id: "orbit", label: "Орбита", angle: -150, col: "left" },
+  { id: "glass", label: "Стекло", angle: -170, col: "left" },
+  { id: "luce", label: "Luce", angle: 170, col: "left" },
   { id: "aurora", label: "Аврора", angle: 150, col: "left" },
   { id: "cyber", label: "Cyber", angle: -30, col: "right" },
   { id: "xp", label: "Windows 95", angle: 0, col: "right" },

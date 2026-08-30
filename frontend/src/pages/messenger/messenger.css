@@ -2232,9 +2232,9 @@
   .chatlist__tab--active {
     background: var(--acc-grad);
     border-color: transparent;
-    color: #fff;
+    color: var(--acc-on);
     font-weight: 600;
-    box-shadow: 0 4px 16px rgba(124, 92, 255, 0.4);
+    box-shadow: var(--acc-tab-sh);
   }
 
   .chatlist__scroll {
@@ -2388,9 +2388,9 @@
   .group-tabs .group-tab--active {
     background: var(--acc-grad);
     border-color: transparent;
-    color: #fff;
+    color: var(--acc-on);
     font-weight: 600;
-    box-shadow: 0 4px 16px rgba(124, 92, 255, 0.4);
+    box-shadow: var(--acc-tab-sh);
   }
 
   .conv__scroll {
@@ -2408,7 +2408,6 @@
   }
   .bubble--out {
     border-bottom-right-radius: 6px;
-    box-shadow: 0 6px 22px rgba(124, 92, 255, 0.32);
   }
   .bubble--in {
     border-bottom-left-radius: 6px;
@@ -2420,7 +2419,7 @@
     gap: 10px;
     padding: 8px 14px calc(10px + var(--safe-bottom));
     border-top: 1px solid var(--divider);
-    background: rgba(11, 12, 20, 0.7);
+    background: var(--head-bg);
     backdrop-filter: blur(var(--blur-glass));
     -webkit-backdrop-filter: blur(var(--blur-glass));
   }
@@ -2434,7 +2433,7 @@
   /* Send and mic are the same accent circle here (§4), glow included. */
   .composer__send,
   .composer__send--mic {
-    box-shadow: 0 6px 22px rgba(124, 92, 255, 0.45);
+    box-shadow: 0 6px 22px rgb(var(--acc-rgb) / 0.45);
   }
   /* The day separator is centred even when its parent is not a flex column. */
   .conv__day {
@@ -2602,8 +2601,8 @@
     width: 170px;
     height: 60px;
     border-radius: 50%;
-    border: 2px solid rgba(138, 107, 255, 0.45);
-    box-shadow: 0 0 30px rgba(124, 92, 255, 0.45);
+    border: 2px solid rgb(var(--acc-rgb) / 0.5);
+    box-shadow: 0 0 30px rgb(var(--acc-rgb) / 0.45);
   }
   .empty-art__ball {
     position: absolute;
@@ -2614,8 +2613,14 @@
     top: 16px;
     width: 112px;
     height: 112px;
-    background: radial-gradient(circle at 32% 26%, #d8c9ff 0%, #9e80ff 32%, #6b49e8 62%, #3a2394 100%);
-    box-shadow: 0 0 70px rgba(124, 92, 255, 0.5);
+    background: radial-gradient(
+      circle at 32% 26%,
+      color-mix(in srgb, var(--acc) 25%, #fff) 0%,
+      color-mix(in srgb, var(--acc) 70%, #fff) 32%,
+      var(--acc) 62%,
+      color-mix(in srgb, var(--acc) 55%, #000) 100%
+    );
+    box-shadow: 0 0 70px rgb(var(--acc-rgb) / 0.5);
   }
   .empty-art__ball--md {
     left: 104px;
@@ -2623,8 +2628,13 @@
     width: 72px;
     height: 72px;
     opacity: 0.92;
-    background: radial-gradient(circle at 34% 28%, #eadfff 0%, #a98bff 40%, #5b3fe0 100%);
-    box-shadow: 0 0 40px rgba(124, 92, 255, 0.4);
+    background: radial-gradient(
+      circle at 34% 28%,
+      color-mix(in srgb, var(--acc) 12%, #fff) 0%,
+      color-mix(in srgb, var(--acc) 65%, #fff) 40%,
+      color-mix(in srgb, var(--acc) 85%, #000) 100%
+    );
+    box-shadow: 0 0 40px rgb(var(--acc-rgb) / 0.4);
   }
   .empty-art__ball--sm {
     left: 74px;
@@ -2641,14 +2651,14 @@
     transform: translateX(-50%);
     width: 150px;
     height: 22px;
-    background: radial-gradient(50% 50% at 50% 50%, rgba(124, 92, 255, 0.35), rgba(11, 12, 20, 0) 70%);
+    background: radial-gradient(50% 50% at 50% 50%, rgb(var(--acc-rgb) / 0.35), transparent 70%);
   }
   .chatlist__empty-cta {
     height: 48px;
     padding: 0 26px;
     font-size: 15px;
     font-weight: 590;
-    box-shadow: 0 8px 28px rgba(124, 92, 255, 0.35);
+    box-shadow: 0 8px 28px rgb(var(--acc-rgb) / 0.35);
   }
 
   /* The formatting keys hide behind "Aa" and rise above the field: the open
@@ -2710,11 +2720,9 @@
     gap: 4px;
     padding: 6px;
     border-radius: 14px;
-    /* Literal, like the composer's own background above: the phone palette is
-       the same dark violet in every theme. */
-    background: rgba(20, 20, 32, 0.9);
-    border: 1px solid var(--divider);
-    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+    background: var(--overlay-bg);
+    border: 1px solid var(--panel-brd);
+    box-shadow: var(--elev-shadow);
     animation: kisy-rise 0.18s ease-out;
   }
   .composer__format--open .composer__fmt,

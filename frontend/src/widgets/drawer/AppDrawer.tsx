@@ -55,6 +55,19 @@ export function AppDrawer({ open, onClose, onOpen, unread = 0 }: Props) {
     { key: "notes", label: "Заметки", icon: Icon.Note, run: () => open_("notes") },
     { key: "feedback", label: "Отзывы и предложения", icon: Icon.Feedback, run: () => open_("feedback") },
     { key: "profile", label: "Настройки профиля", icon: Icon.Settings, run: () => open_("profile") },
+    // The phone has no side rail, so this is the only way into the admin
+    // panel (invites, users, audit) — CEO only, as on the desktop.
+    ...(user.roleLevel === 1
+      ? [
+          {
+            key: "admin",
+            label: "Администрирование",
+            icon: Icon.Shield,
+            active: pathname.startsWith("/admin"),
+            run: () => go("/admin"),
+          },
+        ]
+      : []),
   ];
 
   // Portal to <body>: the drawer must cover the whole viewport, not be clipped

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Icon } from "@shared/ui/icons";
 import { useNotifications } from "@entities/notification/queries";
+import { useAuthStore } from "@shared/store/auth";
 import { NotificationsModal } from "@features/notifications/NotificationsModal";
 import { NotesModal } from "@features/notes/NotesModal";
 import { VotingModal } from "@features/voting/VotingModal";
@@ -21,6 +22,7 @@ export function HubPage() {
   const navigate = useNavigate();
   const [modal, setModal] = useState<Modal>(null);
   const { data: notif } = useNotifications();
+  const user = useAuthStore((st) => st.user);
   const unread = notif?.unreadCount ?? 0;
 
   const cards = [
@@ -41,6 +43,11 @@ export function HubPage() {
     { key: "poll", label: "Создать опрос", icon: Icon.Vote, run: () => setModal("voting") },
     { key: "note", label: "Новая заметка", icon: Icon.Edit, run: () => setModal("notes") },
     { key: "levels", label: "Условия повышения", icon: Icon.Levels, run: () => setModal("conditions") },
+    // Invites and user management: the phone has no side rail, so the Hub and
+    // the drawer are the two ways in. CEO only, as on the desktop.
+    ...(user?.roleLevel === 1
+      ? [{ key: "admin", label: "Администрирование", icon: Icon.Shield, run: () => navigate("/admin") }]
+      : []),
   ];
 
   return (

@@ -1,11 +1,14 @@
-/* Design system: six themes from the KISY handoff — `glass` (light),
-   `luce` (dark), `aurora` (light, vivid gradients), `cyber` (dark neon),
-   `xp` (retro Windows 95) and `matrix` (phosphor terminal). The active theme
-   is `data-theme` on <html> (set by useThemeStore / the inline bootstrap in
-   index.html). Per-theme design tokens (--ink, --acc, --key-bg, --rail-bg,
-   --bubout-bg, --font, …) are the source of truth; the legacy `--color-*`
-   names are aliased onto them so every existing component re-skins
-   automatically in all six themes. */
+/* Design system: seven themes — `orbit` (dark indigo/violet, the default and
+   the phone redesign's palette), `glass` (light), `luce` (dark), `aurora`
+   (light, vivid gradients), `cyber` (dark neon), `xp` (retro Windows 95) and
+   `matrix` (phosphor terminal). The active theme is `data-theme` on <html>
+   (set by useThemeStore / the inline bootstrap in index.html). Per-theme
+   design tokens (--ink, --acc, --acc-rgb, --key-bg, --rail-bg, --bubout-bg,
+   --font, …) are the source of truth; the legacy `--color-*` names are aliased
+   onto them so every existing component re-skins automatically in all seven.
+
+   --acc-rgb carries the accent as space-separated channels so glows can be
+   written as rgb(var(--acc-rgb) / 0.4) instead of hard-coded rgba(). */
 
 :root {
   /* --- theme-neutral primitives --- */
@@ -49,6 +52,11 @@
   --font-family: -apple-system, system-ui, BlinkMacSystemFont, "SF Pro Text",
     "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   --font-mono: ui-monospace, Menlo, monospace;
+
+  /* Brand orange — the logo's gradient. Theme-neutral on purpose: it marks the
+     product (the logo, the tab bar's orb rim) and never competes with the
+     theme accent, whichever theme is on. */
+  --brand-grad: linear-gradient(135deg, #ffb347, #ff6a2a 55%, #e63e1f);
 
   --transition-fast: 150ms ease;
   --transition-medium: 250ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -102,6 +110,7 @@
   --hover: rgba(120, 120, 150, 0.12);
 
   --acc: #5e5ce6;
+  --acc-rgb: 94 92 230;
   --acc-soft: rgba(94, 92, 230, 0.12);
   --acc-ink: #4b49c9;
   --acc-on: #fff;
@@ -154,6 +163,7 @@
   --hover: rgba(255, 255, 255, 0.08);
 
   --acc: #d84332;
+  --acc-rgb: 216 67 50;
   --acc-soft: rgba(216, 67, 50, 0.16);
   --acc-ink: #f0705f;
   --acc-on: #fff;
@@ -210,6 +220,7 @@
   --hover: rgba(150, 90, 200, 0.12);
 
   --acc: #c8269e;
+  --acc-rgb: 200 38 158;
   --acc-soft: rgba(200, 38, 158, 0.12);
   --acc-ink: #c8269e;
   --acc-on: #fff;
@@ -264,6 +275,7 @@
   --hover: rgba(0, 245, 255, 0.16);
 
   --acc: #00f5ff;
+  --acc-rgb: 0 245 255;
   --acc-soft: rgba(0, 245, 255, 0.2);
   --acc-ink: #7dfcff;
   --acc-on: #03121a;
@@ -318,6 +330,7 @@
   --hover: rgba(0, 0, 128, 0.1);
 
   --acc: #000080;
+  --acc-rgb: 0 0 128;
   --acc-soft: #c3c7cb;
   --acc-ink: #000080;
   --acc-on: #ffffff;
@@ -340,14 +353,18 @@
   --key-sh: inset -1px -1px 0 #000, inset 1px 1px 0 #fff, inset -2px -2px 0 #808080, inset 2px 2px 0 #dfdfdf;
   --key-ink: #000000;
 
-  --send-bg: #c0c0c0;
+  /* Title-bar navy: the send actuator carries white glyphs, which a grey
+     button face would swallow. */
+  --send-bg: linear-gradient(90deg, #000080, #1084d0);
   --klogo-bg: linear-gradient(135deg, #008080, #005a5a);
   --mic-bg: #c0c0c0;
   --chip-bg: #ffffcc;
 
   --bubin-bg: #ffffff;
   --bubin-sh: inset -1px -1px 0 #808080, inset 1px 1px 0 #fff, 0 0 0 1px #000;
-  --bubout-bg: #c0c0c0;
+  /* Selected-item navy, like the title bar: the outgoing bubble carries
+     white glyphs, which the grey window face would swallow. */
+  --bubout-bg: linear-gradient(180deg, #1084d0, #000080);
   --bubout-sh: inset -1px -1px 0 #808080, inset 1px 1px 0 #fff, 0 0 0 1px #000;
 }
 
@@ -371,6 +388,7 @@
   --hover: rgba(0, 255, 65, 0.1);
 
   --acc: #00ff41;
+  --acc-rgb: 0 255 65;
   --acc-soft: rgba(0, 255, 65, 0.14);
   --acc-ink: #8dffa0;
   --acc-on: #001b06;
@@ -401,7 +419,9 @@
 
   --bubin-bg: linear-gradient(180deg, #051a08, #020e04);
   --bubin-sh: inset 0 0 0 1px rgba(0, 255, 65, 0.28), 0 0 10px rgba(0, 255, 65, 0.15);
-  --bubout-bg: linear-gradient(180deg, rgba(0, 255, 65, 0.2), rgba(0, 120, 32, 0.14));
+  /* Solid phosphor: the outgoing bubble carries --acc-on (near-black), which
+     a 20%-alpha green would swallow. */
+  --bubout-bg: linear-gradient(180deg, #00ff41, #00b62e);
   --bubout-sh: inset 0 0 0 1px rgba(0, 255, 65, 0.55), 0 0 14px rgba(0, 255, 65, 0.4);
 }
 
@@ -497,72 +517,82 @@ textarea {
   30% { transform: translateY(-4px); opacity: 1; }
 }
 
-/* --- Mobile redesign palette (design_handoff_kisy_mobile) ---------------
-   The phone redesign ships its own indigo/violet palette. It is scoped to the
-   mobile layout so the six desktop themes keep their identity: on a phone the
-   app always wears this skin, on a wide screen nothing changes.
+/* ===== Theme: orbit (dark indigo/violet — the phone redesign, default) =====
+   Born as the mobile redesign's palette (design_handoff_kisy_mobile) and
+   promoted to a full theme: it is what the app wears out of the box, on the
+   phone and on the desktop alike, and it takes its turn in the theme switcher
+   like the other six. */
+:root[data-theme="orbit"] {
+  color-scheme: dark;
+
+  --bg: #0b0c14;
+  --bg-deep: #050609;
+  /* Two soft, non-interactive glows behind everything: indigo rising from the
+     bottom, a smaller violet in the top-left corner. */
+  --app-underlay:
+    radial-gradient(760px 620px at 50% 118%, rgba(59, 30, 138, 0.85) 0%,
+      rgba(59, 30, 138, 0.35) 45%, rgba(11, 12, 20, 0) 72%),
+    radial-gradient(420px 420px at 60px 140px, rgba(124, 92, 255, 0.16) 0%,
+      rgba(11, 12, 20, 0) 70%),
+    #0b0c14;
+  --scroll-thumb: rgba(255, 255, 255, 0.18);
+  --elev-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  --soft-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+
+  --ink: #f2f2f7;
+  --dim: #9a9aae;
+  --dim2: #5e5e72;
+  --divider: rgba(255, 255, 255, 0.08);
+  --hover: rgba(255, 255, 255, 0.07);
+
+  --acc: #7c5cff;
+  --acc-rgb: 124 92 255;
+  --acc-soft: rgba(124, 92, 255, 0.18);
+  --acc-ink: #a48dff;
+  --acc-on: #fff;
+  --acc-grad: linear-gradient(180deg, #8a6bff, #5b3fe0);
+  --acc-tab-sh: 0 4px 16px rgba(124, 92, 255, 0.4);
+  --acc-bg: linear-gradient(180deg, rgba(124, 92, 255, 0.3), rgba(91, 63, 224, 0.2));
+  --acc-sh: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 4px 14px rgba(124, 92, 255, 0.35);
+
+  --side-bg: rgba(11, 12, 20, 0.6);
+  --conv-bg: transparent;
+  --head-bg: rgba(11, 12, 20, 0.7);
+  --field-bg: rgba(255, 255, 255, 0.04);
+  --field-brd: rgba(255, 255, 255, 0.08);
+  --panel-brd: rgba(255, 255, 255, 0.08);
+  --overlay-bg: rgba(20, 20, 32, 0.94);
+
+  /* No moulded plastic here: the keys are the same soft glass tiles as the
+     fields, and the send/mic actuator carries the accent gradient. */
+  --rail-bg: linear-gradient(180deg, rgba(26, 27, 39, 0.96), rgba(15, 16, 25, 0.96));
+  --rail-brd: rgba(255, 255, 255, 0.08);
+  --key-bg: rgba(255, 255, 255, 0.04);
+  --key-sh: none;
+  --key-ink: #f2f2f7;
+
+  --send-bg: linear-gradient(180deg, #8a6bff, #5b3fe0);
+  --klogo-bg: linear-gradient(180deg, #8a6bff, #5b3fe0);
+  --mic-bg: linear-gradient(180deg, #8a6bff, #5b3fe0);
+  --chip-bg: rgba(255, 255, 255, 0.04);
+
+  --bubin-bg: rgba(255, 255, 255, 0.07);
+  --bubin-sh: none;
+  --bubout-bg: linear-gradient(160deg, #8a6bff, #5b3fe0);
+  --bubout-sh: 0 6px 22px rgba(124, 92, 255, 0.32);
+}
+
+/* --- Phone layout tokens ------------------------------------------------
+   Geometry only, and the same in every theme: on a phone the rail becomes a
+   floating 64px capsule that clears the bottom edge, so the scrolling columns
+   must reserve that room. Colours stay with the theme — the phone wears
+   whichever of the seven skins is selected.
 
    Specificity note: a media query adds none, and every theme is declared as
    `:root[data-theme="…"]` (0,1,1). A bare `:root` here would lose, so the
    override matches that specificity and simply comes later in the file. */
 @media (max-width: 760px) {
   :root[data-theme] {
-    --bg: #0b0c14;
-    --bg-deep: #050609;
-    --ink: #f2f2f7;
-    --dim: #9a9aae;
-    --dim2: #5e5e72;
-
-    --divider: rgba(255, 255, 255, 0.08);
-    --hover: rgba(255, 255, 255, 0.07);
-    --field-bg: rgba(255, 255, 255, 0.04);
-    --field-brd: rgba(255, 255, 255, 0.08);
-
-    --acc: #7c5cff;
-    --acc-soft: rgba(124, 92, 255, 0.18);
-    --acc-grad: linear-gradient(180deg, #8a6bff, #5b3fe0);
-    --acc-on: #fff;
-
-    --bubout-bg: linear-gradient(160deg, #8a6bff, #5b3fe0);
-    --bubin-bg: rgba(255, 255, 255, 0.07);
-
-    /* Brand orange — the logo's gradient. Used in exactly one place (the orb's
-       rim) so it never competes with the violet accent. */
-    --brand-grad: linear-gradient(135deg, #ffb347, #ff6a2a 55%, #e63e1f);
-
-    /* Two soft, non-interactive glows behind everything: indigo rising from
-       the bottom, a smaller violet in the top-left corner. */
-    --app-underlay:
-      radial-gradient(760px 620px at 50% 118%, rgba(59, 30, 138, 0.85) 0%,
-        rgba(59, 30, 138, 0.35) 45%, rgba(11, 12, 20, 0) 72%),
-      radial-gradient(420px 420px at 60px 140px, rgba(124, 92, 255, 0.16) 0%,
-        rgba(11, 12, 20, 0) 70%),
-      #0b0c14;
-
-    /* Chrome tokens the redesign paints dark on the phone in every theme.
-       Without them a light desktop theme (glass is the default) leaks white
-       surfaces into the phone: modal sheets, day chips, the mic key. */
-    --side-bg: rgba(11, 12, 20, 0.6);
-    --conv-bg: transparent;
-    --head-bg: rgba(11, 12, 20, 0.7);
-    --overlay-bg: rgba(20, 20, 32, 0.94);
-    --panel-brd: rgba(255, 255, 255, 0.08);
-    --chip-bg: rgba(255, 255, 255, 0.04);
-    --scroll-thumb: rgba(255, 255, 255, 0.18);
-
-    /* Physical keys flatten out: on the phone they are the same soft glass
-       tiles as the fields. Send and mic both carry the accent gradient. */
-    --key-bg: rgba(255, 255, 255, 0.04);
-    --key-ink: #f2f2f7;
-    --key-sh: none;
-    --send-bg: linear-gradient(180deg, #8a6bff, #5b3fe0);
-    --mic-bg: linear-gradient(180deg, #8a6bff, #5b3fe0);
-    --klogo-bg: linear-gradient(180deg, #8a6bff, #5b3fe0);
-    --bubin-sh: none;
-    --bubout-sh: 0 6px 22px rgba(124, 92, 255, 0.32);
-
-    /* The rail becomes a floating capsule (64px) that clears the bottom edge;
-       scrolling columns must reserve that room. */
     --rail-h: 64px;
     --tabbar-gap: 22px;
   }

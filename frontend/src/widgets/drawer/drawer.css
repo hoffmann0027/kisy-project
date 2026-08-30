@@ -10,7 +10,7 @@
 .drawer__scrim {
   position: absolute;
   inset: 0;
-  background: rgba(5, 5, 10, 0.62);
+  background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
   animation: fade-in var(--transition-fast);
@@ -22,9 +22,9 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #14141f 0%, #0d0d16 100%);
-  border-right: 1px solid var(--divider);
-  box-shadow: 24px 0 60px rgba(0, 0, 0, 0.6);
+  background: var(--overlay-bg);
+  border-right: 1px solid var(--panel-brd);
+  box-shadow: var(--elev-shadow);
   animation: rise-in 0.2s ease-out;
 }
 
@@ -97,7 +97,7 @@
 }
 .drawer__item--active {
   background: var(--acc-soft);
-  border-color: rgba(124, 92, 255, 0.28);
+  border-color: rgb(var(--acc-rgb) / 0.28);
   font-weight: 500;
   color: var(--acc);
 }
@@ -124,13 +124,13 @@
   padding: 0 6px;
   border-radius: var(--radius-round);
   background: var(--acc);
-  color: #fff;
+  color: var(--acc-on);
   font-size: 12px;
   font-weight: 640;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 14px rgba(124, 92, 255, 0.6);
+  box-shadow: 0 0 14px rgb(var(--acc-rgb) / 0.6);
 }
 
 .drawer__foot {
@@ -146,14 +146,14 @@
   border: none;
   background: none;
   border-radius: 14px;
-  color: #f0524f;
+  color: var(--color-danger);
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
   text-align: left;
 }
 .drawer__logout:hover {
-  background: rgba(240, 82, 79, 0.1);
+  background: var(--color-danger-soft);
 }
 
 @media (prefers-reduced-motion: reduce) {
