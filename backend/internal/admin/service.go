@@ -89,6 +89,15 @@ func (s *Service) ChangeRole(ctx context.Context, targetID uuid.UUID, newLevel i
 	if err := s.users.UpdateRole(ctx, tx, targetID, newLevel); err != nil {
 		return mapNotFound(err)
 	}
+	// The access token carries the clearance in its `lvl` claim and
+	// RequireClearance trusts that claim, so a demotion would otherwise only
+	// take effect when the token expires — up to JWT_ACCESS_TTL of continued
+	// access to /admin, /invites and the old clearance band's groups. Cutting
+	// the sessions forces a re-login, which re-issues the claim at the new
+	// level; that re-login is the intended cost of changing someone's clearance.
+	if _, err := s.sessions.RevokeAllForUser(ctx, tx, targetID, time.Now().UTC()); err != nil {
+		return err
+	}
 	if err := s.audit.Record(ctx, tx, audit.Event{
 		ActorID:    &actor.UserID,
 		Action:     audit.ActionRoleChanged,
