@@ -1,0 +1,15 @@
+# docker-compose builds this image with `context: ./frontend`, so the root
+# .dockerignore does not apply here — this file is what keeps the context
+# secret-free. Without it `COPY . .` pulls in .env.local, and Vite inlines
+# every VITE_* value it finds into the shipped bundle at build time.
+.env
+.env.*
+!.env.example
+
+node_modules
+dist
+.vite
+*.tsbuildinfo
+coverage
+android
+*.log

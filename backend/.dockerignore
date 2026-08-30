@@ -1,0 +1,10 @@
+# docker-compose builds this image with `context: ./backend`, so the root
+# .dockerignore does not apply here — this file is what keeps the context
+# secret-free, since the Dockerfile does a blanket `COPY . .`.
+.env
+.env.*
+!.env.example
+
+bin
+tmp
+*.log

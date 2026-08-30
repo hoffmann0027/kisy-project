@@ -109,6 +109,21 @@ security-hardening и для будущих аудитов.
 CEO) берутся из переменных окружения / `.env`, никогда не хардкодятся.
 `.env` и приватные TLS-ключи в `.gitignore`.
 
+**Dev-значения не переносятся в прод.** Локальный `.env` — это рабочие
+значения одной машины: они лежат в открытом виде, попадают в архивы и в
+историю shell. Перед публикацией генерируются новые значения для всего
+списка, который проверяет `knownCompromisedDigests`
+(`backend/internal/config/config.go`): `JWT_ACCESS_SECRET`,
+`JWT_REFRESH_SECRET`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `IP_HASH_SALT`,
+`TURN_SECRET`, `BOOTSTRAP_CEO_PASSWORD`, `VAPID_PRIVATE_KEY`.
+
+`.dockerignore` есть в трёх местах и все три обязательны: сборки
+`backend` и `frontend` идут со своим контекстом (`context: ./backend`,
+`context: ./frontend` в `docker-compose.yml`), поэтому корневой файл на них
+не распространяется. Без `frontend/.dockerignore` в контекст попадает
+`.env.local`, а Vite инлайнит любые `VITE_*` из него прямо в отдаваемый
+браузеру бандл.
+
 Мобильные секреты той же категории (подробности — [android.md](android.md)):
 
 - `FCM_SERVICE_ACCOUNT` — ключ сервисного аккаунта Firebase на бэкенде. Даёт
