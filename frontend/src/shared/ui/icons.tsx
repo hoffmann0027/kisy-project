@@ -7,7 +7,7 @@ interface IconProps {
 
 function svg(path: ReactNode, size = 22) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       {path}
     </svg>
   );
@@ -153,4 +153,11 @@ export const Icon = {
       </>,
       size,
     ),
+  // --- added for the mobile redesign ---
+  User: ({ size }: IconProps) => svg(<><circle cx="12" cy="8" r="4" /><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1" /></>, size),
+  X: ({ size }: IconProps) => svg(<path d="M18 6 6 18M6 6l12 12" />, size),
+  Chevron: ({ size }: IconProps) => svg(<path d="m9 6 6 6-6 6" />, size),
+  Dots: ({ size }: IconProps) => svg(<><circle cx="12" cy="5" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="12" cy="19" r="1" /></>, size),
+  // Grid rides the orb at the centre of the tab bar.
+  Grid: ({ size }: IconProps) => svg(<><rect x="3" y="3" width="7.5" height="7.5" rx="2" /><rect x="13.5" y="3" width="7.5" height="7.5" rx="2" /><rect x="3" y="13.5" width="7.5" height="7.5" rx="2" /><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2" /></>, size),
 };

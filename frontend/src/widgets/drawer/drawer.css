@@ -1,0 +1,164 @@
+/* Side drawer for the phone layout (design_handoff_kisy_mobile §7). */
+
+.drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+}
+
+.drawer__scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 5, 10, 0.62);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: fade-in var(--transition-fast);
+}
+
+.drawer__panel {
+  position: relative;
+  width: min(308px, 86vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #14141f 0%, #0d0d16 100%);
+  border-right: 1px solid var(--divider);
+  box-shadow: 24px 0 60px rgba(0, 0, 0, 0.6);
+  animation: rise-in 0.2s ease-out;
+}
+
+.drawer__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* Clears the status bar / notch in the installed app. */
+  padding: calc(20px + var(--safe-top)) 18px 20px;
+  border-bottom: 1px solid var(--divider);
+}
+.drawer__who {
+  flex: 1;
+  min-width: 0;
+}
+.drawer__name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.drawer__role {
+  font-size: 12px;
+  color: var(--dim);
+}
+.drawer__close {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--dim);
+  cursor: pointer;
+  border-radius: var(--radius-round);
+}
+
+.drawer__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 10px;
+}
+
+.drawer__item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 13px 12px;
+  border: 1px solid transparent;
+  background: none;
+  border-radius: 14px;
+  color: var(--ink);
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.drawer__item:hover {
+  background: var(--hover);
+}
+.drawer__item--active {
+  background: var(--acc-soft);
+  border-color: rgba(124, 92, 255, 0.28);
+  font-weight: 500;
+  color: var(--acc);
+}
+
+.drawer__item-icon {
+  display: inline-flex;
+  color: var(--dim);
+}
+.drawer__item--active .drawer__item-icon {
+  color: currentColor;
+}
+.drawer__item-label {
+  flex: 1;
+  min-width: 0;
+}
+.drawer__item-chevron {
+  display: inline-flex;
+  color: var(--dim2);
+}
+.drawer__item-badge {
+  flex: none;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-round);
+  background: var(--acc);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 640;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 14px rgba(124, 92, 255, 0.6);
+}
+
+.drawer__foot {
+  padding: 12px 12px calc(20px + var(--safe-bottom));
+  border-top: 1px solid var(--divider);
+}
+.drawer__logout {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 12px 10px;
+  border: none;
+  background: none;
+  border-radius: 14px;
+  color: #f0524f;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+.drawer__logout:hover {
+  background: rgba(240, 82, 79, 0.1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer__scrim,
+  .drawer__panel {
+    animation: none;
+  }
+}

@@ -14,10 +14,13 @@ import { ChatContextMenu, type MenuTarget } from "@features/chat-folders/ChatCon
 import { FolderManager } from "@features/chat-folders/FolderManager";
 import { FindGroupModal } from "@features/new-chat/FindGroupModal";
 import { usePresenceStore } from "@shared/store/presence";
+import { useAuthStore } from "@shared/store/auth";
 
 interface Props {
   /** Which column to render: private chats ("chats") or groups ("communities"). */
   view: "chats" | "communities";
+  /** Phone layout: the header avatar opens the side drawer. */
+  onOpenDrawer?: () => void;
   activeId: string | null;
   onSelect: (chat: Chat) => void;
   onSelectGroup: (group: Group) => void;
@@ -28,8 +31,9 @@ interface Props {
 /** Chat-list tab: the fixed "all"/"unread" pseudo-tabs or a folder id. */
 type Tab = "all" | "unread" | string;
 
-export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, onNewGroup }: Props) {
+export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, onNewGroup, onOpenDrawer }: Props) {
   const communities = view === "communities";
+  const me = useAuthStore((s) => s.user);
   const { data: chats, isPending } = useChats();
   const { data: groups } = useGroups();
   const [query, setQuery] = useState("");
@@ -185,6 +189,18 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
                 <Icon.Plus />
               </IconButton>
             </>
+          )}
+          {/* Phone layout only (hidden by CSS on desktop, where the rail
+              already carries the avatar): opens the side drawer. */}
+          {onOpenDrawer && me && (
+            <button
+              type="button"
+              className="chatlist__avatar"
+              aria-label="Меню"
+              onClick={onOpenDrawer}
+            >
+              <Avatar name={me.displayName} url={me.avatarUrl} size={38} />
+            </button>
           )}
         </div>
       </div>

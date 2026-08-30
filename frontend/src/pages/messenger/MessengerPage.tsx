@@ -14,6 +14,8 @@ import { NotesModal } from "@features/notes/NotesModal";
 import { ConditionsModal } from "@features/conditions/ConditionsModal";
 import { VotingModal } from "@features/voting/VotingModal";
 import { CallHistoryModal } from "@features/call/CallHistoryModal";
+import { AppDrawer } from "@widgets/drawer/AppDrawer";
+import { useNotifications } from "@entities/notification/queries";
 import { Icon } from "@shared/ui/icons";
 import { formatRelative } from "@shared/lib/format";
 import type { Chat, Group } from "@shared/api/types";
@@ -42,6 +44,9 @@ export function MessengerPage() {
   const [conditions, setConditions] = useState(false);
   const [voting, setVoting] = useState(false);
   const [callHistory, setCallHistory] = useState(false);
+  // Phone layout: the side drawer opened from the header avatar.
+  const [drawer, setDrawer] = useState(false);
+  const { data: notif } = useNotifications();
 
   const activeChat: Chat | undefined = chats?.find((c) => c.id === chatId);
   const activeGroup: Group | undefined = groups?.find((g) => g.id === groupId);
@@ -68,6 +73,7 @@ export function MessengerPage() {
 
       <ChatList
         view={view}
+        onOpenDrawer={() => setDrawer(true)}
         activeId={activeId}
         onSelect={selectChat}
         onSelectGroup={selectGroup}
@@ -111,6 +117,17 @@ export function MessengerPage() {
       <ConditionsModal open={conditions} onClose={() => setConditions(false)} />
       <VotingModal open={voting} onClose={() => setVoting(false)} />
       <CallHistoryModal open={callHistory} onClose={() => setCallHistory(false)} />
+      <AppDrawer
+        open={drawer}
+        onClose={() => setDrawer(false)}
+        unread={notif?.unreadCount ?? 0}
+        onOpen={(what) => {
+          if (what === "notifications") setNotifications(true);
+          else if (what === "notes") setNotes(true);
+          else if (what === "feedback") setFeedback(true);
+          else setProfile(true);
+        }}
+      />
     </div>
   );
 }

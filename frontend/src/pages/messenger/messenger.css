@@ -1026,50 +1026,24 @@
     --msgr-pad: 10px;
   }
 
-  /* The nav rail becomes a fixed horizontal bar along the bottom. */
+  /* The redesign replaces the rail with a floating tab bar (widgets/tabbar).
+     The rail itself is hidden here rather than removed: the desktop layout and
+     the rating page still render it. */
   .rail {
-    position: fixed;
-    left: 0;
-    right: 0;
-    /* Ride above the on-screen keyboard instead of hiding behind it: the
-       layout viewport (and so bottom:0) ignores the keyboard entirely. */
-    bottom: var(--kb-inset);
-    z-index: 50;
-    flex-direction: row;
-    align-items: center;
-    /* Grow the bar by the home-indicator inset and pad the same amount, so the
-       44px buttons keep their full height and sit entirely above it
-       (box-sizing is border-box globally). */
-    height: var(--rail-total);
-    padding: 0 calc(8px + var(--safe-right)) var(--rail-pad-bottom) calc(8px + var(--safe-left));
-    gap: 4px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    border-right: none;
-    border-top: 1px solid var(--color-border);
-  }
-  .rail__logo { display: none; }
-  .rail__nav {
-    flex-direction: row;
-    flex: 0 0 auto;
-    gap: 4px;
-  }
-  .rail__item {
-    flex: 0 0 auto;
-    width: 44px;
-    height: 44px;
+    display: none;
   }
 
+
   /* Columns share the single grid cell; only one is shown at a time. The
-     column starts one .msgr padding below the viewport top, so its height must
-     drop BOTH the rail and that padding — otherwise its bottom (composer, last
-     message) slides under the fixed rail. */
+     column starts one .msgr padding below the viewport top, and the tab bar
+     FLOATS with a gap beneath it, so the height drops the bar, that gap and
+     the padding — otherwise the composer slides under the bar. */
   .chatlist,
   .conv,
   .ui-empty {
     grid-column: 1;
     grid-row: 1;
-    height: calc(100vh - var(--rail-total) - var(--msgr-pad) - var(--kb-inset));
+    height: calc(100vh - var(--rail-total) - var(--tabbar-gap, 0px) - var(--msgr-pad) - var(--kb-inset));
     min-height: 0;
   }
   @supports (height: 100dvh) {
@@ -1079,15 +1053,19 @@
       /* dvh does NOT shrink for the keyboard, so subtract it ourselves — this
          is what keeps the composer (last child of the .conv flex column)
          visible instead of resorting to position:fixed. */
-      height: calc(100dvh - var(--rail-total) - var(--msgr-pad) - var(--kb-inset));
+      height: calc(100dvh - var(--rail-total) - var(--tabbar-gap, 0px) - var(--msgr-pad) - var(--kb-inset));
     }
   }
   .chatlist {
     border-right: none;
     display: flex;
   }
-  .conv,
-  .ui-empty {
+  /* Scoped through .msgr on purpose: ui.css declares `.ui-empty {display:flex}`
+     with the same specificity and is loaded later, so a bare `.ui-empty` here
+     would lose the cascade and the "pick a chat" placeholder would show up
+     underneath the list. */
+  .msgr .conv,
+  .msgr .ui-empty {
     display: none;
   }
 
@@ -2150,4 +2128,205 @@
 }
 .mutemenu__dropdown .schedpick__warn {
   margin: 4px 12px 8px;
+}
+
+/* ===== Mobile redesign: Messages screen (design_handoff_kisy_mobile §1) =====
+   The phone gets a flat, full-bleed list on the app underlay instead of the
+   floating glass panel the desktop uses. Everything here is inside the 760px
+   break, so the desktop layout is untouched. */
+@media (max-width: 760px) {
+  .chatlist,
+  .conv,
+  .ui-empty {
+    /* No card chrome on a phone: the screen IS the panel. */
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .msgr,
+  .msgr--with-panel {
+    padding: 0;
+    gap: 0;
+  }
+
+  .chatlist__header {
+    padding: calc(6px + var(--safe-top)) 16px 14px;
+    gap: 12px;
+  }
+  .chatlist__title {
+    flex: 1;
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+  }
+  /* Square-ish header keys, per the redesign. */
+  .chatlist__header .ui-icon-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 14px;
+    background: var(--field-bg);
+    border: 1px solid var(--divider);
+    color: var(--dim);
+  }
+  .chatlist__avatar {
+    flex: none;
+    padding: 0;
+    border: none;
+    background: none;
+    line-height: 0;
+    border-radius: var(--radius-round);
+    cursor: pointer;
+  }
+
+  .chatlist__search {
+    padding: 0 16px 12px;
+  }
+  .chatlist__search .ui-input {
+    height: 46px;
+    border-radius: 14px;
+    background: var(--field-bg);
+    border: 1px solid var(--divider);
+    font-size: 15px;
+  }
+
+  /* The existing "all / unread / folders" tabs become pill chips. */
+  .chatlist__tabs {
+    gap: 8px;
+    padding: 0 16px 14px;
+    border-bottom: none;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .chatlist__tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .chatlist__tab {
+    flex: none;
+    height: 34px;
+    padding: 0 16px;
+    border-radius: var(--radius-round);
+    background: var(--field-bg);
+    border: 1px solid var(--divider);
+    color: var(--dim);
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .chatlist__tab--active {
+    background: var(--acc-grad);
+    border-color: transparent;
+    color: #fff;
+    font-weight: 600;
+    box-shadow: 0 4px 16px rgba(124, 92, 255, 0.4);
+  }
+
+  .chatlist__scroll {
+    /* Room for the floating tab bar. */
+    padding: 0 12px calc(var(--rail-h) + var(--tabbar-gap) + 24px + var(--safe-bottom));
+  }
+  .chatlist__section {
+    font-size: 11px;
+    letter-spacing: 1.2px;
+    color: var(--dim2);
+    padding: 2px 6px 8px;
+  }
+
+  .chat-item {
+    gap: 12px;
+    padding: 11px 10px;
+    border-radius: var(--radius-lg);
+  }
+  .chat-item__name {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .chat-item__preview {
+    font-size: 13px;
+    color: var(--dim);
+  }
+  .chat-item__time {
+    font-size: 12px;
+    color: var(--dim2);
+  }
+}
+
+/* ===== Mobile redesign: Chat screen (design_handoff_kisy_mobile §4) ===== */
+@media (max-width: 760px) {
+  /* The chat fills the screen: the tab bar hides itself on this route, so the
+     column reclaims the space reserved for it elsewhere. */
+  .msgr--chat-open .conv {
+    height: calc(100dvh - var(--kb-inset));
+  }
+
+  .conv__header {
+    gap: 10px;
+    padding: calc(4px + var(--safe-top)) 12px 12px;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-bottom: 1px solid var(--divider);
+  }
+  .conv__back {
+    width: 34px;
+    height: 34px;
+    color: var(--ink);
+  }
+  .conv__title {
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .conv__status {
+    font-size: 12px;
+    color: var(--dim);
+  }
+  /* Header keys (call, menu) match the Messages header. */
+  .conv__call {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    background: var(--field-bg);
+    border: 1px solid var(--divider);
+    color: var(--ink);
+  }
+
+  .conv__scroll {
+    padding: 16px 16px 8px;
+    gap: 10px;
+    background: transparent;
+  }
+
+  .bubble {
+    max-width: 78%;
+    padding: 10px 14px;
+    font-size: 15px;
+    line-height: 1.45;
+    border-radius: 18px;
+  }
+  .bubble--out {
+    border-bottom-right-radius: 6px;
+    box-shadow: 0 6px 22px rgba(124, 92, 255, 0.32);
+  }
+  .bubble--in {
+    border-bottom-left-radius: 6px;
+    border: 1px solid var(--divider);
+    box-shadow: none;
+  }
+
+  .composer {
+    gap: 10px;
+    padding: 8px 14px calc(10px + var(--safe-bottom));
+    border-top: 1px solid var(--divider);
+    background: rgba(11, 12, 20, 0.7);
+    backdrop-filter: blur(var(--blur-glass));
+    -webkit-backdrop-filter: blur(var(--blur-glass));
+  }
+  .composer__input {
+    min-height: 44px;
+    border-radius: 14px;
+    background: var(--field-bg);
+    border: 1px solid var(--divider);
+    font-size: 15px;
+  }
 }

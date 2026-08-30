@@ -496,3 +496,52 @@ textarea {
   0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
   30% { transform: translateY(-4px); opacity: 1; }
 }
+
+/* --- Mobile redesign palette (design_handoff_kisy_mobile) ---------------
+   The phone redesign ships its own indigo/violet palette. It is scoped to the
+   mobile layout so the six desktop themes keep their identity: on a phone the
+   app always wears this skin, on a wide screen nothing changes.
+
+   Specificity note: a media query adds none, and every theme is declared as
+   `:root[data-theme="…"]` (0,1,1). A bare `:root` here would lose, so the
+   override matches that specificity and simply comes later in the file. */
+@media (max-width: 760px) {
+  :root[data-theme] {
+    --bg: #0b0c14;
+    --bg-deep: #050609;
+    --ink: #f2f2f7;
+    --dim: #9a9aae;
+    --dim2: #5e5e72;
+
+    --divider: rgba(255, 255, 255, 0.08);
+    --hover: rgba(255, 255, 255, 0.07);
+    --field-bg: rgba(255, 255, 255, 0.04);
+    --field-brd: rgba(255, 255, 255, 0.08);
+
+    --acc: #7c5cff;
+    --acc-soft: rgba(124, 92, 255, 0.18);
+    --acc-grad: linear-gradient(180deg, #8a6bff, #5b3fe0);
+    --acc-on: #fff;
+
+    --bubout-bg: linear-gradient(160deg, #8a6bff, #5b3fe0);
+    --bubin-bg: rgba(255, 255, 255, 0.07);
+
+    /* Brand orange — the logo's gradient. Used in exactly one place (the orb's
+       rim) so it never competes with the violet accent. */
+    --brand-grad: linear-gradient(135deg, #ffb347, #ff6a2a 55%, #e63e1f);
+
+    /* Two soft, non-interactive glows behind everything: indigo rising from
+       the bottom, a smaller violet in the top-left corner. */
+    --app-underlay:
+      radial-gradient(760px 620px at 50% 118%, rgba(59, 30, 138, 0.85) 0%,
+        rgba(59, 30, 138, 0.35) 45%, rgba(11, 12, 20, 0) 72%),
+      radial-gradient(420px 420px at 60px 140px, rgba(124, 92, 255, 0.16) 0%,
+        rgba(11, 12, 20, 0) 70%),
+      #0b0c14;
+
+    /* The rail becomes a floating capsule (64px) that clears the bottom edge;
+       scrolling columns must reserve that room. */
+    --rail-h: 64px;
+    --tabbar-gap: 22px;
+  }
+}
