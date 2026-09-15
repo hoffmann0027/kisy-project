@@ -40,7 +40,11 @@ public final class CallRinger {
     private static Vibrator vibrator;
     private static String ringingCallId;
     private static final Handler handler = new Handler(Looper.getMainLooper());
-    private static final Runnable autoStop = () -> stop();
+    private static final Runnable autoStop = () -> {
+        stop();
+        // The caller has long given up; the screen goes with the sound.
+        IncomingCallActivity.closeIfShowing();
+    };
 
     private CallRinger() {}
 

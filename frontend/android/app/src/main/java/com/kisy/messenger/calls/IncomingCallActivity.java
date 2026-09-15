@@ -43,6 +43,21 @@ public class IncomingCallActivity extends Activity {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
     }
 
+    /**
+     * The call screen currently on display, so a call that ends elsewhere can
+     * take it down. Without this, a cancelled call leaves a dead "Ответить"
+     * sitting on top of the lock screen until the user dismisses it by hand.
+     */
+    private static volatile IncomingCallActivity showing;
+
+    /** Closes the ringing screen if one is up. Safe to call from any thread. */
+    static void closeIfShowing() {
+        IncomingCallActivity a = showing;
+        if (a == null) return;
+        showing = null;
+        a.runOnUiThread(a::finish);
+    }
+
     private String callId;
 
     @Override
@@ -61,6 +76,7 @@ public class IncomingCallActivity extends Activity {
             return;
         }
 
+        showing = this;
         setContentView(R.layout.activity_incoming_call);
         TextView name = findViewById(R.id.call_caller);
         name.setText(caller == null || caller.isEmpty() ? getString(R.string.call_unknown_caller) : caller);
@@ -95,6 +111,7 @@ public class IncomingCallActivity extends Activity {
 
     private void accept() {
         Log.i(TAG, "accepted " + callId + " from the call screen");
+        showing = null; // this screen is leaving on its own terms
         CallNotifications.dismiss(this);
         PendingCallAction.put(this, PendingCallAction.ACCEPT, callId);
         KisyCallPlugin.announce(PendingCallAction.ACCEPT, callId);
@@ -114,6 +131,7 @@ public class IncomingCallActivity extends Activity {
 
     private void decline() {
         Log.i(TAG, "declined " + callId + " from the call screen");
+        showing = null;
         CallNotifications.dismiss(this);
         PendingCallAction.put(this, PendingCallAction.REJECT, callId);
         KisyCallPlugin.announce(PendingCallAction.REJECT, callId);
@@ -123,6 +141,7 @@ public class IncomingCallActivity extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (showing == this) showing = null;
         // Swiped away rather than answered: stop the noise, leave the call to
         // the server's ring timeout.
         CallRinger.stopIf(callId);

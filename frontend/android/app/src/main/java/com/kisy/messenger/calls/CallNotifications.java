@@ -119,6 +119,8 @@ public final class CallNotifications {
     public static void dismiss(Context ctx) {
         NotificationManagerCompat.from(ctx).cancel(NOTIFICATION_ID);
         CallRinger.stop();
+        // A cancelled call must not leave a live "Ответить" on the lock screen.
+        IncomingCallActivity.closeIfShowing();
     }
 
     /**
