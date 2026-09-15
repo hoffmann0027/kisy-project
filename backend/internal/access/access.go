@@ -33,10 +33,17 @@ func IsCEO(level int) bool { return level == CEOLevel }
 // A group requires clearance minRoleLevel or stronger; "higher" groups
 // (smaller minRoleLevel) are invisible to weaker (larger-level) roles.
 //
-// An account with no level clears no threshold at all: it is not at the bottom
-// of the hierarchy, it is outside it. (A group open to everyone is expressed
-// by having no threshold, not by admitting level-less accounts here.)
+// The two arguments both use zero for "absent", and it means the opposite
+// thing on each side — which is the whole subtlety of this function:
+//
+//   - minRoleLevel absent: the group names no threshold, so it is open to
+//     everyone, an account outside the hierarchy included;
+//   - actorLevel absent: the account is outside the hierarchy, so it clears no
+//     threshold at all. It is not at the bottom of the ladder, it is off it.
 func CanAccessGroup(actorLevel, minRoleLevel int) bool {
+	if !HasLevel(minRoleLevel) {
+		return true
+	}
 	if !HasLevel(actorLevel) {
 		return false
 	}

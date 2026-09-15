@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/access"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
 )
@@ -189,9 +190,16 @@ func (h *Handler) listMembers(w http.ResponseWriter, r *http.Request) {
 }
 
 type createRequest struct {
-	Name         string  `json:"name"`
-	Description  *string `json:"description"`
-	MinRoleLevel int     `json:"minRoleLevel"`
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+	// Absent or null means "no threshold": open to every clearance, including
+	// accounts that have none. An account outside the hierarchy cannot send
+	// anything else — whatever it sends, the service ignores.
+	MinRoleLevel *int `json:"minRoleLevel"`
+	// "group" (default) or "community".
+	Kind string `json:"kind"`
+	// Communities only: the posts appear in the shared feed.
+	IsPublic bool `json:"isPublic"`
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -210,15 +218,26 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "name must be 1-128 characters")
 		return
 	}
-	if req.MinRoleLevel < 1 || req.MinRoleLevel > 10 {
+	if req.MinRoleLevel != nil && (*req.MinRoleLevel < 1 || *req.MinRoleLevel > 10) {
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "minRoleLevel must be between 1 and 10")
 		return
+	}
+	if req.Kind != "" && req.Kind != KindGroup && req.Kind != KindCommunity {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "kind must be group or community")
+		return
+	}
+
+	minLevel := access.NoLevel
+	if req.MinRoleLevel != nil {
+		minLevel = *req.MinRoleLevel
 	}
 
 	g, err := h.svc.Create(r.Context(), CreateInput{
 		Name:         req.Name,
 		Description:  req.Description,
-		MinRoleLevel: req.MinRoleLevel,
+		MinRoleLevel: minLevel,
+		Kind:         req.Kind,
+		IsPublic:     req.IsPublic,
 	}, actor)
 	if errors.Is(err, ErrLevelTooHigh) {
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "нельзя создать группу с уровнем доступа выше вашего")

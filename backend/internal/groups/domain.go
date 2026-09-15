@@ -53,14 +53,35 @@ func isEditorTier(role string) bool {
 	}
 }
 
+// Kinds of group. A group is a conversation between its members; a community
+// is a wall its owners publish to and its members read.
+const (
+	KindGroup     = "group"
+	KindCommunity = "community"
+)
+
+// threshold renders a stored level as the API sees it: absent rather than
+// zero, so "open to everyone" cannot be misread as "open to the CEO only".
+func threshold(level int) *int {
+	if !access.HasLevel(level) {
+		return nil
+	}
+	l := level
+	return &l
+}
+
 // Group mirrors the groups table. MinRoleLevel is the weakest clearance
 // (largest level number) allowed to see the group.
 type Group struct {
-	ID           uuid.UUID
-	Name         string
-	Description  *string
-	AvatarURL    *string
+	ID          uuid.UUID
+	Name        string
+	Description *string
+	AvatarURL   *string
+	// MinRoleLevel is access.NoLevel (0) when the group has no threshold at
+	// all — open to every clearance, including accounts that have none.
 	MinRoleLevel int
+	Kind         string
+	IsPublic     bool
 	JoinPolicy   string
 	PostPolicy   string
 	CreatedBy    uuid.UUID
@@ -90,11 +111,15 @@ type JoinRequest struct {
 
 // DTO is the API representation of a group.
 type DTO struct {
-	ID           uuid.UUID `json:"id"`
-	Name         string    `json:"name"`
-	Description  *string   `json:"description"`
-	AvatarURL    *string   `json:"avatarUrl"`
-	MinRoleLevel int       `json:"minRoleLevel"`
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	Description *string   `json:"description"`
+	AvatarURL   *string   `json:"avatarUrl"`
+	// Null when the group has no threshold: open to everyone, including
+	// accounts outside the role hierarchy. Not 10 — that is still a threshold.
+	MinRoleLevel *int      `json:"minRoleLevel"`
+	Kind         string    `json:"kind"`
+	IsPublic     bool      `json:"isPublic"`
 	JoinPolicy   string    `json:"joinPolicy"`
 	PostPolicy   string    `json:"postPolicy"`
 	CreatedBy    uuid.UUID `json:"createdBy"`
@@ -107,7 +132,9 @@ func (g *Group) ToDTO() DTO {
 		Name:         g.Name,
 		Description:  g.Description,
 		AvatarURL:    g.AvatarURL,
-		MinRoleLevel: g.MinRoleLevel,
+		MinRoleLevel: threshold(g.MinRoleLevel),
+		Kind:         g.Kind,
+		IsPublic:     g.IsPublic,
 		JoinPolicy:   g.JoinPolicy,
 		PostPolicy:   g.PostPolicy,
 		CreatedBy:    g.CreatedBy,

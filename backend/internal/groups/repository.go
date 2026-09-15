@@ -66,10 +66,14 @@ type PostgresRepository struct{}
 
 func NewPostgresRepository() *PostgresRepository { return &PostgresRepository{} }
 
-const groupColumns = `id, name, description, avatar_url, min_role_level, join_policy, post_policy, created_by, is_archived, created_at, updated_at`
+// A group with no threshold stores NULL and is read as access.NoLevel (0),
+// the same convention users.role_id uses. Zero is never a valid level, and
+// every rule that looks at one goes through internal/access.
+const groupColumns = `id, name, description, avatar_url, COALESCE(min_role_level, 0), kind, is_public,
+	join_policy, post_policy, created_by, is_archived, created_at, updated_at`
 
 func scanGroupInto(row pgx.Row, g *Group) error {
-	return row.Scan(&g.ID, &g.Name, &g.Description, &g.AvatarURL, &g.MinRoleLevel,
+	return row.Scan(&g.ID, &g.Name, &g.Description, &g.AvatarURL, &g.MinRoleLevel, &g.Kind, &g.IsPublic,
 		&g.JoinPolicy, &g.PostPolicy, &g.CreatedBy, &g.IsArchived, &g.CreatedAt, &g.UpdatedAt)
 }
 
@@ -87,10 +91,10 @@ func scanGroup(row pgx.Row) (*Group, error) {
 
 func (r *PostgresRepository) Create(ctx context.Context, q db.DBTX, g *Group) error {
 	err := q.QueryRow(ctx, `
-		INSERT INTO groups (name, description, avatar_url, min_role_level, created_by)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO groups (name, description, avatar_url, min_role_level, kind, is_public, created_by)
+		VALUES ($1, $2, $3, NULLIF($4, 0), $5, $6, $7)
 		RETURNING id, join_policy, post_policy, is_archived, created_at, updated_at`,
-		g.Name, g.Description, g.AvatarURL, g.MinRoleLevel, g.CreatedBy,
+		g.Name, g.Description, g.AvatarURL, g.MinRoleLevel, g.Kind, g.IsPublic, g.CreatedBy,
 	).Scan(&g.ID, &g.JoinPolicy, &g.PostPolicy, &g.IsArchived, &g.CreatedAt, &g.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("groups: create: %w", err)
@@ -109,7 +113,11 @@ func (r *PostgresRepository) ListVisible(ctx context.Context, q db.DBTX, actorLe
 		-- $1 is the actor's level. Zero means no level at all, and an account
 		-- outside the hierarchy clears no threshold — without the range guard
 		-- zero would sit below every min_role_level and match every group.
-		WHERE is_archived = false AND $1 BETWEEN 1 AND 10 AND min_role_level >= $1
+		-- A group with no threshold is open to everyone, including accounts
+		-- outside the hierarchy; one with a threshold still needs a level that
+		-- clears it, and $1 = 0 ("no level") clears none.
+		WHERE is_archived = false
+		  AND (min_role_level IS NULL OR ($1 BETWEEN 1 AND 10 AND min_role_level >= $1))
 		ORDER BY created_at DESC, id DESC`, actorLevel)
 	if err != nil {
 		return nil, fmt.Errorf("groups: list visible: %w", err)
@@ -193,7 +201,7 @@ func (r *PostgresRepository) ListDirectory(ctx context.Context, q db.DBTX, actor
 		LEFT JOIN group_join_requests jr
 		       ON jr.group_id = g.id AND jr.user_id = $1 AND jr.status = 'pending'
 		WHERE g.is_archived = false
-		  AND $2 BETWEEN 1 AND 10 AND g.min_role_level >= $2
+		  AND (g.min_role_level IS NULL OR ($2 BETWEEN 1 AND 10 AND g.min_role_level >= $2))
 		  AND NOT EXISTS (SELECT 1 FROM group_members m WHERE m.group_id = g.id AND m.user_id = $1)
 		ORDER BY g.created_at DESC, g.id DESC`, actorID, actorLevel)
 	if err != nil {

@@ -199,6 +199,10 @@ type CreateInput struct {
 	Name         string
 	Description  *string
 	MinRoleLevel int
+	// Kind is "group" or "community"; anything else is read as a group.
+	Kind string
+	// IsPublic puts a community's posts in the shared feed and lets anyone in.
+	IsPublic bool
 }
 
 // Create makes a new group and enrolls the creator as owner. Any user may
@@ -206,21 +210,33 @@ type CreateInput struct {
 // creator's own (they must be able to belong to it): min_role_level must
 // be >= the creator's role level.
 func (s *Service) Create(ctx context.Context, in CreateInput, actor ActorMeta) (*Group, error) {
-	// An account with no level cannot place a group in a hierarchy it is not
-	// part of. (Groups without a threshold, which it will be able to create,
-	// arrive with communities in migration 000043.)
+	// An account outside the hierarchy has no threshold to offer and is not
+	// asked for one: whatever it sends, the group it creates is open to
+	// everyone. Asking it to pick a level it does not have would be a form
+	// with no valid answer.
+	minLevel := in.MinRoleLevel
 	if !access.HasLevel(actor.RoleLevel) {
+		minLevel = access.NoLevel
+	} else if access.HasLevel(minLevel) && minLevel < actor.RoleLevel {
+		// A threshold stronger than the creator's own clearance would lock
+		// them out of their own group.
 		return nil, ErrLevelTooHigh
 	}
-	if in.MinRoleLevel < actor.RoleLevel {
-		return nil, ErrLevelTooHigh
+
+	kind := in.Kind
+	if kind != KindCommunity {
+		kind = KindGroup
 	}
 
 	g := &Group{
 		Name:         in.Name,
 		Description:  in.Description,
-		MinRoleLevel: in.MinRoleLevel,
-		CreatedBy:    actor.UserID,
+		MinRoleLevel: minLevel,
+		Kind:         kind,
+		// Only a community can be public: an ordinary group has no wall to
+		// show, so publishing it to the feed would mean nothing.
+		IsPublic:  kind == KindCommunity && in.IsPublic,
+		CreatedBy: actor.UserID,
 	}
 
 	tx, err := s.pool.Begin(ctx)

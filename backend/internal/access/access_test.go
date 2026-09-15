@@ -83,6 +83,20 @@ func TestNoLevelClearsNoThreshold(t *testing.T) {
 	}
 }
 
+func TestAGroupWithNoThresholdIsOpenToEveryone(t *testing.T) {
+	// Zero means "absent" on both sides of this rule and the opposite thing on
+	// each: a group with no threshold admits everyone, an account with no
+	// level clears nothing.
+	if !CanAccessGroup(NoLevel, NoLevel) {
+		t.Fatal("a group with no threshold must admit an account with no level")
+	}
+	for _, actor := range []int{CEOLevel, 5, LowestLevel} {
+		if !CanAccessGroup(actor, NoLevel) {
+			t.Fatalf("a group with no threshold must admit level %d", actor)
+		}
+	}
+}
+
 func TestNoLevelMeetsNoClearance(t *testing.T) {
 	// The bug this guards: RequireClearance(1) gates the admin panel, and
 	// `0 > 1` is false — a level-less account would have walked straight in.
