@@ -82,6 +82,17 @@ func scanUser(row pgx.Row) (*User, error) {
 }
 
 func (r *PostgresRepository) Create(ctx context.Context, q db.DBTX, u *User) error {
+	// The kind and the level describe one fact, so the level decides and the
+	// kind follows. Asking callers to set both invites the two to disagree —
+	// and they cannot: the database has a constraint that refuses the
+	// combination, which is what caught this in the first place.
+	if u.AccountKind == "" {
+		u.AccountKind = KindInvited
+		if !access.HasLevel(u.RoleID) {
+			u.AccountKind = KindBasic
+		}
+	}
+
 	err := q.QueryRow(ctx, `
 		INSERT INTO users (username, display_name, password_hash, role_id, account_kind, must_change_password)
 		VALUES ($1, $2, $3, NULLIF($4, 0), $5, $6)

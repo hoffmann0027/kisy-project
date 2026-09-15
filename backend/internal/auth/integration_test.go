@@ -15,6 +15,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"kisy-backend/internal/access"
 	"kisy-backend/internal/audit"
 	"kisy-backend/internal/auth"
 	"kisy-backend/internal/auth/password"
@@ -90,7 +91,7 @@ func setup(t *testing.T) *env {
 	invitesRepo := invitations.NewPostgresRepository()
 	tokens := token.NewManager("integration-test-secret-32-chars-min", 15*time.Minute)
 
-	svc, err := auth.NewService(pool, usersRepo, sessionsRepo, invitesRepo, rec, tokens, 24*time.Hour)
+	svc, err := auth.NewService(pool, usersRepo, sessionsRepo, invitesRepo, rec, tokens, 24*time.Hour, true)
 	if err != nil {
 		t.Fatalf("auth service: %v", err)
 	}
@@ -335,4 +336,47 @@ func refreshPlain(t *testing.T, cookie string) string {
 	}
 	t.Fatalf("malformed refresh cookie: %s", cookie)
 	return ""
+}
+
+// Registration without an invitation: the account that the whole of stage 2
+// is about. It exists, it can sign in, and it holds no clearance level — not
+// the lowest one, none at all.
+func TestRegisterWithoutInviteCreatesAnAccountOutsideTheHierarchy(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+
+	res, err := e.svc.Register(ctx, "", "just_someone", "open-register-77", testMeta)
+	if err != nil {
+		t.Fatalf("register without invite: %v", err)
+	}
+	if res.User.AccountKind != users.KindBasic {
+		t.Fatalf("kind = %q, want %q", res.User.AccountKind, users.KindBasic)
+	}
+	if access.HasLevel(res.User.RoleID) {
+		t.Fatalf("level = %d, want none", res.User.RoleID)
+	}
+
+	// The level really is absent in the database, not stored as some number
+	// that would later pass a threshold.
+	var stored *int
+	if err := e.pool.QueryRow(ctx,
+		`SELECT role_id FROM users WHERE username = 'just_someone'`).Scan(&stored); err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if stored != nil {
+		t.Fatalf("role_id = %d, want NULL", *stored)
+	}
+
+	if _, err := e.svc.Login(ctx, "just_someone", "open-register-77", testMeta); err != nil {
+		t.Fatalf("login: %v", err)
+	}
+}
+
+func TestBadInviteIsNeverQuietlyDowngraded(t *testing.T) {
+	// Someone who was given a token and typed it in must be told it did not
+	// work — not handed a different, lesser account without being told.
+	e := setup(t)
+	if _, err := e.svc.Register(context.Background(), "not-a-real-token", "hopeful", "open-register-77", testMeta); !errors.Is(err, auth.ErrInvalidInvite) {
+		t.Fatalf("error = %v, want ErrInvalidInvite", err)
+	}
 }
