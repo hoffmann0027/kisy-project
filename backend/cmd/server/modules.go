@@ -136,7 +136,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 
 	tokens := token.NewManager(cfg.JWTAccessSecret, cfg.JWTAccessTTL)
 
-	authSvc, err := auth.NewService(pool, usersRepo, sessionsRepo, invitesRepo, auditRec, tokens, cfg.JWTRefreshTTL)
+	authSvc, err := auth.NewService(pool, usersRepo, sessionsRepo, invitesRepo, auditRec, tokens, cfg.JWTRefreshTTL, cfg.RegistrationOpen)
 	if err != nil {
 		return nil, err
 	}

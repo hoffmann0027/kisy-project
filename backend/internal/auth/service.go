@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"kisy-backend/internal/access"
 	"kisy-backend/internal/audit"
 	"kisy-backend/internal/auth/password"
 	"kisy-backend/internal/auth/token"
@@ -26,6 +28,9 @@ type Service struct {
 	audit      audit.Recorder
 	tokens     *token.Manager
 	refreshTTL time.Duration
+	// registrationOpen allows accounts to be created without an invitation.
+	// Off turns KISY back into the invitation-only product it started as.
+	registrationOpen bool
 
 	// dummyHash equalizes login timing for unknown usernames so response
 	// latency does not reveal whether an account exists.
@@ -40,6 +45,7 @@ func NewService(
 	rec audit.Recorder,
 	tokens *token.Manager,
 	refreshTTL time.Duration,
+	registrationOpen bool,
 ) (*Service, error) {
 	dummy, err := password.Hash(uuid.NewString())
 	if err != nil {
@@ -53,6 +59,7 @@ func NewService(
 		audit:      rec,
 		tokens:     tokens,
 		refreshTTL: refreshTTL,
+		registrationOpen: registrationOpen,
 		dummyHash:  dummy,
 	}, nil
 }
@@ -190,7 +197,7 @@ func (s *Service) openSession(ctx context.Context, u *users.User, meta ClientMet
 		return nil, fmt.Errorf("auth: commit: %w", err)
 	}
 
-	access, accessExp, err := s.tokens.IssueAccess(u.ID, sess.ID, u.RoleID)
+	access, accessExp, err := s.tokens.IssueAccess(u.ID, sess.ID, u.RoleID, u.AccountKind)
 	if err != nil {
 		return nil, err
 	}
@@ -208,6 +215,16 @@ func (s *Service) openSession(ctx context.Context, u *users.User, meta ClientMet
 // the invitation used in the same transaction (single-use guarantee), then
 // opens the first session.
 func (s *Service) Register(ctx context.Context, inviteToken, username, plainPassword string, meta ClientMeta) (*LoginResult, error) {
+	// No token offered: an ordinary account, outside the role hierarchy.
+	//
+	// A token that was offered and turned out to be bad is a different story
+	// and stays an error. Quietly downgrading it to a basic account would hand
+	// someone a working account while telling them nothing about the
+	// invitation they thought they were using.
+	if strings.TrimSpace(inviteToken) == "" {
+		return s.registerWithoutInvite(ctx, username, plainPassword, meta)
+	}
+
 	now := time.Now().UTC()
 	tokenHash := token.HashOpaqueToken(inviteToken)
 
@@ -238,6 +255,7 @@ func (s *Service) Register(ctx context.Context, inviteToken, username, plainPass
 		DisplayName:  username,
 		PasswordHash: hash,
 		RoleID:       DefaultRegisteredRoleLevel,
+		AccountKind:  users.KindInvited,
 	}
 	if err := s.users.Create(ctx, tx, u); err != nil {
 		return nil, err // users.ErrUsernameTaken passes through
@@ -279,6 +297,70 @@ func (s *Service) Register(ctx context.Context, inviteToken, username, plainPass
 	}
 	return &LoginResult{User: u, Tokens: *pair}, nil
 }
+
+// registerWithoutInvite creates an account that stands outside the role
+// hierarchy: no invitation was redeemed, so there is no level to grant and
+// nobody vouched for it.
+//
+// It is the same product otherwise — chats, groups, calls, notes, encryption —
+// but everything built on levels (the rating board, promotions, level votes,
+// administration) is not merely hidden from it, it does not apply.
+func (s *Service) registerWithoutInvite(
+	ctx context.Context, username, plainPassword string, meta ClientMeta,
+) (*LoginResult, error) {
+	if !s.registrationOpen {
+		return nil, ErrRegistrationClosed
+	}
+
+	now := time.Now().UTC()
+	hash, err := password.Hash(plainPassword)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("auth: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	u := &users.User{
+		Username:     username,
+		DisplayName:  username,
+		PasswordHash: hash,
+		RoleID:       access.NoLevel,
+		AccountKind:  users.KindBasic,
+	}
+	if err := s.users.Create(ctx, tx, u); err != nil {
+		return nil, err // users.ErrUsernameTaken passes through
+	}
+
+	if err := s.audit.Record(ctx, tx, audit.Event{
+		ActorID:    &u.ID,
+		Action:     audit.ActionUserRegistered,
+		TargetType: "user",
+		TargetID:   &u.ID,
+		IPHash:     meta.IPHash,
+		RequestID:  meta.RequestID,
+		Metadata:   map[string]any{"accountKind": users.KindBasic},
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("auth: commit: %w", err)
+	}
+
+	pair, err := s.openSession(ctx, u, meta, audit.ActionUserLogin, now)
+	if err != nil {
+		return nil, err
+	}
+	return &LoginResult{User: u, Tokens: *pair}, nil
+}
+
+// RegistrationOpen reports whether accounts can be created without an
+// invitation on this deployment.
+func (s *Service) RegistrationOpen() bool { return s.registrationOpen }
 
 // Refresh rotates the refresh token. Presenting a stale token for a live
 // session is treated as theft (reuse detection): the session is revoked
@@ -329,7 +411,7 @@ func (s *Service) Refresh(ctx context.Context, sessionID uuid.UUID, plainRefresh
 		return nil, err
 	}
 
-	access, accessExp, err := s.tokens.IssueAccess(u.ID, sess.ID, u.RoleID)
+	access, accessExp, err := s.tokens.IssueAccess(u.ID, sess.ID, u.RoleID, u.AccountKind)
 	if err != nil {
 		return nil, err
 	}

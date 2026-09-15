@@ -261,18 +261,26 @@ func newRouter(d routerDeps) http.Handler {
 				m.notesHandler.Routes(r)
 			})
 
+			// Everything built on the role hierarchy. An account that
+			// registered without an invitation has no level and no place in
+			// any of it — hiding these in the UI is presentation, this is the
+			// rule (docs/spec/01-vision-and-access.md §5).
 			r.Route("/conditions", func(r chi.Router) {
+				r.Use(m.authMW.RequireInvited)
 				m.conditionsHandler.Routes(r)
 			})
 
 			r.Route("/rating", func(r chi.Router) {
 				// The rating board is the clan board: open to clearance levels
 				// 1–9; the weakest level (10) is "not in a clan" and blocked.
+				r.Use(m.authMW.RequireInvited)
 				r.Use(m.authMW.RequireClearance(9))
 				m.ratingHandler.Routes(r)
 			})
 
 			r.Route("/polls", func(r chi.Router) {
+				// The company-wide vote board the CEO runs.
+				r.Use(m.authMW.RequireInvited)
 				m.votingHandler.Routes(r)
 			})
 
@@ -305,6 +313,7 @@ func newRouter(d routerDeps) http.Handler {
 			})
 
 			r.Route("/admin", func(r chi.Router) {
+				r.Use(m.authMW.RequireInvited)
 				r.Use(m.authMW.RequireClearance(1)) // CEO only
 				m.adminHandler.Routes(r)
 			})

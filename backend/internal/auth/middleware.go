@@ -9,7 +9,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"kisy-backend/internal/access"
 	"kisy-backend/internal/auth/token"
+	"kisy-backend/internal/users"
 	"kisy-backend/pkg/httpresponse"
 )
 
@@ -99,13 +101,36 @@ func (m *Middleware) RequireClearance(maxLevel int) func(http.Handler) http.Hand
 				httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
 				return
 			}
-			if claims.RoleLevel > maxLevel {
+			// Not `claims.RoleLevel > maxLevel`: a basic account carries level
+			// zero, which under that comparison outranks the CEO and would
+			// walk straight into the admin panel.
+			if !access.MeetsClearance(claims.RoleLevel, maxLevel) {
 				httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "insufficient clearance")
 				return
 			}
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// RequireInvited allows only accounts that came through an invitation.
+//
+// Guards everything built on the role hierarchy — the rating board, promotion
+// conditions, level votes, administration — which a basic account has no place
+// in. Hiding those in the UI is presentation; this is the rule.
+func (m *Middleware) RequireInvited(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := ClaimsFromContext(r.Context())
+		if !ok {
+			httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
+			return
+		}
+		if claims.Kind != users.KindInvited {
+			httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "invitation required")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func accessTokenFromRequest(r *http.Request) string {

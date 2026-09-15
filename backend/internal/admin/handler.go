@@ -131,6 +131,9 @@ func (h *Handler) writeResult(w http.ResponseWriter, r *http.Request, err error)
 		httpresponse.OK(w, r, http.StatusOK, map[string]any{"ok": true})
 	case errors.Is(err, ErrInvalidRole), errors.Is(err, ErrWeakPassword):
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, err.Error())
+	case errors.Is(err, ErrNotInvited):
+		// The request is well-formed; what it asks for cannot exist.
+		httpresponse.Fail(w, r, http.StatusUnprocessableEntity, httpresponse.ErrValidationFailed, err.Error())
 	case errors.Is(err, ErrSelfMutation):
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, err.Error())
 	case errors.Is(err, ErrNotFound):

@@ -14,6 +14,9 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+
+	"kisy-backend/internal/access"
+	"kisy-backend/internal/users"
 )
 
 var (
@@ -27,12 +30,17 @@ const issuer = "kisy"
 type AccessClaims struct {
 	UserID    uuid.UUID
 	SessionID uuid.UUID
+	// RoleLevel is access.NoLevel (0) for a basic account. Kind says which
+	// kind of account it is, and the two are validated against each other on
+	// parse so a level-less token cannot be mistaken for a privileged one.
 	RoleLevel int
+	Kind      string
 }
 
 type jwtClaims struct {
 	SessionID string `json:"sid"`
 	RoleLevel int    `json:"lvl"`
+	Kind      string `json:"knd,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -46,13 +54,14 @@ func NewManager(secret string, ttl time.Duration) *Manager {
 	return &Manager{secret: []byte(secret), ttl: ttl}
 }
 
-func (m *Manager) IssueAccess(userID, sessionID uuid.UUID, roleLevel int) (string, time.Time, error) {
+func (m *Manager) IssueAccess(userID, sessionID uuid.UUID, roleLevel int, kind string) (string, time.Time, error) {
 	now := time.Now().UTC()
 	expiresAt := now.Add(m.ttl)
 
 	claims := jwtClaims{
 		SessionID: sessionID.String(),
 		RoleLevel: roleLevel,
+		Kind:      kind,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    issuer,
 			Subject:   userID.String(),
@@ -92,11 +101,28 @@ func (m *Manager) ParseAccess(raw string) (*AccessClaims, error) {
 	if err != nil {
 		return nil, ErrInvalid
 	}
-	if claims.RoleLevel < 1 || claims.RoleLevel > 10 {
+	// A level outside 1..10 is only acceptable when the token says, in the same
+	// breath, that this account has no level. Nothing is loosened for an
+	// ordinary token: one that simply lacks "lvl" is still rejected, so a
+	// stripped or forged claim cannot pass itself off as a level-less account
+	// and then be treated as stronger than the CEO by a `<=` somewhere.
+	basic := claims.Kind == users.KindBasic
+	if basic {
+		if claims.RoleLevel != access.NoLevel {
+			return nil, ErrInvalid
+		}
+	} else if !access.HasLevel(claims.RoleLevel) {
 		return nil, ErrInvalid
 	}
 
-	return &AccessClaims{UserID: userID, SessionID: sessionID, RoleLevel: claims.RoleLevel}, nil
+	kind := claims.Kind
+	if kind == "" {
+		// Tokens issued before account kinds existed belong to invited
+		// accounts — those were the only kind there was.
+		kind = users.KindInvited
+	}
+
+	return &AccessClaims{UserID: userID, SessionID: sessionID, RoleLevel: claims.RoleLevel, Kind: kind}, nil
 }
 
 // NewOpaqueToken returns a 256-bit cryptographically random token and its

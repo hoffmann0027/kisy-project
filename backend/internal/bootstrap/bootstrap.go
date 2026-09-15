@@ -46,6 +46,7 @@ func EnsureCEO(ctx context.Context, pool *pgxpool.Pool, repo users.Repository, r
 		DisplayName:  username,
 		PasswordHash: hash,
 		RoleID:       1, // CEO
+		AccountKind:  users.KindInvited,
 		// The seed password comes from configuration and may have been shared
 		// out-of-band, so force a change at first login (§2 of the July 2026
 		// security update). The frontend blocks the app until it is changed.

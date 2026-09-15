@@ -54,11 +54,17 @@ paths:
   /auth/register:
     post:
       tags: [auth]
-      summary: Register using an invitation token
+      summary: Register, with or without an invitation token
       description: >
-        Redeems a single-use invitation token (120s lifetime) and creates
-        an account at the lowest clearance level, then opens the first
-        session (sets auth cookies).
+        With an invitation token: redeems a single-use token (120s lifetime)
+        and creates an invited account at the lowest clearance level.
+
+        Without one (omitted or empty): creates a basic account — no clearance
+        level, outside the role hierarchy — provided the deployment allows it
+        (see GET /auth/registration). A token that is supplied but invalid or
+        already used is an error, never a silent downgrade to a basic account.
+
+        Either way the first session is opened (sets auth cookies).
       security: []
       requestBody:
         required: true
@@ -66,10 +72,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [inviteToken, username, password]
+              required: [username, password]
               properties:
                 inviteToken:
                   type: string
+                  description: Omit or leave empty to register without an invitation.
                 username:
                   type: string
                   pattern: '^[A-Za-z0-9_]{3,32}$'
@@ -95,8 +102,38 @@ paths:
                         properties:
                           user: { $ref: '#/components/schemas/User' }
         '400': { $ref: '#/components/responses/ValidationError' }
+        '403':
+          description: >
+            Registration without an invitation is closed on this deployment
+            (REGISTRATION_OPEN=false).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
         '409': { $ref: '#/components/responses/Conflict' }
         '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/registration:
+    get:
+      tags: [auth]
+      summary: Whether accounts can be created without an invitation
+      description: >
+        Asked by the sign-up screen before it decides whether to offer
+        registration at all. Unauthenticated by necessity; it reveals one
+        boolean about the deployment's policy and nothing about anyone in it.
+      security: []
+      responses:
+        '200':
+          description: Registration policy
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          open: { type: boolean }
 
   /auth/login:
     post:
@@ -3307,7 +3344,20 @@ components:
         id: { type: string, format: uuid }
         username: { type: string }
         displayName: { type: string }
-        roleLevel: { type: integer, minimum: 1, maximum: 10 }
+        roleLevel:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 10
+          description: >
+            Clearance level, or null for an account registered without an
+            invitation. Null means the account stands outside the role
+            hierarchy — not that it sits at the bottom of it.
+        accountKind:
+          type: string
+          enum: [basic, invited]
+          description: >
+            invited — redeemed a CEO invitation and holds a level;
+            basic — registered openly and holds none.
         avatarUrl: { type: [string, 'null'] }
         status: { type: string, enum: [online, offline, away] }
         isActive: { type: boolean }

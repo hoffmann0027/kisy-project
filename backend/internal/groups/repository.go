@@ -106,7 +106,10 @@ func (r *PostgresRepository) ListVisible(ctx context.Context, q db.DBTX, actorLe
 	rows, err := q.Query(ctx, `
 		SELECT `+groupColumns+`
 		FROM groups
-		WHERE is_archived = false AND min_role_level >= $1
+		-- $1 is the actor's level. Zero means no level at all, and an account
+		-- outside the hierarchy clears no threshold — without the range guard
+		-- zero would sit below every min_role_level and match every group.
+		WHERE is_archived = false AND $1 BETWEEN 1 AND 10 AND min_role_level >= $1
 		ORDER BY created_at DESC, id DESC`, actorLevel)
 	if err != nil {
 		return nil, fmt.Errorf("groups: list visible: %w", err)
@@ -190,7 +193,7 @@ func (r *PostgresRepository) ListDirectory(ctx context.Context, q db.DBTX, actor
 		LEFT JOIN group_join_requests jr
 		       ON jr.group_id = g.id AND jr.user_id = $1 AND jr.status = 'pending'
 		WHERE g.is_archived = false
-		  AND g.min_role_level >= $2
+		  AND $2 BETWEEN 1 AND 10 AND g.min_role_level >= $2
 		  AND NOT EXISTS (SELECT 1 FROM group_members m WHERE m.group_id = g.id AND m.user_id = $1)
 		ORDER BY g.created_at DESC, g.id DESC`, actorID, actorLevel)
 	if err != nil {

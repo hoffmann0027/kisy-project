@@ -37,7 +37,9 @@ export function Rail({ onProfile }: Props) {
   // therefore highlights Сообщества, not Чаты.
   const onCommunities = pathname.startsWith("/communities") || pathname.startsWith("/group/");
   const onChats = !onRating && !onCommunities;
-  const canRating = user.roleLevel <= RATING_MAX_LEVEL;
+  // An account with no level is not at the bottom of the hierarchy, it is
+  // outside it, so no threshold admits it.
+  const canRating = user.roleLevel !== null && user.roleLevel <= RATING_MAX_LEVEL;
   const openRating = () => (canRating ? navigate("/rating") : setNoClan(true));
 
   return (

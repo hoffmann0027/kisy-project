@@ -16,7 +16,18 @@ export function ConditionsModal({ open, onClose }: Props) {
 
   return (
     <Modal open={open} title="Условия повышения уровня" onClose={onClose}>
-      {isCEO ? <CeoEditor open={open} /> : <MemberView open={open} level={me.roleLevel} />}
+      {isCEO ? (
+        <CeoEditor open={open} />
+      ) : me.roleLevel === null ? (
+        // Promotion is a movement inside the hierarchy; this account is not in
+        // it. The backend refuses /conditions for the same reason, so there is
+        // nothing to fetch here either.
+        <p style={{ color: "var(--color-text-secondary)" }}>
+          Повышение уровня доступно только участникам, приглашённым в систему.
+        </p>
+      ) : (
+        <MemberView open={open} level={me.roleLevel} />
+      )}
     </Modal>
   );
 }

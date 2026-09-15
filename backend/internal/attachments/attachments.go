@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"kisy-backend/internal/access"
 	"kisy-backend/internal/platform/blobstore"
 	"kisy-backend/internal/platform/db"
 )
@@ -77,7 +78,11 @@ type Limits struct {
 
 // MaxBytesFor returns the upload ceiling for a clearance level.
 func (l Limits) MaxBytesFor(roleLevel int) int64 {
-	if roleLevel <= l.LeadershipMaxLevel {
+	// The leadership allowance is a privilege of the top of the hierarchy, so
+	// an account outside the hierarchy does not get it. Written through
+	// access.MeetsClearance because the bare `roleLevel <= …` reads a
+	// level-less account (zero) as the most senior one there is.
+	if access.MeetsClearance(roleLevel, l.LeadershipMaxLevel) {
 		return l.MaxBytesLeadership
 	}
 	return l.MaxBytesStaff

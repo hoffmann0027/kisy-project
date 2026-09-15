@@ -91,6 +91,12 @@ type Config struct {
 	// that directory (single-service same-origin deployment).
 	WebDir string
 
+	// RegistrationOpen allows accounts to be created without an invitation
+	// (users.KindBasic). Defaults to true; setting it false returns the
+	// deployment to the invitation-only product described in
+	// docs/spec/01-vision-and-access.md §3.
+	RegistrationOpen bool
+
 	// RunMigrations forces schema migrations to run on boot. Defaults to
 	// true outside production; a managed single-service deploy sets it true.
 	RunMigrations bool
@@ -353,6 +359,13 @@ func Load() (*Config, error) {
 	cfg.RunMigrations = cfg.Env != "production"
 	if v := os.Getenv("RUN_MIGRATIONS"); v != "" {
 		cfg.RunMigrations = v == "true" || v == "1"
+	}
+
+	// Open registration is the default, because it is the feature; a
+	// deployment that wants to stay invitation-only says so explicitly.
+	cfg.RegistrationOpen = true
+	if v := os.Getenv("REGISTRATION_OPEN"); v != "" {
+		cfg.RegistrationOpen = v == "true" || v == "1"
 	}
 
 	if err := cfg.validateProduction(); err != nil {

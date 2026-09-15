@@ -2,11 +2,24 @@
 // json tags). Kept in one place so every feature shares one source of
 // truth for the API shape.
 
+/**
+ * How the account came to exist. "invited" redeemed a CEO invitation and holds
+ * a clearance level; "basic" registered openly and holds none.
+ */
+export type AccountKind = "basic" | "invited";
+
 export interface User {
   id: string;
   username: string;
   displayName: string;
-  roleLevel: number;
+  /**
+   * Clearance 1–10, or null for an account that registered without an
+   * invitation. Null is not "level 10": such an account stands outside the
+   * role hierarchy rather than at the bottom of it, and that is what decides
+   * whether levels are shown at all.
+   */
+  roleLevel: number | null;
+  accountKind: AccountKind;
   avatarUrl: string | null;
   status: "online" | "offline" | "away";
   isActive: boolean;
@@ -485,6 +498,12 @@ export const ROLE_LABELS: Record<number, string> = {
   10: "Guest",
 };
 
-export function roleLabel(level: number): string {
+/**
+ * The label under someone's name. Empty for an account with no level: there is
+ * no such thing as an unranked rank, and inventing one ("Гость", "Level 0")
+ * would put it in a hierarchy it does not belong to.
+ */
+export function roleLabel(level: number | null | undefined): string {
+  if (level == null) return "";
   return ROLE_LABELS[level] ?? `Level ${level}`;
 }

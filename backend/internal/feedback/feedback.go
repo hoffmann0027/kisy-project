@@ -37,7 +37,8 @@ type Author struct {
 	DisplayName string    `json:"displayName"`
 	Username    string    `json:"username"`
 	AvatarURL   *string   `json:"avatarUrl"`
-	RoleLevel   int       `json:"roleLevel"`
+	// Null for an author with no level (an account outside the hierarchy).
+	RoleLevel *int `json:"roleLevel"`
 }
 
 // DTO is the API representation of one feedback entry.
@@ -69,6 +70,9 @@ func NewPostgresRepository() *PostgresRepository { return &PostgresRepository{} 
 const selectColumns = `
 	f.id, f.body, f.created_at,
 	u.id, u.display_name, u.username, u.avatar_url, u.role_id`
+
+// role_id is NULL for an account outside the hierarchy; the author card then
+// simply carries no level.
 
 func scan(row pgx.Row) (DTO, error) {
 	var d DTO

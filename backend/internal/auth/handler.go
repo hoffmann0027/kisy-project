@@ -64,6 +64,10 @@ func NewHandler(svc *Service, mw *Middleware, ipHashSalt string, secureCookie bo
 // caller (main router) so limits are configured in one place.
 func (h *Handler) Routes(r chi.Router) {
 	r.Post("/register", h.register)
+	// Unauthenticated by necessity: it is what the sign-up screen asks before
+	// deciding whether to offer registration at all. It reveals one boolean
+	// about the deployment's policy and nothing about anyone in it.
+	r.Get("/registration", h.registrationPolicy)
 	r.Post("/login", h.login)
 	r.Post("/refresh", h.refresh)
 
@@ -99,16 +103,22 @@ type registerRequest struct {
 	Password    string `json:"password"`
 }
 
+// registrationPolicy tells the sign-up screen whether an account can be
+// created without an invitation here. Offering a form that will be refused is
+// worse than not offering it.
+func (h *Handler) registrationPolicy(w http.ResponseWriter, r *http.Request) {
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"open": h.svc.RegistrationOpen()})
+}
+
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 	if err := httpjson.Decode(w, r, &req); err != nil {
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "malformed JSON body")
 		return
 	}
-	if req.InviteToken == "" {
-		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "inviteToken is required")
-		return
-	}
+	// An empty invitation token is now a request for an ordinary account, not
+	// a malformed request. A non-empty one that turns out to be invalid still
+	// fails, in the service.
 	if !usernamePattern.MatchString(req.Username) {
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "username must be 3-32 characters: letters, digits, underscore")
 		return
@@ -250,6 +260,8 @@ func (h *Handler) writeAuthError(w http.ResponseWriter, r *http.Request, err err
 		httpresponse.Fail(w, r, http.StatusTooManyRequests, httpresponse.ErrRateLimited, "account temporarily locked, try again later")
 	case errors.Is(err, ErrInvalidInvite):
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrAuthInvalidToken, "invitation token is invalid or expired")
+	case errors.Is(err, ErrRegistrationClosed):
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "registration requires an invitation on this deployment")
 	case errors.Is(err, users.ErrUsernameTaken):
 		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrValidationFailed, "username is already taken")
 	case errors.Is(err, ErrInvalidRefresh):

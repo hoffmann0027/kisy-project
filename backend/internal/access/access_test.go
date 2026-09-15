@@ -50,3 +50,65 @@ func TestIsCEO(t *testing.T) {
 		}
 	}
 }
+
+// An account outside the role hierarchy carries level zero, and zero is the
+// dangerous number here: every rule in this package is written as "stronger
+// clearance is a SMALLER number", so a bare `level <= threshold` reads zero as
+// stronger than the CEO. These tests pin down that it never does.
+
+func TestNoLevelIsNotALevel(t *testing.T) {
+	if HasLevel(NoLevel) {
+		t.Fatal("an account outside the hierarchy must not count as having a level")
+	}
+	for level := CEOLevel; level <= LowestLevel; level++ {
+		if !HasLevel(level) {
+			t.Fatalf("level %d is a real level", level)
+		}
+	}
+	if HasLevel(LowestLevel + 1) {
+		t.Fatal("a level past the bottom of the hierarchy is not a level")
+	}
+	if HasLevel(-1) {
+		t.Fatal("a negative level is not a level")
+	}
+}
+
+func TestNoLevelClearsNoThreshold(t *testing.T) {
+	// Including the weakest group there is: the account is not at the bottom
+	// of the hierarchy, it is outside it.
+	for _, min := range []int{CEOLevel, 5, LowestLevel} {
+		if CanAccessGroup(NoLevel, min) {
+			t.Fatalf("a level-less account must not reach a group requiring %d", min)
+		}
+	}
+}
+
+func TestNoLevelMeetsNoClearance(t *testing.T) {
+	// The bug this guards: RequireClearance(1) gates the admin panel, and
+	// `0 > 1` is false — a level-less account would have walked straight in.
+	if MeetsClearance(NoLevel, CEOLevel) {
+		t.Fatal("a level-less account must not pass the CEO gate")
+	}
+	if MeetsClearance(NoLevel, LowestLevel) {
+		t.Fatal("a level-less account must not pass even the weakest gate")
+	}
+	if !MeetsClearance(CEOLevel, CEOLevel) || !MeetsClearance(2, 9) {
+		t.Fatal("real clearance still passes")
+	}
+	if MeetsClearance(10, 9) {
+		t.Fatal("insufficient clearance still fails")
+	}
+}
+
+func TestChatsAreNotGovernedByTheHierarchyWhenSomeoneIsOutsideIt(t *testing.T) {
+	// Deliberate, and the one place where "no level" is permissive: the rule
+	// about who may write to whom orders the hierarchy, and an account outside
+	// it is not being ordered. What limits a basic account is what it can find
+	// — it has no directory (users.Search) — not who it may write to.
+	if !CanInitiateChat(NoLevel, 1) {
+		t.Fatal("a basic account may write to anyone it found, the CEO included")
+	}
+	if !CanInitiateChat(10, NoLevel) {
+		t.Fatal("anyone may write to a basic account")
+	}
+}

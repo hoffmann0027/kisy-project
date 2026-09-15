@@ -15,6 +15,8 @@ var (
 	ErrAccountLocked      = errors.New("auth: account temporarily locked")
 	ErrInvalidRefresh     = errors.New("auth: invalid refresh token")
 	ErrInvalidInvite      = errors.New("auth: invalid or expired invitation token")
+	// ErrRegistrationClosed: this deployment only accepts invited accounts.
+	ErrRegistrationClosed = errors.New("auth: registration without an invitation is closed")
 )
 
 // Login/lockout policy per docs/spec/06-security.md ("Account lockout

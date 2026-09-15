@@ -22,6 +22,9 @@ import (
 var (
 	ErrNotFound     = errors.New("admin: user not found")
 	ErrInvalidRole  = errors.New("admin: role level must be 1..10")
+	// ErrNotInvited: the account registered without an invitation and stands
+	// outside the role hierarchy, so it cannot be given a level.
+	ErrNotInvited = errors.New("admin: account registered without an invitation has no place in the role hierarchy")
 	ErrSelfMutation = errors.New("admin: cannot perform this action on yourself")
 	ErrWeakPassword = errors.New("admin: password too weak")
 )
@@ -78,6 +81,13 @@ func (s *Service) ChangeRole(ctx context.Context, targetID uuid.UUID, newLevel i
 	current, err := s.users.GetByID(ctx, s.pool, targetID)
 	if err != nil {
 		return mapNotFound(err)
+	}
+	// A basic account is not at the bottom of the hierarchy, it is outside it.
+	// Granting it a level would make it an invited account without anyone
+	// having invited it — the one thing the invitation model exists to
+	// prevent — and the database refuses the combination anyway.
+	if current.AccountKind != users.KindInvited {
+		return ErrNotInvited
 	}
 
 	tx, err := s.pool.Begin(ctx)

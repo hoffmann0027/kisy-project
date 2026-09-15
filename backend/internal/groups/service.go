@@ -206,6 +206,12 @@ type CreateInput struct {
 // creator's own (they must be able to belong to it): min_role_level must
 // be >= the creator's role level.
 func (s *Service) Create(ctx context.Context, in CreateInput, actor ActorMeta) (*Group, error) {
+	// An account with no level cannot place a group in a hierarchy it is not
+	// part of. (Groups without a threshold, which it will be able to create,
+	// arrive with communities in migration 000043.)
+	if !access.HasLevel(actor.RoleLevel) {
+		return nil, ErrLevelTooHigh
+	}
 	if in.MinRoleLevel < actor.RoleLevel {
 		return nil, ErrLevelTooHigh
 	}

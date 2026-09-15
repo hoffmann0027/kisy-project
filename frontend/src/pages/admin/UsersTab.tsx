@@ -64,10 +64,20 @@ export function UsersTab() {
               <td>
                 {u.id === me.id ? (
                   <span>{roleLabel(u.roleLevel)}</span>
+                ) : u.accountKind === "basic" ? (
+                  // Not a disabled dropdown of levels this account could have:
+                  // it could have none. Granting one would make it an invited
+                  // account that nobody invited, and the server refuses it.
+                  <span
+                    style={{ color: "var(--color-text-tertiary)" }}
+                    title="Аккаунт зарегистрирован без приглашения и не входит в иерархию уровней"
+                  >
+                    Без уровня
+                  </span>
                 ) : (
                   <select
                     className="role-select"
-                    value={u.roleLevel}
+                    value={u.roleLevel ?? ""}
                     onChange={(e) => changeRole.mutate({ id: u.id, role: Number(e.target.value) })}
                   >
                     {Object.entries(ROLE_LABELS).map(([lvl, label]) => (
