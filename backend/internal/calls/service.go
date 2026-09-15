@@ -376,14 +376,23 @@ func (s *Service) HandleDisconnect(ctx context.Context, userID uuid.UUID) {
 		_ = s.store.ClearUserBusy(ctx, userID)
 		return
 	}
-	var status string
-	switch {
-	case st.AnsweredAt != nil:
-		status = StatusCompleted
-	case userID == st.Caller:
+	// A callee whose socket dies while the phone is still ringing has not
+	// refused anything — that is the state the push path is built for. The
+	// socket the app had before it was swept out of memory is exactly the one
+	// that closes here, moments after a push woke the phone, and ending the
+	// call on it turned the user's "Ответить" into a rejected call. Let the
+	// ring timeout decide instead; it is the only thing that knows nobody came.
+	if st.AnsweredAt == nil && userID != st.Caller {
+		s.log.Info("calls: callee socket dropped while ringing, leaving the call to the ring timeout",
+			"callID", callID, "userID", userID)
+		return
+	}
+
+	// Only two cases are left: a call that was already answered, or a caller
+	// who dropped before it was. A disconnect is never a refusal.
+	status := StatusCompleted
+	if st.AnsweredAt == nil {
 		status = StatusCanceled
-	default:
-		status = StatusRejected
 	}
 	s.finalize(ctx, st, status)
 	_ = s.store.Delete(ctx, callID)

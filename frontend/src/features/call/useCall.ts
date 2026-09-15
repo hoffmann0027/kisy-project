@@ -66,6 +66,9 @@ export function useCall() {
   // Decisions from the native ringing screen already acted on, so a tap that
   // reaches us twice is not answered twice.
   const handledNative = useRef<Set<string>>(new Set());
+  // A call answered on the lock screen, waiting for the app to be on screen
+  // before the microphone is asked for.
+  const deferredAnswer = useRef<string | null>(null);
   const endTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   if (!remoteAudio.current && typeof window !== "undefined") {
@@ -206,19 +209,32 @@ export function useCall() {
     [fetchIce, finishWith, getMic, makePc],
   );
 
-  const accept = useCallback(async () => {
+  const accept = useCallback(async (opts?: { auto?: boolean }) => {
     const s = session.current;
     if (!s || s.role !== "callee") return;
     // A session that already has a peer connection is being answered; a second
     // accept would open a second microphone and a second connection.
     if (s.pc) return;
-    callLog("answering", s.callId);
+    const auto = opts?.auto === true;
+    callLog(auto ? "answering automatically" : "answering", s.callId);
     ringtone.stop();
     void stopNativeRinging();
     let localStream: MediaStream;
     try {
       localStream = await getMic();
     } catch (e) {
+      // Answered on the native screen, and the microphone is not available
+      // yet: Android refuses it to an app that is not visibly in the
+      // foreground, which is exactly where the app is while the phone is
+      // still unlocking. Hanging up here would turn the user's "Ответить"
+      // into a rejected call — the call is kept ringing in the app instead,
+      // and answered for real once the app is on screen.
+      if (auto) {
+        callLog("microphone not available yet, keeping the call ringing", (e as Error).message);
+        ringtone.incoming();
+        setView((v) => (v.phase === "idle" ? v : { ...v, phase: "incoming" }));
+        return;
+      }
       wsClient.send({ type: "call.reject", data: { callId: s.callId } });
       finishWith((e as Error).message, true);
       return;
@@ -355,7 +371,17 @@ export function useCall() {
         callLog("answered a call that is no longer ringing", d.callId);
         return;
       }
-      await accept();
+      if (document.visibilityState !== "visible") {
+        // The tap happened on the lock screen and the app is still coming up
+        // behind it. Answering now would ask for a microphone the system does
+        // not hand to an app nobody can see; the answer waits for the app to
+        // actually be on screen, which is a moment away — the user is
+        // unlocking the phone to talk.
+        callLog("answer held until the app is on screen", d.callId);
+        deferredAnswer.current = d.callId;
+        return;
+      }
+      await accept({ auto: true });
     },
     [accept, resumePending, teardown],
   );
@@ -367,6 +393,20 @@ export function useCall() {
     // notification, a push, coming back to the foreground.
     const pickUp = async () => {
       await resumePending();
+
+      // An answer that was waiting for the app to be visible: the same tap,
+      // carried out now that the microphone can actually be granted.
+      const held = deferredAnswer.current;
+      if (held && document.visibilityState === "visible") {
+        deferredAnswer.current = null;
+        if (session.current?.callId === held) {
+          callLog("carrying out the held answer", held);
+          await accept({ auto: true });
+          return;
+        }
+        callLog("held answer dropped, the call is gone", held);
+      }
+
       const decided = await takeNativeCallDecision();
       if (decided) await applyNativeDecision(decided);
     };
@@ -383,12 +423,17 @@ export function useCall() {
     const offNative = onNativeCallDecision((d) => void applyNativeDecision(d));
     window.addEventListener(CALL_PUSH_EVENT, onPush);
     document.addEventListener("visibilitychange", onVisible);
+    // visibilitychange alone is not enough on the way back from a lock screen:
+    // a WebView can report itself visible while the window is not yet focused,
+    // and the microphone follows focus.
+    window.addEventListener("focus", onVisible);
     return () => {
       offNative();
       window.removeEventListener(CALL_PUSH_EVENT, onPush);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
     };
-  }, [applyNativeDecision, resumePending]);
+  }, [accept, applyNativeDecision, resumePending]);
 
   useEffect(() => {
     const unsub = wsClient.subscribe((e: ServerEvent) => {

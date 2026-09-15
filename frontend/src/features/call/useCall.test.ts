@@ -65,6 +65,8 @@ const { useCall } = await import("./useCall");
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mic.mockResolvedValue({ getTracks: () => [], getAudioTracks: () => [] });
+  Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
   native.decision = null;
   native.listeners.clear();
   api.pending.mockResolvedValue({ call: null });
@@ -120,6 +122,64 @@ describe("a call answered on the native screen", () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(answers()).toHaveLength(0);
     expect(mic).not.toHaveBeenCalled();
+  });
+});
+
+function setVisibility(state: "visible" | "hidden") {
+  Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
+}
+
+describe("answering from a locked screen", () => {
+  it("waits for the app to be on screen instead of answering behind the lock", async () => {
+    // Android does not give the microphone to an app nobody can see, and the
+    // app is exactly there while the phone is still unlocking.
+    setVisibility("hidden");
+    native.decision = { action: "accept", callId: ringingCall.callId };
+    api.pending.mockResolvedValue({ call: ringingCall });
+
+    renderHook(() => useCall());
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(answers()).toHaveLength(0);
+    expect(mic).not.toHaveBeenCalled();
+    // The call is kept, not refused.
+    expect(api.reject).not.toHaveBeenCalled();
+
+    setVisibility("visible");
+    document.dispatchEvent(new Event("visibilitychange"));
+    await waitFor(() => expect(answers()).toHaveLength(1));
+  });
+
+  it("keeps the call ringing when the microphone is not available yet", async () => {
+    // The tap said "answer". Turning a refused microphone into a hang-up would
+    // answer the user's "Ответить" with a rejected call.
+    setVisibility("visible");
+    native.decision = { action: "accept", callId: ringingCall.callId };
+    api.pending.mockResolvedValue({ call: ringingCall });
+    mic.mockRejectedValueOnce(Object.assign(new Error("denied"), { name: "NotAllowedError" }));
+
+    renderHook(() => useCall());
+    await waitFor(() => expect(mic).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 20));
+
+    const rejects = ws.send.mock.calls.filter(([f]) => (f as { type: string }).type === "call.reject");
+    expect(rejects).toHaveLength(0);
+    expect(answers()).toHaveLength(0);
+  });
+
+  it("still hangs up when the user answers in the app and has no microphone", async () => {
+    // Only the automatic answer is forgiving: a person who pressed the button
+    // is looking at the screen and deserves to be told.
+    setVisibility("visible");
+    api.pending.mockResolvedValue({ call: ringingCall });
+    mic.mockRejectedValueOnce(Object.assign(new Error("denied"), { name: "NotAllowedError" }));
+
+    const { result } = renderHook(() => useCall());
+    await waitFor(() => expect(result.current.view.phase).toBe("incoming"));
+    await result.current.accept();
+
+    const rejects = ws.send.mock.calls.filter(([f]) => (f as { type: string }).type === "call.reject");
+    expect(rejects).toHaveLength(1);
   });
 });
 

@@ -10,6 +10,7 @@ import android.os.Build;
 import android.util.Log;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
+import androidx.core.app.Person;
 import com.kisy.messenger.R;
 
 /**
@@ -88,21 +89,31 @@ public final class CallNotifications {
             .putExtra(CallActionReceiver.EXTRA_CALL_ID, callId);
         PendingIntent decline = PendingIntent.getBroadcast(ctx, 2, declineIntent, flags(PendingIntent.FLAG_UPDATE_CURRENT));
 
+        // CallStyle, not a plain notification with two buttons: from Android 12
+        // this is how the system is told "this is a ringing call", and it is
+        // what earns the call treatment — the heads-up banner that outranks
+        // everything else, the lock-screen presentation, and on several OEM
+        // skins the right to appear at all. A generic notification with an
+        // "Ответить" button is, to the system, just a notification.
+        Person caller = new Person.Builder().setName(name).setImportant(true).build();
         NotificationCompat.Builder b = new NotificationCompat.Builder(ctx, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.sym_call_incoming)
             .setContentTitle(name)
             .setContentText(ctx.getString(R.string.call_incoming))
+            .setStyle(NotificationCompat.CallStyle.forIncomingCall(caller, decline, accept))
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setAutoCancel(false)
-            .setSilent(true)
+            // Deliberately NOT setSilent(true): a silenced notification is
+            // denied its heads-up banner, so the phone rang from CallRinger
+            // while the call itself stayed hidden in the shade. The channel is
+            // what keeps it quiet (no sound, no vibration) — the ringing is
+            // CallRinger's job.
             .setTimeoutAfter(TIMEOUT_MS)
             .setContentIntent(screen)
-            .setFullScreenIntent(screen, true)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, ctx.getString(R.string.call_decline), decline)
-            .addAction(android.R.drawable.sym_action_call, ctx.getString(R.string.call_accept), accept);
+            .setFullScreenIntent(screen, true);
 
         try {
             NotificationManagerCompat.from(ctx).notify(NOTIFICATION_ID, b.build());
@@ -112,7 +123,8 @@ public final class CallNotifications {
             Log.w(TAG, "notify refused: " + e.getMessage());
         }
         CallRinger.start(ctx, callId);
-        Log.i(TAG, "incoming call " + callId + " from " + name + ", fullScreen=" + canUseFullScreenIntent(ctx));
+        Log.i(TAG, "incoming call " + callId + " from " + name);
+        logDelivery(ctx);
     }
 
     /** Takes the call off the screen and silences the phone. */
@@ -121,6 +133,42 @@ public final class CallNotifications {
         CallRinger.stop();
         // A cancelled call must not leave a live "Ответить" on the lock screen.
         IncomingCallActivity.closeIfShowing();
+    }
+
+    /**
+     * Reports everything that decides whether a call is actually shown.
+     *
+     * When a phone rings but no call appears, the cause is almost never in this
+     * code — it is a permission the system never granted, a channel the user or
+     * the OEM quietly demoted, or a skin that keeps heads-up notifications for
+     * itself. None of that is visible from the app's behaviour, so it is all
+     * written down at the moment a call arrives.
+     */
+    private static void logDelivery(Context ctx) {
+        NotificationManagerCompat compat = NotificationManagerCompat.from(ctx);
+        StringBuilder s = new StringBuilder("delivery: notificationsEnabled=")
+            .append(compat.areNotificationsEnabled())
+            .append(" fullScreenIntent=")
+            .append(canUseFullScreenIntent(ctx));
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationManager nm = ctx.getSystemService(NotificationManager.class);
+            NotificationChannel ch = nm == null ? null : nm.getNotificationChannel(CHANNEL_ID);
+            if (ch == null) {
+                s.append(" channel=MISSING");
+            } else {
+                // importance below IMPORTANCE_HIGH (4) means no heads-up, and
+                // it can be lowered after the channel was created.
+                s.append(" channelImportance=").append(ch.getImportance()).append("/4");
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    s.append(" channelBlocked=").append(ch.getImportance() == NotificationManager.IMPORTANCE_NONE);
+                }
+            }
+            if (nm != null) {
+                s.append(" dndFilter=").append(nm.getCurrentInterruptionFilter());
+            }
+        }
+        Log.i(TAG, s.toString());
     }
 
     /**

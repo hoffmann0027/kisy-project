@@ -512,6 +512,37 @@ func TestDisconnectEndsRingingCall(t *testing.T) {
 	}
 }
 
+func TestCalleeDisconnectDoesNotRefuseARingingCall(t *testing.T) {
+	// The phone was swept out of memory and woken by a push. The socket it had
+	// before dies right about now — and a dying socket is not a refusal. This
+	// was answering "Ответить" with a rejected call: the app opened, the old
+	// connection was reaped, and the caller heard "Звонок отклонён".
+	h := newHarness(t)
+	callID := uuid.New()
+	if err := h.invite(t, h.alice, h.bob, callID); err != nil {
+		t.Fatal(err)
+	}
+	logID := h.store.calls[callID].LogID
+
+	h.svc.HandleDisconnect(context.Background(), h.bob)
+
+	if _, ok := h.store.calls[callID]; !ok {
+		t.Fatal("a ringing call must survive the callee's socket dropping")
+	}
+	if h.pub.has("ended", h.alice) {
+		t.Fatal("caller must not be told the call ended")
+	}
+	if _, finalized := h.repo.final[logID]; finalized {
+		t.Fatalf("call must not be finalized, got %q", h.repo.final[logID].status)
+	}
+
+	// And it still ends by itself when nobody ever picks up.
+	h.svc.onRingTimeout(context.Background(), callID)
+	if h.repo.final[logID].status != StatusMissed {
+		t.Fatalf("status = %q, want missed", h.repo.final[logID].status)
+	}
+}
+
 func TestDisconnectReapsOrphanBusyMarker(t *testing.T) {
 	h := newHarness(t)
 	// Simulate an orphaned marker: busy set but no live call state.

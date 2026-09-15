@@ -68,6 +68,10 @@ public class IncomingCallActivity extends Activity {
         callId = getIntent().getStringExtra(EXTRA_CALL_ID);
         String action = getIntent().getStringExtra(EXTRA_ACTION);
         String caller = getIntent().getStringExtra(EXTRA_CALLER);
+        // Proof that the full-screen intent fired at all. Its absence in the
+        // log, with "incoming call" present, means the system took the
+        // notification but refused to launch the screen.
+        Log.i(TAG, "call screen launched action=" + action + " call=" + callId);
 
         // Accept was tapped on the notification itself: there is nothing to
         // show, go straight to the app.
