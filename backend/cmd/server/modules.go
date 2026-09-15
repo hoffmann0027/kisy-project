@@ -454,7 +454,6 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 
 	// --- community posts and the feed ---
 	postsSvc := posts.NewService(pool, posts.NewPostgresRepository(), postsCommunities{groups: groupsSvc}, auditRec)
-	postsSvc.SetProfiles(authorCards(pool, usersRepo))
 	postsSvc.SetRanker(posts.NewRedisRanker(rdb))
 	if blobs != nil {
 		// Without an object store the bytes stay in the row (migration 44), so
@@ -669,12 +668,21 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	// last-connection close both records last-seen and ends any in-flight call.
 
 	// --- task boards (per group) ---
+	// Board and calendar go through EnsureWorkspace, not EnsureMember: in a
+	// community they belong to its editors, not to every reader who joined.
 	boardsSvc := boards.NewService(pool, boards.NewPostgresRepository(), boards.Access{
 		EnsureActorMember: func(ctx context.Context, groupID, actorID uuid.UUID, actorLevel int) error {
-			return groupsSvc.EnsureMember(ctx, groupID, groups.ActorMeta{UserID: actorID, RoleLevel: actorLevel})
+			return groupsSvc.EnsureWorkspace(ctx, groupID, groups.ActorMeta{UserID: actorID, RoleLevel: actorLevel})
 		},
 		IsFounder: groupsSvc.IsFounder,
-		IsMember:  groupsSvc.IsMember,
+		// A card may only be assigned to someone who can open the board it is on.
+		IsMember: func(ctx context.Context, groupID, userID uuid.UUID) (bool, error) {
+			level, ok := userLevel(ctx, userID)
+			if !ok {
+				return false, nil
+			}
+			return groupsSvc.HasWorkspace(ctx, groupID, userID, level)
+		},
 	})
 	boardsSvc.SetPublisher(wsPublisher)
 	boardsHandler := boards.NewHandler(boardsSvc, func(r *http.Request) (boards.Actor, bool) {
@@ -689,11 +697,11 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	calBoardsRepo := boards.NewPostgresRepository()
 	calendarSvc := calendar.NewService(pool, calendar.NewPostgresRepository(), auditRec, calendar.Access{
 		EnsureMember: func(ctx context.Context, groupID, actorID uuid.UUID, actorLevel int) error {
-			err := groupsSvc.EnsureMember(ctx, groupID, groups.ActorMeta{UserID: actorID, RoleLevel: actorLevel})
+			err := groupsSvc.EnsureWorkspace(ctx, groupID, groups.ActorMeta{UserID: actorID, RoleLevel: actorLevel})
 			switch {
 			case errors.Is(err, groups.ErrNotFound):
 				return calendar.ErrNotFound
-			case errors.Is(err, groups.ErrNotMember):
+			case errors.Is(err, groups.ErrNotMember), errors.Is(err, groups.ErrForbidden):
 				return calendar.ErrForbidden
 			default:
 				return err

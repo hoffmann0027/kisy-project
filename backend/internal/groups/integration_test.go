@@ -312,6 +312,113 @@ func TestPolicyChangePermissions(t *testing.T) {
 	}
 }
 
+// Seeing a group used to be enough to add anyone to it, yourself included —
+// which made a request-only join policy optional.
+func TestAddMemberIsTheOwnersCall(t *testing.T) {
+	svc, pool := newGroups(t)
+	ctx := context.Background()
+	mgr := testdb.SeedUser(t, pool, "mgr", 5)
+	emp := testdb.SeedUser(t, pool, "emp", 8)
+	other := testdb.SeedUser(t, pool, "other", 8)
+
+	g, err := svc.Create(ctx, groups.CreateInput{Name: "Closed", MinRoleLevel: 8}, actor(mgr, 5))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.JoinPolicy != groups.PolicyJoinRequest {
+		t.Fatalf("precondition: want a request-only group, got %s", g.JoinPolicy)
+	}
+
+	if err := svc.AddMember(ctx, g.ID, emp, 8, actor(emp, 8)); !errors.Is(err, groups.ErrForbidden) {
+		t.Fatalf("adding yourself past the join policy: got %v, want ErrForbidden", err)
+	}
+	if member, _ := svc.IsMember(ctx, g.ID, emp); member {
+		t.Fatal("a refused self-add must not leave a membership behind")
+	}
+	if err := svc.AddMember(ctx, g.ID, other, 8, actor(mgr, 5)); err != nil {
+		t.Fatalf("owner adds a member: %v", err)
+	}
+}
+
+func TestCommunityCannotEnrolAnyone(t *testing.T) {
+	svc, pool := newGroups(t)
+	ctx := context.Background()
+	ceo := testdb.SeedUser(t, pool, "ceo", 1)
+	mgr := testdb.SeedUser(t, pool, "mgr", 5)
+	emp := testdb.SeedUser(t, pool, "emp", 8)
+
+	c, err := svc.Create(ctx, groups.CreateInput{Name: "Wall", Kind: groups.KindCommunity}, actor(mgr, 5))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, who := range map[string]groups.ActorMeta{"owner": actor(mgr, 5), "CEO": actor(ceo, 1)} {
+		if err := svc.AddMember(ctx, c.ID, emp, 8, who); !errors.Is(err, groups.ErrForbidden) {
+			t.Fatalf("%s enrols a user into a community: got %v, want ErrForbidden", name, err)
+		}
+	}
+	if member, _ := svc.IsMember(ctx, c.ID, emp); member {
+		t.Fatal("nobody may be put into a community without joining it themselves")
+	}
+}
+
+func TestCommunityWorkspaceIsForEditors(t *testing.T) {
+	svc, pool := newGroups(t)
+	ctx := context.Background()
+	mgr := testdb.SeedUser(t, pool, "mgr", 5)
+	reader := testdb.SeedUser(t, pool, "reader", 8)
+	stranger := testdb.SeedUser(t, pool, "stranger", 8)
+
+	c, err := svc.Create(ctx, groups.CreateInput{Name: "Wall", Kind: groups.KindCommunity, IsPublic: true}, actor(mgr, 5))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetPolicies(ctx, c.ID, groups.PolicyJoinOpen, groups.PolicyPostEditors, actor(mgr, 5)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Join(ctx, c.ID, actor(reader, 8)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := svc.EnsureWorkspace(ctx, c.ID, actor(mgr, 5)); err != nil {
+		t.Fatalf("owner opens the board: %v", err)
+	}
+	if err := svc.EnsureWorkspace(ctx, c.ID, actor(reader, 8)); !errors.Is(err, groups.ErrForbidden) {
+		t.Fatalf("plain reader opens the board: got %v, want ErrForbidden", err)
+	}
+	if err := svc.EnsureWorkspace(ctx, c.ID, actor(stranger, 8)); !errors.Is(err, groups.ErrNotMember) {
+		t.Fatalf("non-member opens the board: got %v, want ErrNotMember", err)
+	}
+	vs, err := svc.Viewer(ctx, c.ID, actor(reader, 8))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if vs.CanUseWorkspace {
+		t.Fatal("the client must not be told to show a reader the board tab")
+	}
+	if ok, _ := svc.HasWorkspace(ctx, c.ID, reader, 8); ok {
+		t.Fatal("a card must not be assignable to someone who cannot open the board")
+	}
+
+	if err := svc.SetMemberRole(ctx, c.ID, reader, groups.RoleEditor, actor(mgr, 5)); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.EnsureWorkspace(ctx, c.ID, actor(reader, 8)); err != nil {
+		t.Fatalf("promoted editor opens the board: %v", err)
+	}
+
+	// An ordinary group keeps its board open to every member.
+	g, err := svc.Create(ctx, groups.CreateInput{Name: "Team", MinRoleLevel: 8}, actor(mgr, 5))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.AddMember(ctx, g.ID, stranger, 8, actor(mgr, 5)); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.EnsureWorkspace(ctx, g.ID, actor(stranger, 8)); err != nil {
+		t.Fatalf("group member opens the group's board: %v", err)
+	}
+}
+
 func containsGroup(list []groups.Group, id uuid.UUID) bool {
 	for i := range list {
 		if list[i].ID == id {

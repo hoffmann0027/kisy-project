@@ -161,6 +161,21 @@ func canPost(postPolicy, role string, level int) bool {
 	return access.IsCEO(level) || isEditorTier(role)
 }
 
+// canUseWorkspace reports whether a member may open the group's board and
+// calendar.
+//
+// In a group every member may: the board is the group's shared work. In a
+// community it is the editors' back office — its members came to read the
+// wall, and the plans behind it are not published with it. The editor tier here
+// is the same one that may publish (owner, editor, moderator, and the CEO by
+// clearance), so "who runs this community" is answered in one place.
+func canUseWorkspace(kind, role string, level int) bool {
+	if kind != KindCommunity {
+		return true
+	}
+	return access.IsCEO(level) || isEditorTier(role)
+}
+
 // validJoinPolicy / validPostPolicy guard incoming values.
 func validJoinPolicy(p string) bool { return p == PolicyJoinOpen || p == PolicyJoinRequest }
 func validPostPolicy(p string) bool { return p == PolicyPostAll || p == PolicyPostEditors }

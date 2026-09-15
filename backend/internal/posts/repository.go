@@ -203,9 +203,10 @@ func (r *PostgresRepository) ByIDsVisible(
 }
 
 func (r *PostgresRepository) ScoreInputs(ctx context.Context, q db.DBTX, since time.Time) ([]ScoreInput, error) {
-	// COUNT(DISTINCT user_id), not COUNT(*): reactions are unique per
-	// (post, user, emoji), so one person with ten emoji is ten rows and one
-	// opinion (docs/spec/07-business-logic.md).
+	// COUNT(DISTINCT user_id) counts people, which is what the formula is
+	// about (docs/spec/07-business-logic.md). Since migration 45 a person has
+	// at most one reaction per post, so this equals COUNT(rx.id) — kept
+	// DISTINCT so the ranking does not silently depend on that constraint.
 	rows, err := q.Query(ctx, `
 		SELECT p.id,
 		       COUNT(DISTINCT rx.user_id) AS reactors,
@@ -291,12 +292,17 @@ func (r *PostgresRepository) ReactionsFor(
 }
 
 func (r *PostgresRepository) AddReaction(ctx context.Context, q db.DBTX, postID, userID uuid.UUID, emoji string) error {
-	// The conflict target is the partial unique index from migration 43, not
-	// the message one: a plain UNIQUE would not constrain these rows at all
-	// (message_id is NULL here, and NULL never equals NULL).
+	// One reaction per person per post (migration 45): a second emoji replaces
+	// the first rather than joining it. One statement, so two quick taps cannot
+	// interleave into a delete-then-double-insert.
+	//
+	// The conflict target names the partial index's predicate on purpose —
+	// without the WHERE, Postgres does not match a partial index and rejects
+	// the statement outright.
 	_, err := q.Exec(ctx, `
 		INSERT INTO reactions (post_id, user_id, emoji) VALUES ($1, $2, $3)
-		ON CONFLICT (post_id, user_id, emoji) WHERE post_id IS NOT NULL DO NOTHING`,
+		ON CONFLICT (post_id, user_id) WHERE post_id IS NOT NULL
+		DO UPDATE SET emoji = EXCLUDED.emoji, created_at = now()`,
 		postID, userID, emoji)
 	if err != nil {
 		return fmt.Errorf("posts: add reaction: %w", err)

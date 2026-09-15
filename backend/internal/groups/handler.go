@@ -337,6 +337,9 @@ func (h *Handler) addMember(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "group or user not found")
 	case errors.Is(err, ErrAlreadyMember):
 		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrValidationFailed, "user is already a member")
+	case errors.Is(err, ErrForbidden):
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied,
+			"участников добавляет только владелец группы, а в сообщество вступают сами")
 	case err != nil:
 		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "failed to add member")
 	default:

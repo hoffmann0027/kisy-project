@@ -176,6 +176,9 @@ type ViewerState struct {
 	Member  bool   `json:"member"`
 	Role    string `json:"role"`
 	CanPost bool   `json:"canPost"`
+	// CanUseWorkspace says whether the board and the calendar are theirs to
+	// open. The client hides the tabs by it; the server enforces it regardless.
+	CanUseWorkspace bool `json:"canUseWorkspace"`
 }
 
 // Viewer returns the actor's own membership/role/post-right for a group. A
@@ -191,7 +194,43 @@ func (s *Service) Viewer(ctx context.Context, groupID uuid.UUID, actor ActorMeta
 	}
 	vs := ViewerState{Member: ok, Role: role}
 	vs.CanPost = ok && canPost(g.PostPolicy, role, actor.RoleLevel)
+	vs.CanUseWorkspace = ok && canUseWorkspace(g.Kind, role, actor.RoleLevel)
 	return vs, nil
+}
+
+// EnsureWorkspace returns nil if the actor may use the group's board and
+// calendar: a member, and in a community an editor-tier one. A hidden group is
+// ErrNotFound, a non-member ErrNotMember, a plain community member ErrForbidden.
+func (s *Service) EnsureWorkspace(ctx context.Context, groupID uuid.UUID, actor ActorMeta) error {
+	g, err := s.Get(ctx, groupID, actor)
+	if err != nil {
+		return err
+	}
+	role, ok, err := s.repo.MemberRole(ctx, s.pool, groupID, actor.UserID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrNotMember
+	}
+	if !canUseWorkspace(g.Kind, role, actor.RoleLevel) {
+		return ErrForbidden
+	}
+	return nil
+}
+
+// HasWorkspace is EnsureWorkspace for someone other than the caller — a card's
+// assignee, who must be able to open the board the card is on.
+func (s *Service) HasWorkspace(ctx context.Context, groupID, userID uuid.UUID, level int) (bool, error) {
+	err := s.EnsureWorkspace(ctx, groupID, ActorMeta{UserID: userID, RoleLevel: level})
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, ErrNotFound), errors.Is(err, ErrNotMember), errors.Is(err, ErrForbidden):
+		return false, nil
+	default:
+		return false, err
+	}
 }
 
 // CreateInput is validated by the handler before reaching the service.
@@ -362,12 +401,31 @@ func (s *Service) ClearanceLevel(ctx context.Context, groupID uuid.UUID) (int, e
 	return g.MinRoleLevel, nil
 }
 
-// AddMember adds a user to a group. The actor must be able to see the
-// group, and the target's clearance must also satisfy the group minimum.
+// AddMember puts another user into a group directly. Only the group's owner or
+// the CEO may, and the target's clearance must satisfy the group minimum.
+//
+// Nobody may do it to a community. Joining one is the reader's own decision —
+// "Вступить", or a request its editors approve — and a community that could
+// enrol people would be one that puts its posts in front of someone who never
+// asked for them.
 func (s *Service) AddMember(ctx context.Context, groupID, targetID uuid.UUID, targetLevel int, actor ActorMeta) error {
 	g, err := s.Get(ctx, groupID, actor)
 	if err != nil {
 		return err
+	}
+	if g.Kind == KindCommunity {
+		return ErrForbidden
+	}
+	// Until now any user who could merely SEE a group could add anyone to it —
+	// themselves included, which walked straight past a request-only join
+	// policy. The client only ever offered the button to the founder; the
+	// server now agrees with it.
+	owner, err := s.isOwnerOrCEO(ctx, g, actor)
+	if err != nil {
+		return err
+	}
+	if !owner {
+		return ErrForbidden
 	}
 	if !access.CanAccessGroup(targetLevel, g.MinRoleLevel) {
 		return ErrNotFound

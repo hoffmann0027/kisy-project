@@ -16,6 +16,7 @@ import {
   useUpdateGroupSettings,
 } from "@entities/group/queries";
 import { useAuthStore } from "@shared/store/auth";
+import { useCapabilities } from "@shared/lib/useCapabilities";
 import { ApiError } from "@shared/api/envelope";
 import { AvatarCropper } from "./AvatarCropper";
 
@@ -46,8 +47,10 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
   const updateLevel = useUpdateGroupLevel();
   const updateSettings = useUpdateGroupSettings();
   const setRole = useSetMemberRole();
+  const caps = useCapabilities();
+  const noun = group.kind === "community" ? "сообщество" : "группа";
   // The CEO may manage any group; the founder their own.
-  const isCEO = me.roleLevel === 1;
+  const isCEO = caps.canAdmin;
   const isOwner = isCEO || me.id === group.createdBy;
   const canManage = isOwner;
   const canDelete = canManage;
@@ -89,10 +92,11 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
   };
 
   const removeGroup = () => {
-    if (!window.confirm(`Удалить группу «${group.name}»? Это удалит её чат и доску задач.`)) return;
+    const what = group.kind === "community" ? "сообщество" : "группу";
+    if (!window.confirm(`Удалить ${what} «${group.name}»? Это удалит её чат и доску задач.`)) return;
     del.mutate(group.id, {
       onSuccess: () => {
-        toast.success("Группа удалена");
+        toast.success(group.kind === "community" ? "Сообщество удалено" : "Группа удалена");
         onClose();
         navigate("/", { replace: true });
       },
@@ -113,11 +117,15 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
         <div>
           <div style={{ fontWeight: 640, fontSize: 17 }}>{group.name}</div>
           <div style={{ color: "var(--color-text-secondary)", fontSize: 14 }}>
-            {canManage ? "Нажмите на аватар, чтобы изменить" : "Группа"}
+            {canManage ? "Нажмите на аватар, чтобы изменить" : noun[0].toUpperCase() + noun.slice(1)}
           </div>
         </div>
       </div>
 
+      {/* Levels are a fact of the hierarchy. An account outside it has none,
+          cannot change this field and learns nothing from it — every group it
+          can see is one without a threshold — so it is not shown at all. */}
+      {caps.canSeeLevels && (
       <div className="ui-field">
         <label className="ui-field__label">Уровень доступа</label>
         {group.minRoleLevel === null ? (
@@ -148,6 +156,7 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
               : "Группа видна пользователям этого уровня и выше."}
         </span>
       </div>
+      )}
 
       {canManage && (
         <div className="ui-field">
@@ -164,7 +173,8 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
             <option value="request:editors">Закрытая (по заявке) · пишут редакторы (канал)</option>
           </select>
           <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
-            Публичная — вступают сразу; закрытая — по заявке. «Пишут редакторы» — остальные только читают. Клиренс всегда сильнее этих настроек.
+            Публичная — вступают сразу; закрытая — по заявке. «Пишут редакторы» — остальные только читают.
+            {caps.canSeeLevels && " Клиренс всегда сильнее этих настроек."}
           </span>
         </div>
       )}
@@ -232,7 +242,7 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
       {canDelete && (
         <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 14 }}>
           <Button variant="danger" block loading={del.isPending} onClick={removeGroup}>
-            Удалить группу
+            {group.kind === "community" ? "Удалить сообщество" : "Удалить группу"}
           </Button>
         </div>
       )}
@@ -257,7 +267,13 @@ function AddMemberPicker({ group, onDone }: { group: Group; onDone: () => void }
           onDone();
         },
         onError: (e) =>
-          toast.error(e instanceof ApiError && e.status === 409 ? "Уже в группе" : "Не удалось добавить (проверьте уровень доступа)"),
+          toast.error(
+            e instanceof ApiError && e.status === 409
+              ? "Уже в группе"
+              : e instanceof ApiError && e.status === 403
+                ? "Добавлять участников может только владелец группы"
+                : "Не удалось добавить (проверьте уровень доступа)",
+          ),
       },
     );
   };

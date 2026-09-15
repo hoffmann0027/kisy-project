@@ -8,9 +8,7 @@ import (
 
 	"kisy-backend/internal/groups"
 	"kisy-backend/internal/platform/blobstore"
-	"kisy-backend/internal/platform/db"
 	"kisy-backend/internal/posts"
-	"kisy-backend/internal/users"
 )
 
 // The adapters that let internal/posts use the rest of the app without
@@ -85,37 +83,6 @@ func mapGroupErr(err error) error {
 		return posts.ErrNotFound
 	}
 	return err
-}
-
-// postsProfiles renders the author cards on a page of posts.
-type postsProfiles func(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]posts.AuthorCard, error)
-
-func (f postsProfiles) Cards(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]posts.AuthorCard, error) {
-	return f(ctx, ids)
-}
-
-// authorCards loads the small user cards a page of posts needs.
-func authorCards(pool db.DBTX, repo users.Repository) postsProfiles {
-	return func(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]posts.AuthorCard, error) {
-		out := make(map[uuid.UUID]posts.AuthorCard, len(ids))
-		for _, id := range ids {
-			if _, done := out[id]; done {
-				continue // one author usually writes several posts on a page
-			}
-			u, err := repo.GetByID(ctx, pool, id)
-			if err != nil {
-				// A deleted author must not take the whole page down with them.
-				continue
-			}
-			out[id] = posts.AuthorCard{
-				ID:          u.ID,
-				DisplayName: u.DisplayName,
-				Username:    u.Username,
-				AvatarURL:   u.AvatarURL,
-			}
-		}
-		return out, nil
-	}
 }
 
 // postsPublisher announces a new post over the WebSocket.

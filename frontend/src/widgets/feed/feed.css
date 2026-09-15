@@ -24,10 +24,14 @@
   flex: 1;
 }
 
+/* Design tokens straight from theme.css. The --color-bg-elevated and
+   --color-bg-secondary this file first used exist in no theme, so the cards and
+   the active sort had no background at all. */
 .feed__sort {
   display: flex;
   gap: 4px;
-  background: var(--color-bg-secondary);
+  background: var(--field-bg);
+  border: 1px solid var(--field-brd);
   border-radius: 999px;
   padding: 3px;
 }
@@ -44,8 +48,8 @@
 }
 
 .feed__sort-btn--active {
-  background: var(--color-bg-elevated);
-  color: var(--color-text-primary);
+  background: var(--acc-soft);
+  color: var(--ink);
 }
 
 .feed__scroll {
@@ -69,65 +73,57 @@
 }
 
 .post {
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
+  background: var(--chip-bg);
+  border: 1px solid var(--panel-brd);
+  border-radius: var(--radius-lg);
   padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
+/* The community is the author: its avatar and name head the card. */
+.post__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .post__origin {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.post__origin-link {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex: 1;
   min-width: 0;
   border: 0;
   background: transparent;
   color: inherit;
   font: inherit;
-  cursor: pointer;
   padding: 0;
   text-align: left;
 }
 
-.post__origin-name {
+button.post__origin {
+  cursor: pointer;
+}
+
+.post__who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.post__community {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 15px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.post__head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.post__who {
-  flex: 1;
-  min-width: 0;
-}
-
-.post__author {
-  font-weight: 600;
-  font-size: 15px;
-}
-
 .post__time {
   font-size: 12px;
-  color: var(--color-text-tertiary);
+  color: var(--dim2);
 }
 
 .post__text {
@@ -169,9 +165,25 @@
 }
 
 .post__reactions {
+  /* The picker's anchor. */
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+/* Below the reactions, not above: a post at the top of the list has no room
+   above it, and a picker cut off by the edge of the scroller cannot be
+   scrolled back into view. Below, it extends the scroll area instead. */
+.post__reactions .emojipick {
+  top: calc(100% + 8px);
+  bottom: auto;
+  left: 0;
+  width: min(320px, 100%);
+}
+
+.post__reaction-more {
+  color: var(--dim);
 }
 
 .post__reaction {
@@ -206,9 +218,9 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
+  background: var(--chip-bg);
+  border: 1px solid var(--panel-brd);
+  border-radius: var(--radius-lg);
   padding: 12px;
 }
 

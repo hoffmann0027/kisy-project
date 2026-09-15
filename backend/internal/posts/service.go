@@ -41,11 +41,6 @@ type Communities interface {
 	MemberIDs(ctx context.Context, communityID uuid.UUID) ([]uuid.UUID, error)
 }
 
-// Profiles renders author cards.
-type Profiles interface {
-	Cards(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]AuthorCard, error)
-}
-
 // MediaStore persists an uploaded file and reads it back. Satisfied by the
 // blob store; a local interface keeps posts out of that dependency.
 type MediaStore interface {
@@ -76,7 +71,6 @@ type Service struct {
 	pool        *pgxpool.Pool
 	repo        Repository
 	communities Communities
-	profiles    Profiles
 	audit       audit.Recorder
 	media       MediaStore
 	pub         Publisher
@@ -87,7 +81,6 @@ func NewService(pool *pgxpool.Pool, repo Repository, communities Communities, re
 	return &Service{pool: pool, repo: repo, communities: communities, audit: rec}
 }
 
-func (s *Service) SetProfiles(p Profiles)     { s.profiles = p }
 func (s *Service) SetPublisher(p Publisher)   { s.pub = p }
 func (s *Service) SetRanker(r Ranker)         { s.ranker = r }
 func (s *Service) SetMediaStore(m MediaStore) { s.media = m }
@@ -419,18 +412,16 @@ func (s *Service) page(ctx context.Context, rows []Post, limit int, actor ActorM
 	return Page{Posts: dtos, NextCursor: next}, nil
 }
 
-// render attaches media, reactions, authors and communities to a page of
-// posts — four batched queries, not four per row.
+// render attaches media, reactions and communities to a page of posts —
+// batched queries, not a set per row.
 func (s *Service) render(ctx context.Context, rows []Post, actor ActorMeta) ([]DTO, error) {
 	if len(rows) == 0 {
 		return []DTO{}, nil
 	}
 	postIDs := make([]uuid.UUID, 0, len(rows))
-	authorIDs := make([]uuid.UUID, 0, len(rows))
 	communityIDs := make([]uuid.UUID, 0, len(rows))
 	for _, p := range rows {
 		postIDs = append(postIDs, p.ID)
-		authorIDs = append(authorIDs, p.AuthorID)
 		communityIDs = append(communityIDs, p.CommunityID)
 	}
 
@@ -446,12 +437,6 @@ func (s *Service) render(ctx context.Context, rows []Post, actor ActorMeta) ([]D
 	if err != nil {
 		return nil, err
 	}
-	cards := map[uuid.UUID]AuthorCard{}
-	if s.profiles != nil {
-		if cards, err = s.profiles.Cards(ctx, authorIDs); err != nil {
-			return nil, err
-		}
-	}
 
 	out := make([]DTO, 0, len(rows))
 	for _, p := range rows {
@@ -460,7 +445,6 @@ func (s *Service) render(ctx context.Context, rows []Post, actor ActorMeta) ([]D
 			ID:        p.ID,
 			Text:      p.Text,
 			CreatedAt: p.CreatedAt,
-			Author:    cards[p.AuthorID],
 			Community: CommunityCard{
 				ID:         community.ID,
 				Name:       community.Name,

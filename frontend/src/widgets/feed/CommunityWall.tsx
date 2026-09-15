@@ -5,9 +5,8 @@ import { PostComposer } from "@features/post-compose/PostComposer";
 import { PostCard } from "./PostCard";
 import "./feed.css";
 
-// A community's own wall. Same cards as the feed, minus the origin strip —
-// on the community's own page, saying where each post came from would repeat
-// the page title once per post.
+// A community's own wall. Same cards as the feed; each still speaks as the
+// community, but its header does not link back to the page it is already on.
 
 export function CommunityWall({ group, canPost }: { group: Group; canPost: boolean }) {
   const wall = useCommunityPosts(group.id);

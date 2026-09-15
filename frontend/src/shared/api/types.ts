@@ -83,6 +83,8 @@ export interface GroupViewer {
   member: boolean;
   role: GroupRole | "";
   canPost: boolean;
+  /** Board and calendar: every member of a group, only editors of a community. */
+  canUseWorkspace: boolean;
 }
 
 export type CalendarColor = "blue" | "green" | "red" | "orange" | "purple" | "teal" | "pink" | "gray";
@@ -568,7 +570,7 @@ export interface Post {
   text: string;
   createdAt: string;
   editedAt: string | null;
-  author: Pick<User, "id" | "displayName" | "username" | "avatarUrl">;
+  /** A post speaks as its community; the editor who wrote it is not sent. */
   community: PostCommunity;
   media: PostMedia[];
   reactions: PostReaction[];

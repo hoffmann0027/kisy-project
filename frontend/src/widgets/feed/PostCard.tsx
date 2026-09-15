@@ -1,5 +1,6 @@
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Avatar, Button, IconButton, toast } from "@shared/ui";
+import { Avatar, Button, EmojiPicker, IconButton, toast } from "@shared/ui";
 import { ApiImage } from "@shared/ui/ApiImage";
 import { Icon } from "@shared/ui/icons";
 import { formatRelative } from "@shared/lib/format";
@@ -9,18 +10,24 @@ import { useDeletePost, useReactToPost } from "@entities/post/queries";
 
 // One post in the feed or on a community's wall.
 //
-// The community strip along the top is not decoration. A post in the shared
-// feed comes from somewhere the reader may not belong to, and a post whose
-// origin cannot be opened or joined is a dead end — you see something
-// interesting and have nowhere to go.
+// A post speaks as its community — its avatar and name head the card, the way
+// a channel's do — so the header is also the way out: in the shared feed it
+// opens the community and, for a reader who is not in it, offers to join. A
+// post whose origin cannot be opened or joined is a dead end.
 
-/** The reactions offered on a post. Same set as a chat message's quick row. */
+/** The reactions offered on a post without opening the picker. */
 const QUICK_REACTIONS = ["👍", "🔥", "❤️", "😂", "👏"];
 
 interface Props {
   post: Post;
-  /** On a community's own wall the origin strip would repeat the page title. */
+  /** In the shared feed the header links to the community and offers to join;
+      on the community's own wall that would only point back at this page. */
   showCommunity?: boolean;
+}
+
+/** A touch screen raises its keyboard for a focused field — over the grid. */
+function isTouchScreen() {
+  return typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
 }
 
 export function PostCard({ post, showCommunity = true }: Props) {
@@ -28,8 +35,19 @@ export function PostCard({ post, showCommunity = true }: Props) {
   const react = useReactToPost();
   const remove = useDeletePost();
   const join = useJoinGroup();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const reactionsRef = useRef<HTMLElement>(null);
 
-  const toggle = (emoji: string) => {
+  // The picker opens below the reactions so it is never cut off by the top of
+  // the list; this brings it on screen when the post sits low in the viewport.
+  useEffect(() => {
+    if (!pickerOpen) return;
+    reactionsRef.current?.querySelector(".emojipick")?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  }, [pickerOpen]);
+
+  // One reaction per reader: tapping your own takes it back, tapping another
+  // replaces it (the server keeps one row per person).
+  const choose = (emoji: string) => {
     const mine = post.reactions.some((r) => r.emoji === emoji && r.mine);
     react.mutate(
       { postId: post.id, communityId: post.community.id, emoji, on: !mine },
@@ -49,35 +67,41 @@ export function PostCard({ post, showCommunity = true }: Props) {
     });
   };
 
+  const origin = (
+    <>
+      <Avatar name={post.community.name} url={post.community.avatarUrl} size={40} />
+      <span className="post__who">
+        <span className="post__community">{post.community.name}</span>
+        <span className="post__time">
+          {formatRelative(post.createdAt)}
+          {post.editedAt && " · изменено"}
+        </span>
+      </span>
+    </>
+  );
+
+  // Quick emoji first, then anything else someone picked from the full set.
+  const extra = post.reactions.filter((r) => !QUICK_REACTIONS.includes(r.emoji));
+  const chips = [
+    ...QUICK_REACTIONS.map((emoji) => post.reactions.find((r) => r.emoji === emoji) ?? { emoji, count: 0, mine: false }),
+    ...extra,
+  ];
+
   return (
     <article className="post">
-      {showCommunity && (
-        <header className="post__origin">
-          <button
-            type="button"
-            className="post__origin-link"
-            onClick={() => navigate(`/group/${post.community.id}`)}
-          >
-            <Avatar name={post.community.name} url={post.community.avatarUrl} size={28} />
-            <span className="post__origin-name">{post.community.name}</span>
+      <header className="post__head">
+        {showCommunity ? (
+          <button type="button" className="post__origin" onClick={() => navigate(`/group/${post.community.id}`)}>
+            {origin}
           </button>
-          {!post.community.isMember && (
-            <Button variant="secondary" onClick={joinCommunity} loading={join.isPending}>
-              {post.community.joinPolicy === "open" ? "Вступить" : "Подать заявку"}
-            </Button>
-          )}
-        </header>
-      )}
-
-      <div className="post__head">
-        <Avatar name={post.author.displayName} url={post.author.avatarUrl} size={36} />
-        <div className="post__who">
-          <div className="post__author">{post.author.displayName}</div>
-          <div className="post__time">
-            {formatRelative(post.createdAt)}
-            {post.editedAt && " · изменено"}
-          </div>
-        </div>
+        ) : (
+          <div className="post__origin">{origin}</div>
+        )}
+        {showCommunity && !post.community.isMember && (
+          <Button variant="secondary" onClick={joinCommunity} loading={join.isPending}>
+            {post.community.joinPolicy === "open" ? "Вступить" : "Подать заявку"}
+          </Button>
+        )}
         {post.canDelete && (
           <IconButton
             label="Удалить пост"
@@ -91,7 +115,7 @@ export function PostCard({ post, showCommunity = true }: Props) {
             <Icon.Trash size={18} />
           </IconButton>
         )}
-      </div>
+      </header>
 
       {post.text && <p className="post__text">{post.text}</p>}
 
@@ -114,35 +138,44 @@ export function PostCard({ post, showCommunity = true }: Props) {
         </div>
       )}
 
-      <footer className="post__reactions">
-        {QUICK_REACTIONS.map((emoji) => {
-          const summary = post.reactions.find((r) => r.emoji === emoji);
-          return (
-            <button
-              key={emoji}
-              type="button"
-              className={`post__reaction${summary?.mine ? " post__reaction--mine" : ""}`}
-              onClick={() => toggle(emoji)}
-            >
-              <span>{emoji}</span>
-              {summary && summary.count > 0 && <span className="post__reaction-count">{summary.count}</span>}
-            </button>
-          );
-        })}
-        {/* Reactions with an emoji outside the quick row still show their count. */}
-        {post.reactions
-          .filter((r) => !QUICK_REACTIONS.includes(r.emoji))
-          .map((r) => (
-            <button
-              key={r.emoji}
-              type="button"
-              className={`post__reaction${r.mine ? " post__reaction--mine" : ""}`}
-              onClick={() => toggle(r.emoji)}
-            >
-              <span>{r.emoji}</span>
-              <span className="post__reaction-count">{r.count}</span>
-            </button>
-          ))}
+      <footer className="post__reactions" ref={reactionsRef}>
+        {chips.map((r) => (
+          <button
+            key={r.emoji}
+            type="button"
+            className={`post__reaction${r.mine ? " post__reaction--mine" : ""}`}
+            aria-pressed={r.mine}
+            onClick={() => choose(r.emoji)}
+          >
+            <span>{r.emoji}</span>
+            {r.count > 0 && <span className="post__reaction-count">{r.count}</span>}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="post__reaction post__reaction-more"
+          aria-label="Другие эмодзи"
+          aria-expanded={pickerOpen}
+          data-picker-toggle={post.id}
+          onClick={() => setPickerOpen((v) => !v)}
+        >
+          <Icon.Plus size={16} />
+        </button>
+        {pickerOpen && (
+          <EmojiPicker
+            // This post's own toggle only: the "+" on the next card is an
+            // outside click, and it must close this picker as it opens its own.
+            ignoreSelector={`[data-picker-toggle="${post.id}"]`}
+            autoFocusSearch={!isTouchScreen()}
+            onPick={(emoji) => {
+              setPickerOpen(false);
+              // From the picker it is always a choice, never a take-back: the
+              // emoji you already have is right there on the card to tap.
+              if (!post.reactions.some((r) => r.emoji === emoji && r.mine)) choose(emoji);
+            }}
+            onClose={() => setPickerOpen(false)}
+          />
+        )}
       </footer>
     </article>
   );

@@ -544,7 +544,11 @@ paths:
   /groups/{groupID}/members:
     post:
       tags: [groups]
-      summary: Add a member to a group
+      summary: Add a member to a group (owner or CEO; never a community)
+      description: >
+        Only the group's owner or the CEO may add someone directly. A community
+        cannot be joined this way by anyone — readers join it themselves
+        (POST /groups/{groupID}/join) — and answers 403.
       parameters:
         - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
@@ -563,6 +567,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Envelope' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
     get:
@@ -670,6 +675,12 @@ paths:
                               member: { type: boolean }
                               role: { type: string }
                               canPost: { type: boolean }
+                              canUseWorkspace:
+                                type: boolean
+                                description: >
+                                  May open the board and calendar. Every member
+                                  of a group; only editors (and the CEO) of a
+                                  community — its readers get 403 from both.
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
@@ -930,8 +941,11 @@ paths:
         schema: { type: string, format: uuid }
     post:
       tags: [posts]
-      summary: React to a post
-      description: Seeing the community is enough to react; posting to it is not.
+      summary: React to a post (one reaction per person)
+      description: >
+        Seeing the community is enough to react; posting to it is not. A person
+        has at most one reaction on a post: reacting with another emoji replaces
+        the previous one. Removing an emoji the caller no longer has is a no-op.
       requestBody:
         required: true
         content:
@@ -3648,14 +3662,15 @@ components:
       description: >
         A community post. NOT end-to-end encrypted, unlike a message: it is
         published to everyone who can see the community, and a feed the server
-        cannot read cannot be ranked (docs/e2ee-design.md §7).
+        cannot read cannot be ranked (docs/e2ee-design.md §7). A post speaks as
+        its community and carries no author: which editor published it is kept
+        server-side for moderation and audit only.
       type: object
       properties:
         id: { type: string, format: uuid }
         text: { type: string }
         createdAt: { type: string, format: date-time }
         editedAt: { type: [string, 'null'], format: date-time }
-        author: { $ref: '#/components/schemas/User' }
         community: { $ref: '#/components/schemas/PostCommunity' }
         media:
           type: array

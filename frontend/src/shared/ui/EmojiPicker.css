@@ -1,0 +1,80 @@
+/* The emoji picker. Opened from the composer, a message's action bar and a
+   post's reactions, so it lives with the component rather than with any one
+   page — the feed is a page of its own and never loads messenger.css.
+
+   Every value is a theme token: it is the same floating glass panel as the
+   app's other overlays in whichever of the seven themes is on. The anchor
+   decides where it opens (above by default); each call site positions it. */
+
+.emojipick {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  z-index: 40;
+  width: 300px;
+  max-width: calc(100vw - 32px);
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+  background: var(--overlay-bg);
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  backdrop-filter: blur(var(--blur-glass));
+  border: 1px solid var(--panel-brd);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elev-shadow);
+  color: var(--ink);
+  font-family: var(--font, var(--font-family));
+  overflow: hidden;
+}
+
+.emojipick__search {
+  margin: 8px;
+}
+
+.emojipick__scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 8px 8px;
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
+
+.emojipick__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--dim);
+  margin: 8px 2px 4px;
+}
+
+.emojipick__grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+
+.emojipick__emoji {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  padding: 4px 0;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+
+.emojipick__emoji:hover {
+  background: var(--hover);
+}
+
+.emojipick__emoji:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: -2px;
+}
+
+.emojipick__empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--dim);
+  font-size: 13px;
+  padding: 16px 0;
+}

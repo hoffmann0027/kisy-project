@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useBackHandler } from "@shared/lib/backStack";
 import { EMOJI_CATEGORIES, searchEmojis } from "./emojiData";
+import "./EmojiPicker.css";
 
 const RECENT_KEY = "kisy-emoji-recent";
 const RECENT_MAX = 24;
@@ -28,9 +29,15 @@ interface Props {
   onClose: () => void;
   /** Anchor className to skip in the outside-click check (the toggle button). */
   ignoreSelector?: string;
+  /**
+   * Put the cursor in the search field on open. Right when typing is the
+   * point (the composer); wrong for a reaction on a phone, where focusing
+   * raises the keyboard over the very grid the reader came to tap.
+   */
+  autoFocusSearch?: boolean;
 }
 
-export function EmojiPicker({ onPick, onClose, ignoreSelector }: Props) {
+export function EmojiPicker({ onPick, onClose, ignoreSelector, autoFocusSearch = true }: Props) {
   // Mounted only while open, so it always claims the back gesture.
   useBackHandler(true, onClose);
   const [query, setQuery] = useState("");
@@ -67,7 +74,7 @@ export function EmojiPicker({ onPick, onClose, ignoreSelector }: Props) {
       <input
         className="emojipick__search ui-input"
         placeholder="Поиск эмодзи"
-        autoFocus
+        autoFocus={autoFocusSearch}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />

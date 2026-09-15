@@ -92,14 +92,6 @@ type ReactionSummary struct {
 	Mine  bool   `json:"mine"`
 }
 
-// AuthorCard is the small user card shown on a post.
-type AuthorCard struct {
-	ID          uuid.UUID `json:"id"`
-	DisplayName string    `json:"displayName"`
-	Username    string    `json:"username"`
-	AvatarURL   *string   `json:"avatarUrl"`
-}
-
 // CommunityCard says where a post came from, and whether the reader is in it.
 //
 // Carried on every feed item on purpose: a post whose community the reader
@@ -127,12 +119,17 @@ type MediaDTO struct {
 }
 
 // DTO is a post as the API returns it.
+//
+// There is no author on it, and that is the point rather than an omission: a
+// community speaks as itself, the way a channel does. Which editor pressed
+// "publish" stays in posts.author_id and in the audit log, where moderation
+// needs it, and does not travel to readers — a name hidden only by the client
+// would still be one request away.
 type DTO struct {
 	ID        uuid.UUID         `json:"id"`
 	Text      string            `json:"text"`
 	CreatedAt time.Time         `json:"createdAt"`
 	EditedAt  *time.Time        `json:"editedAt"`
-	Author    AuthorCard        `json:"author"`
 	Community CommunityCard     `json:"community"`
 	Media     []MediaDTO        `json:"media"`
 	Reactions []ReactionSummary `json:"reactions"`

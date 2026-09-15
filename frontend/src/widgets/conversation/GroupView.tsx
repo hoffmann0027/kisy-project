@@ -24,9 +24,20 @@ export function GroupView({ group }: { group: Group }) {
   // The board and the calendar are sub-views, not screens: back returns to the
   // group's chat rather than leaving the group.
   const homeTab: Tab = isCommunity ? "posts" : "chat";
-  useBackHandler(tab !== homeTab, () => setTab(homeTab));
   const isFounder = useAuthStore((s) => s.user?.id === group.createdBy);
   const { data: viewer } = useGroupViewer(group.id);
+  // In a community the board and calendar are its editors' back office; the
+  // server refuses them to plain readers, so the tabs are not offered either.
+  // Until the viewer loads, a group shows its tabs as it always has, and a
+  // community keeps them back rather than flash them at a reader.
+  const canUseWorkspace = viewer?.canUseWorkspace ?? !isCommunity;
+  // Losing the right while a sub-view is open (demoted, or the viewer loads
+  // late) falls back to the home tab rather than to a screen of errors.
+  const shown: Tab = (tab === "board" || tab === "calendar") && !canUseWorkspace ? homeTab : tab;
+  useBackHandler(shown !== homeTab, () => setTab(homeTab));
+  // People are added directly only to a group. A community is joined by the
+  // reader's own choice — "Вступить" or a request its editors approve.
+  const canAdd = isFounder && !isCommunity;
   // Editors-only group where the viewer is a plain member → composer hidden.
   const readOnly = viewer && !viewer.canPost ? "Писать могут только редакторы" : undefined;
   // Group's clearance, shown in the header so the level is visible in-chat.
@@ -41,7 +52,7 @@ export function GroupView({ group }: { group: Group }) {
     <div className="group-tabs">
       {isCommunity && (
         <button
-          className={cn("group-tab", tab === "posts" && "group-tab--active")}
+          className={cn("group-tab", shown === "posts" && "group-tab--active")}
           onClick={() => setTab("posts")}
         >
           Посты
@@ -52,31 +63,39 @@ export function GroupView({ group }: { group: Group }) {
           question asked once instead of a second flag beside it. */}
       {(!isCommunity || group.postPolicy === "all") && (
         <button
-          className={cn("group-tab", tab === "chat" && "group-tab--active")}
+          className={cn("group-tab", shown === "chat" && "group-tab--active")}
           onClick={() => setTab("chat")}
         >
           {isCommunity ? "Обсуждение" : "Чат"}
         </button>
       )}
-      <button
-        className={cn("group-tab", tab === "board" && "group-tab--active")}
-        onClick={() => setTab("board")}
-      >
-        <Icon.Board size={16} /> Доска
-      </button>
-      <button
-        className={cn("group-tab", tab === "calendar" && "group-tab--active")}
-        onClick={() => setTab("calendar")}
-      >
-        <Icon.Calendar size={16} /> Календарь
-      </button>
+      {canUseWorkspace && (
+        <>
+          <button
+            className={cn("group-tab", shown === "board" && "group-tab--active")}
+            onClick={() => setTab("board")}
+          >
+            <Icon.Board size={16} /> Доска
+          </button>
+          <button
+            className={cn("group-tab", shown === "calendar" && "group-tab--active")}
+            onClick={() => setTab("calendar")}
+          >
+            <Icon.Calendar size={16} /> Календарь
+          </button>
+        </>
+      )}
       <button className="group-tab" onClick={() => setMembersOpen(true)} title="Участники">
         <Icon.Users size={16} />
       </button>
     </div>
   );
 
-  if (tab === "posts") {
+  const members = (
+    <GroupMembersModal group={group} canAdd={canAdd} open={membersOpen} onClose={() => setMembersOpen(false)} />
+  );
+
+  if (shown === "posts") {
     return (
       <section className="conv">
         <header className="conv__header">
@@ -90,12 +109,12 @@ export function GroupView({ group }: { group: Group }) {
           {tabs}
         </header>
         <CommunityWall group={group} canPost={viewer?.canPost ?? false} />
-        <GroupMembersModal group={group} canAdd={isFounder} open={membersOpen} onClose={() => setMembersOpen(false)} />
+        {members}
       </section>
     );
   }
 
-  if (tab === "board" || tab === "calendar") {
+  if (shown === "board" || shown === "calendar") {
     return (
       <section className="conv">
         <header className="conv__header">
@@ -104,12 +123,12 @@ export function GroupView({ group }: { group: Group }) {
           </button>
           <div className="conv__header-body">
             <div className="conv__title">{group.name}</div>
-            <div className="conv__status">{tab === "board" ? "Доска задач" : "Календарь"}</div>
+            <div className="conv__status">{shown === "board" ? "Доска задач" : "Календарь"}</div>
           </div>
           {tabs}
         </header>
-        {tab === "board" ? <BoardView group={group} /> : <CalendarView group={group} onOpenCard={() => setTab("board")} />}
-        <GroupMembersModal group={group} canAdd={isFounder} open={membersOpen} onClose={() => setMembersOpen(false)} />
+        {shown === "board" ? <BoardView group={group} /> : <CalendarView group={group} onOpenCard={() => setTab("board")} />}
+        {members}
       </section>
     );
   }
@@ -128,7 +147,7 @@ export function GroupView({ group }: { group: Group }) {
         headerActions={tabs}
         readOnly={readOnly}
       />
-      <GroupMembersModal group={group} canAdd={isFounder} open={membersOpen} onClose={() => setMembersOpen(false)} />
+      {members}
     </>
   );
 }
