@@ -6,7 +6,6 @@ import { ChatList } from "@widgets/chat-list/ChatList";
 import { Conversation } from "@widgets/conversation/Conversation";
 import { GroupView } from "@widgets/conversation/GroupView";
 import { AppDrawer } from "@widgets/drawer/AppDrawer";
-import { useNotifications } from "@entities/notification/queries";
 import { Icon } from "@shared/ui/icons";
 import { formatRelative } from "@shared/lib/format";
 import type { Chat, Group } from "@shared/api/types";
@@ -50,7 +49,6 @@ export function MessengerPage() {
   const [callHistory, setCallHistory] = useState(false);
   // Phone layout: the side drawer opened from the header avatar.
   const [drawer, setDrawer] = useState(false);
-  const { data: notif } = useNotifications();
 
   const activeChat: Chat | undefined = chats?.find((c) => c.id === chatId);
   const activeGroup: Group | undefined = groups?.find((g) => g.id === groupId);
@@ -65,15 +63,7 @@ export function MessengerPage() {
 
   return (
     <div className={activeId ? "msgr msgr--chat-open" : "msgr"}>
-      <Rail
-        onProfile={() => setProfile(true)}
-        onNotifications={() => setNotifications(true)}
-        onFeedback={() => setFeedback(true)}
-        onNotes={() => setNotes(true)}
-        onConditions={() => setConditions(true)}
-        onVoting={() => setVoting(true)}
-        onCalls={() => setCallHistory(true)}
-      />
+      <Rail onProfile={() => setProfile(true)} />
 
       <ChatList
         view={view}
@@ -124,17 +114,7 @@ export function MessengerPage() {
       {callHistory && <CallHistoryModal open onClose={() => setCallHistory(false)} />}
       </Suspense>
 
-      <AppDrawer
-        open={drawer}
-        onClose={() => setDrawer(false)}
-        unread={notif?.unreadCount ?? 0}
-        onOpen={(what) => {
-          if (what === "notifications") setNotifications(true);
-          else if (what === "notes") setNotes(true);
-          else if (what === "feedback") setFeedback(true);
-          else setProfile(true);
-        }}
-      />
+      <AppDrawer open={drawer} onClose={() => setDrawer(false)} />
     </div>
   );
 }

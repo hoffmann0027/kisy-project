@@ -13,15 +13,13 @@ const RATING_MAX_LEVEL = 9;
 
 interface Props {
   onProfile: () => void;
-  onNotifications: () => void;
-  onFeedback: () => void;
-  onNotes: () => void;
-  onConditions: () => void;
-  onVoting: () => void;
-  onCalls: () => void;
 }
 
-export function Rail({ onProfile, onNotifications, onFeedback, onNotes, onConditions, onVoting, onCalls }: Props) {
+// Desktop counterpart of the phone tab bar. Same rule as the drawer: nothing
+// here may duplicate the hub. Notifications, votes, notes, feedback, level
+// conditions, call history and admin all moved there — the rail keeps the
+// first-level destinations plus the profile and sign-out.
+export function Rail({ onProfile }: Props) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
@@ -66,35 +64,19 @@ export function Rail({ onProfile, onNotifications, onFeedback, onNotes, onCondit
         >
           <Icon.Community />
         </button>
-        <button className="rail__item" title="Уведомления" onClick={onNotifications}>
-          <Icon.Bell />
+        <button
+          className={cn("rail__item", pathname.startsWith("/hub") && "rail__item--active")}
+          title="Хаб"
+          onClick={() => navigate("/hub")}
+        >
+          <Icon.Grid />
           {unread > 0 && (
             <span className="rail__item-badge">
               <Badge>{unread > 9 ? "9+" : unread}</Badge>
             </span>
           )}
         </button>
-        {user.roleLevel === 1 && (
-          <button className="rail__item" title="Администрирование" onClick={() => navigate("/admin")}>
-            <Icon.Shield />
-          </button>
-        )}
       </div>
-      <button className="rail__item" title="Голосование" onClick={onVoting}>
-        <Icon.Vote />
-      </button>
-      <button className="rail__item" title="Условия повышения уровня" onClick={onConditions}>
-        <Icon.Levels />
-      </button>
-      <button className="rail__item" title="История звонков" onClick={onCalls}>
-        <Icon.Phone />
-      </button>
-      <button className="rail__item" title="Заметки" onClick={onNotes}>
-        <Icon.Note />
-      </button>
-      <button className="rail__item" title="Отзывы и предложения" onClick={onFeedback}>
-        <Icon.Feedback />
-      </button>
       <button className="rail__item" title="Профиль" onClick={onProfile}>
         <Avatar name={user.displayName} url={user.avatarUrl} size={38} />
       </button>

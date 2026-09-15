@@ -9,6 +9,7 @@ import { VotingModal } from "@features/voting/VotingModal";
 import { FeedbackModal } from "@features/feedback/FeedbackModal";
 import { NewGroupModal } from "@features/new-chat/NewGroupModal";
 import { ConditionsModal } from "@features/conditions/ConditionsModal";
+import { CallHistoryModal } from "@features/call/CallHistoryModal";
 import "./hub.css";
 
 // The Hub (design_handoff_kisy_mobile §5): the phone layout has room for four
@@ -16,7 +17,7 @@ import "./hub.css";
 // the desktop rail. Each card opens the feature's existing modal; nothing is
 // reimplemented.
 
-type Modal = "notifications" | "voting" | "notes" | "feedback" | "conditions" | "group" | null;
+type Modal = "notifications" | "voting" | "notes" | "feedback" | "conditions" | "group" | "calls" | null;
 
 export function HubPage() {
   const navigate = useNavigate();
@@ -36,6 +37,9 @@ export function HubPage() {
     { key: "voting" as const, title: "Голосования", hint: "Опросы команды", icon: Icon.Vote, tint: "orange" },
     { key: "notes" as const, title: "Заметки", hint: "Личные записи", icon: Icon.Note, tint: "amber" },
     { key: "feedback" as const, title: "Отзывы", hint: "Идеи и проблемы", icon: Icon.Feedback, tint: "green" },
+    // Used to be reachable only from the desktop rail, i.e. not at all on a
+    // phone.
+    { key: "calls" as const, title: "Звонки", hint: "История вызовов", icon: Icon.Phone, tint: "violet" },
   ];
 
   const actions = [
@@ -90,6 +94,7 @@ export function HubPage() {
       <NotesModal open={modal === "notes"} onClose={() => setModal(null)} />
       <FeedbackModal open={modal === "feedback"} onClose={() => setModal(null)} />
       <ConditionsModal open={modal === "conditions"} onClose={() => setModal(null)} />
+      <CallHistoryModal open={modal === "calls"} onClose={() => setModal(null)} />
       <NewGroupModal
         open={modal === "group"}
         onClose={() => setModal(null)}

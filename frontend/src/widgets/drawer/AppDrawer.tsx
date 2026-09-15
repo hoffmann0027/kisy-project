@@ -1,8 +1,7 @@
 import { useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
-import { cn } from "@shared/lib/cn";
 import { Avatar } from "@shared/ui";
+import { ThemeSwitcher } from "@features/profile/ThemeSwitcher";
 import { Icon } from "@shared/ui/icons";
 import { useAuthStore } from "@shared/store/auth";
 import { roleLabel } from "@shared/api/types";
@@ -15,14 +14,9 @@ import "./drawer.css";
 interface Props {
   open: boolean;
   onClose: () => void;
-  /** Sections that live in modals rather than routes. */
-  onOpen: (what: "notifications" | "notes" | "feedback" | "profile") => void;
-  unread?: number;
 }
 
-export function AppDrawer({ open, onClose, onOpen, unread = 0 }: Props) {
-  const navigate = useNavigate();
-  const { pathname } = useLocation();
+export function AppDrawer({ open, onClose }: Props) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
 
@@ -37,38 +31,7 @@ export function AppDrawer({ open, onClose, onOpen, unread = 0 }: Props) {
 
   if (!open || !user) return null;
 
-  const go = (to: string) => {
-    navigate(to);
-    onClose();
-  };
-  const open_ = (what: Parameters<Props["onOpen"]>[0]) => {
-    onOpen(what);
-    onClose();
-  };
 
-  const items = [
-    { key: "messages", label: "Сообщения", icon: Icon.Chat, active: pathname === "/" || pathname.startsWith("/chat/"), run: () => go("/") },
-    { key: "communities", label: "Сообщества", icon: Icon.Community, active: pathname.startsWith("/communities") || pathname.startsWith("/group/"), run: () => go("/communities") },
-    { key: "hub", label: "Хаб", icon: Icon.Grid, active: pathname.startsWith("/hub"), run: () => go("/hub") },
-    { key: "rating", label: "Рейтинг проектов", icon: Icon.Trophy, active: pathname.startsWith("/rating"), run: () => go("/rating") },
-    { key: "notifications", label: "Уведомления", icon: Icon.Bell, badge: unread, run: () => open_("notifications") },
-    { key: "notes", label: "Заметки", icon: Icon.Note, run: () => open_("notes") },
-    { key: "feedback", label: "Отзывы и предложения", icon: Icon.Feedback, run: () => open_("feedback") },
-    { key: "profile", label: "Настройки профиля", icon: Icon.Settings, run: () => open_("profile") },
-    // The phone has no side rail, so this is the only way into the admin
-    // panel (invites, users, audit) — CEO only, as on the desktop.
-    ...(user.roleLevel === 1
-      ? [
-          {
-            key: "admin",
-            label: "Администрирование",
-            icon: Icon.Shield,
-            active: pathname.startsWith("/admin"),
-            run: () => go("/admin"),
-          },
-        ]
-      : []),
-  ];
 
   // Portal to <body>: the drawer must cover the whole viewport, not be clipped
   // by a panel with overflow:hidden.
@@ -88,28 +51,12 @@ export function AppDrawer({ open, onClose, onOpen, unread = 0 }: Props) {
           </button>
         </header>
 
-        <nav className="drawer__list">
-          {items.map((it) => (
-            <button
-              key={it.key}
-              type="button"
-              className={cn("drawer__item", it.active && "drawer__item--active")}
-              onClick={it.run}
-            >
-              <span className="drawer__item-icon">
-                <it.icon size={20} />
-              </span>
-              <span className="drawer__item-label">{it.label}</span>
-              {it.badge ? (
-                <span className="drawer__item-badge">{it.badge > 99 ? "99+" : it.badge}</span>
-              ) : (
-                <span className="drawer__item-chevron">
-                  <Icon.Chevron size={18} />
-                </span>
-              )}
-            </button>
-          ))}
-        </nav>
+        {/* Every destination that used to live here is reachable from the tab
+            bar or the hub; keeping copies meant three places to update and
+            three places to disagree. What stays is what has no other home. */}
+        <div className="drawer__theme">
+          <ThemeSwitcher />
+        </div>
 
         <footer className="drawer__foot">
           <button type="button" className="drawer__logout" onClick={() => void logout()}>

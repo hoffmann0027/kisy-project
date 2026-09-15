@@ -5,12 +5,6 @@ import { Spinner } from "@shared/ui";
 import { RatingAnalytics } from "@widgets/rating/RatingAnalytics";
 import { RatingKanban } from "@widgets/rating/RatingKanban";
 import { ProfileModal } from "@features/profile/ProfileModal";
-import { NotificationsModal } from "@features/notifications/NotificationsModal";
-import { FeedbackModal } from "@features/feedback/FeedbackModal";
-import { NotesModal } from "@features/notes/NotesModal";
-import { ConditionsModal } from "@features/conditions/ConditionsModal";
-import { VotingModal } from "@features/voting/VotingModal";
-import { CallHistoryModal } from "@features/call/CallHistoryModal";
 import { useRatingAnalytics, useRatingBoard, useRatingMutations } from "@entities/rating/queries";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
@@ -21,24 +15,10 @@ export function RatingPage() {
   const m = useRatingMutations();
 
   const [profile, setProfile] = useState(false);
-  const [notifications, setNotifications] = useState(false);
-  const [feedback, setFeedback] = useState(false);
-  const [notes, setNotes] = useState(false);
-  const [conditions, setConditions] = useState(false);
-  const [voting, setVoting] = useState(false);
-  const [callHistory, setCallHistory] = useState(false);
 
   return (
     <div className="rating-shell">
-      <Rail
-        onProfile={() => setProfile(true)}
-        onNotifications={() => setNotifications(true)}
-        onFeedback={() => setFeedback(true)}
-        onNotes={() => setNotes(true)}
-        onConditions={() => setConditions(true)}
-        onVoting={() => setVoting(true)}
-        onCalls={() => setCallHistory(true)}
-      />
+      <Rail onProfile={() => setProfile(true)} />
 
       <main className="rating">
         <div className="rating__scroll">
@@ -62,12 +42,6 @@ export function RatingPage() {
       </main>
 
       <ProfileModal open={profile} onClose={() => setProfile(false)} />
-      <NotificationsModal open={notifications} onClose={() => setNotifications(false)} />
-      <FeedbackModal open={feedback} onClose={() => setFeedback(false)} />
-      <NotesModal open={notes} onClose={() => setNotes(false)} />
-      <ConditionsModal open={conditions} onClose={() => setConditions(false)} />
-      <VotingModal open={voting} onClose={() => setVoting(false)} />
-      <CallHistoryModal open={callHistory} onClose={() => setCallHistory(false)} />
     </div>
   );
 }
