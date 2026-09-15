@@ -45,6 +45,20 @@ type Profiles interface {
 	Cards(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]AuthorCard, error)
 }
 
+// MediaStore persists an uploaded file and reads it back. Satisfied by the
+// blob store; a local interface keeps posts out of that dependency.
+type MediaStore interface {
+	Put(ctx context.Context, name, mime string, raw []byte) (storagePath string, err error)
+	Get(ctx context.Context, storagePath string) (raw []byte, mime string, err error)
+}
+
+// UploadedFile is one file on its way onto a post.
+type UploadedFile struct {
+	FileName string
+	MimeType string
+	Bytes    []byte
+}
+
 // Publisher announces a new post to a community's members.
 //
 // Deliberately its own port rather than the chat publisher: a post is not a
@@ -61,6 +75,7 @@ type Service struct {
 	communities Communities
 	profiles    Profiles
 	audit       audit.Recorder
+	media       MediaStore
 	pub         Publisher
 	ranker      Ranker
 }
@@ -69,9 +84,10 @@ func NewService(pool *pgxpool.Pool, repo Repository, communities Communities, re
 	return &Service{pool: pool, repo: repo, communities: communities, audit: rec}
 }
 
-func (s *Service) SetProfiles(p Profiles)   { s.profiles = p }
-func (s *Service) SetPublisher(p Publisher) { s.pub = p }
-func (s *Service) SetRanker(r Ranker)       { s.ranker = r }
+func (s *Service) SetProfiles(p Profiles)     { s.profiles = p }
+func (s *Service) SetPublisher(p Publisher)   { s.pub = p }
+func (s *Service) SetRanker(r Ranker)         { s.ranker = r }
+func (s *Service) SetMediaStore(m MediaStore) { s.media = m }
 
 // CreateInput is validated by the handler before it reaches the service.
 type CreateInput struct {
@@ -258,6 +274,119 @@ func (s *Service) React(ctx context.Context, postID uuid.UUID, emoji string, on 
 		return s.repo.AddReaction(ctx, s.pool, postID, actor.UserID, emoji)
 	}
 	return s.repo.RemoveReaction(ctx, s.pool, postID, actor.UserID, emoji)
+}
+
+// AttachMedia adds one uploaded file to a post and returns the updated post.
+//
+// Only the author may attach, and only to a post that is still theirs: media
+// travels after the post because a file and a JSON body do not share a
+// request, not because anyone else should be able to add to it later.
+func (s *Service) AttachMedia(
+	ctx context.Context, postID uuid.UUID, file UploadedFile, actor ActorMeta,
+) (*DTO, error) {
+	if len(file.Bytes) == 0 {
+		return nil, ErrEmpty
+	}
+	p, err := s.repo.Get(ctx, s.pool, postID)
+	if err != nil {
+		return nil, err
+	}
+	if p.AuthorID != actor.UserID {
+		return nil, ErrForbidden
+	}
+	if _, err := s.communities.Resolve(ctx, p.CommunityID, actor); err != nil {
+		return nil, err
+	}
+
+	existing, err := s.repo.MediaFor(ctx, s.pool, []uuid.UUID{postID})
+	if err != nil {
+		return nil, err
+	}
+	if len(existing[postID]) >= MaxMediaPerPost {
+		return nil, ErrTooLong
+	}
+
+	name := strings.TrimSpace(file.FileName)
+	if name == "" {
+		name = "file"
+	}
+	m := Media{
+		Kind:      mediaKindFor(file.MimeType),
+		FileName:  name,
+		MimeType:  file.MimeType,
+		SizeBytes: int64(len(file.Bytes)),
+		Position:  len(existing[postID]),
+	}
+	// With an object store the bytes go there; without one they stay in the
+	// row. The alternative — refusing attachments on a deployment that has no
+	// bucket — would make the feature depend on infrastructure the user never
+	// asked about.
+	if s.media != nil {
+		path, err := s.media.Put(ctx, name, file.MimeType, file.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("posts: store media: %w", err)
+		}
+		m.StoragePath = path
+	} else {
+		m.Bytes = file.Bytes
+	}
+	if err := s.repo.AddMedia(ctx, s.pool, postID, []Media{m}); err != nil {
+		return nil, err
+	}
+
+	page, err := s.render(ctx, []Post{*p}, actor)
+	if err != nil || len(page) == 0 {
+		return nil, err
+	}
+	return &page[0], nil
+}
+
+// ReadMedia streams one post attachment back, after checking that the reader
+// may see the post it hangs off.
+func (s *Service) ReadMedia(ctx context.Context, mediaID uuid.UUID, actor ActorMeta) ([]byte, string, error) {
+	m, postID, err := s.repo.MediaByID(ctx, s.pool, mediaID)
+	if err != nil {
+		return nil, "", err
+	}
+	p, err := s.repo.Get(ctx, s.pool, postID)
+	if err != nil {
+		return nil, "", err
+	}
+	// The community decides: a file is exactly as visible as its post.
+	if _, err := s.communities.Resolve(ctx, p.CommunityID, actor); err != nil {
+		return nil, "", err
+	}
+	// Whichever half of the XOR this row uses (migration 44).
+	if len(m.Bytes) > 0 {
+		return m.Bytes, m.MimeType, nil
+	}
+	if s.media == nil {
+		// The row points at an object store this process does not have.
+		return nil, "", ErrNotFound
+	}
+	raw, mime, err := s.media.Get(ctx, m.StoragePath)
+	if err != nil {
+		return nil, "", fmt.Errorf("posts: read media: %w", err)
+	}
+	if mime == "" {
+		mime = m.MimeType
+	}
+	return raw, mime, nil
+}
+
+// mediaKindFor maps a content type to the kind stored on the row, which is
+// what the client uses to pick a renderer.
+func mediaKindFor(mime string) string {
+	switch {
+	case strings.HasPrefix(mime, "image/"):
+		return MediaImage
+	case strings.HasPrefix(mime, "video/"):
+		return MediaVideo
+	case strings.HasPrefix(mime, "audio/"):
+		return MediaAudio
+	default:
+		return MediaFile
+	}
 }
 
 // HideCommunity drops a community out of this user's feed (and ShowCommunity

@@ -40,6 +40,8 @@ type Repository interface {
 	AddReaction(ctx context.Context, q db.DBTX, postID, userID uuid.UUID, emoji string) error
 	RemoveReaction(ctx context.Context, q db.DBTX, postID, userID uuid.UUID, emoji string) error
 
+	MediaByID(ctx context.Context, q db.DBTX, id uuid.UUID) (Media, uuid.UUID, error)
+
 	HideCommunity(ctx context.Context, q db.DBTX, userID, groupID uuid.UUID) error
 	ShowCommunity(ctx context.Context, q db.DBTX, userID, groupID uuid.UUID) error
 }
@@ -90,9 +92,9 @@ func (r *PostgresRepository) AddMedia(ctx context.Context, q db.DBTX, postID uui
 	for i := range media {
 		m := media[i]
 		_, err := q.Exec(ctx, `
-			INSERT INTO post_media (post_id, kind, file_name, mime_type, size_bytes, storage_path, position)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			postID, m.Kind, m.FileName, m.MimeType, m.SizeBytes, m.StoragePath, i)
+			INSERT INTO post_media (post_id, kind, file_name, mime_type, size_bytes, storage_path, bytes, position)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			postID, m.Kind, m.FileName, m.MimeType, m.SizeBytes, m.StoragePath, m.Bytes, i)
 		if err != nil {
 			return fmt.Errorf("posts: add media: %w", err)
 		}
@@ -347,4 +349,21 @@ func prefixed(columns, alias string) string {
 		parts[i] = alias + "." + strings.TrimSpace(c)
 	}
 	return strings.Join(parts, ", ")
+}
+
+// MediaByID returns one attachment and the post it belongs to.
+func (r *PostgresRepository) MediaByID(ctx context.Context, q db.DBTX, id uuid.UUID) (Media, uuid.UUID, error) {
+	var m Media
+	var postID uuid.UUID
+	err := q.QueryRow(ctx, `
+		SELECT id, post_id, kind, file_name, mime_type, size_bytes, storage_path, bytes, position
+		FROM post_media WHERE id = $1`, id).
+		Scan(&m.ID, &postID, &m.Kind, &m.FileName, &m.MimeType, &m.SizeBytes, &m.StoragePath, &m.Bytes, &m.Position)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Media{}, uuid.Nil, ErrNotFound
+	}
+	if err != nil {
+		return Media{}, uuid.Nil, fmt.Errorf("posts: media by id: %w", err)
+	}
+	return m, postID, nil
 }

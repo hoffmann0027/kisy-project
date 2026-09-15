@@ -36,9 +36,14 @@ func NewPostgresRepository() *PostgresRepository { return &PostgresRepository{} 
 
 func (r *PostgresRepository) Add(ctx context.Context, q db.DBTX, messageID, userID uuid.UUID, emoji string) error {
 	// Idempotent: re-reacting with the same emoji is a no-op.
+	//
+	// The WHERE clause is not decoration. Since migration 43 reactions are
+	// polymorphic and the uniqueness rule is a PARTIAL index, so a conflict
+	// target without the same predicate matches no constraint at all and
+	// Postgres rejects the statement outright.
 	_, err := q.Exec(ctx, `
 		INSERT INTO reactions (message_id, user_id, emoji) VALUES ($1, $2, $3)
-		ON CONFLICT (message_id, user_id, emoji) DO NOTHING`,
+		ON CONFLICT (message_id, user_id, emoji) WHERE message_id IS NOT NULL DO NOTHING`,
 		messageID, userID, emoji)
 	if err != nil {
 		return fmt.Errorf("reactions: add: %w", err)

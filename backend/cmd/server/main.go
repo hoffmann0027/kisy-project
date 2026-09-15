@@ -327,6 +327,23 @@ func newRouter(d routerDeps) http.Handler {
 				m.boardsHandler.GroupRoutes(r)
 				// Calendar list/create under a group.
 				m.calendarHandler.GroupRoutes(r)
+				// A community's wall. Hangs off the group because a community
+				// IS a group (migration 43) — same membership, same visibility.
+				r.Route("/{groupID}/posts", func(r chi.Router) {
+					m.postsHandler.CommunityRoutes(r)
+				})
+			})
+
+			// Posts themselves: deletion, media, reactions.
+			r.Route("/posts", func(r chi.Router) {
+				m.postsHandler.Routes(r)
+			})
+
+			// The shared feed across public communities. Open to both kinds of
+			// account — it is the one screen a basic account has that an
+			// invited one reaches from the hub instead.
+			r.Route("/feed", func(r chi.Router) {
+				m.postsHandler.FeedRoutes(r)
 			})
 
 			// Board structure/card endpoints (access checked per-board via

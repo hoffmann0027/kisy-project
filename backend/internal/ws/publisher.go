@@ -159,3 +159,16 @@ func (p *Publisher) PublishReaction(chatType string, chatID, messageID, userID u
 		Emoji:     emoji,
 	}))
 }
+
+// PublishPostCreated tells a community's members that a new post appeared, so
+// their feed and the community's wall can refetch it.
+//
+// Addressed to the member list rather than to a chat topic: a post is not a
+// chat message, and routing it through the message channel is exactly how a
+// reaction on a post would end up surfacing in someone's conversation.
+func (p *Publisher) PublishPostCreated(memberIDs []uuid.UUID, communityID, postID uuid.UUID) {
+	p.hub.publishToUsers(memberIDs, encode(EventPostCreated, map[string]any{
+		"communityId": communityID,
+		"postId":      postID,
+	}))
+}

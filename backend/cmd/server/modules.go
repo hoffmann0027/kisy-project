@@ -42,6 +42,7 @@ import (
 	"kisy-backend/internal/platform/blobstore"
 	"kisy-backend/internal/platform/db"
 	"kisy-backend/internal/platform/ratelimit"
+	"kisy-backend/internal/posts"
 	"kisy-backend/internal/push"
 	"kisy-backend/internal/rating"
 	"kisy-backend/internal/reactions"
@@ -69,6 +70,7 @@ type modules struct {
 	messagesHandler      *messages.Handler
 	attachmentsHandler   *attachments.Handler
 	reactionsHandler     *reactions.Handler
+	postsHandler         *posts.Handler
 	readstateHandler     *readstate.Handler
 	favoritesHandler     *favorites.Handler
 	chatfoldersHandler   *chatfolders.Handler
@@ -449,6 +451,34 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		}
 		return reactions.Actor{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
 	})
+
+	// --- community posts and the feed ---
+	postsSvc := posts.NewService(pool, posts.NewPostgresRepository(), postsCommunities{groups: groupsSvc}, auditRec)
+	postsSvc.SetProfiles(authorCards(pool, usersRepo))
+	postsSvc.SetRanker(posts.NewRedisRanker(rdb))
+	if blobs != nil {
+		// Without an object store the bytes stay in the row (migration 44), so
+		// attachments work either way.
+		postsSvc.SetMediaStore(postsMedia{store: blobs})
+	}
+	postsHandler := posts.NewHandler(postsSvc, func(r *http.Request) (posts.ActorMeta, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return posts.ActorMeta{}, false
+		}
+		m := authHandler.ClientMeta(r)
+		return posts.ActorMeta{
+			UserID:    claims.UserID,
+			SessionID: claims.SessionID,
+			RoleLevel: claims.RoleLevel,
+			IPHash:    m.IPHash,
+			RequestID: m.RequestID,
+		}, true
+	})
+	postsSvc.SetPublisher(postsPublisher{publish: wsPublisher.PublishPostCreated})
+	// The ranking ages with the clock, so it is recomputed on a timer rather
+	// than per request (docs/spec/07-business-logic.md).
+	postsSvc.StartRankingWorker(ctx, posts.RankingInterval, log)
 
 	// --- read state / unread counters ---
 	readstateSvc := readstate.NewService(pool, readstate.NewPostgresRepository(), readstate.ChatAuthorizer(chatAuthorizer))
@@ -832,6 +862,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		messagesHandler:      messagesHandler,
 		attachmentsHandler:   attachmentsHandler,
 		reactionsHandler:     reactionsHandler,
+		postsHandler:         postsHandler,
 		readstateHandler:     readstateHandler,
 		favoritesHandler:     favoritesHandler,
 		chatfoldersHandler:   chatfoldersHandler,

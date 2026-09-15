@@ -78,7 +78,10 @@ type Media struct {
 	MimeType    string
 	SizeBytes   int64
 	StoragePath string
-	Position    int
+	// Bytes holds the file inline when no object store is configured; exactly
+	// one of Bytes and StoragePath is set (migration 44).
+	Bytes    []byte
+	Position int
 }
 
 // ReactionSummary is one emoji on one post: how many people chose it and

@@ -29,6 +29,7 @@ const (
 	EventGroupChanged    = "group.changed"
 	EventRatingChanged   = "rating.changed"
 	EventPollChanged     = "poll.changed"
+	EventPostCreated     = "post.created"
 
 	// Voice-call signaling (server→client). Client→server call frames are
 	// prefix-routed ("call.*") to the calls package, which owns their names.
