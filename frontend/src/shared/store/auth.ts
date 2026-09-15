@@ -1,9 +1,17 @@
 import { create } from "zustand";
 import { authApi, usersApi } from "@shared/api/endpoints";
+import { isAuthFailure } from "@shared/api/envelope";
 import { forgetNativePushDevice } from "@shared/lib/nativePush";
 import type { User } from "@shared/api/types";
 
-type Status = "loading" | "authenticated" | "anonymous";
+type Status = "loading" | "authenticated" | "anonymous" | "offline";
+
+// How long to keep trying to reach the server before admitting there is no
+// connection. A phone woken by a call has its radio attaching while the app is
+// already running, and the first request or two simply do not land.
+const RETRY_DELAYS_MS = [400, 800, 1600, 3200];
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 interface AuthState {
   user: User | null;
@@ -20,12 +28,35 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   status: "loading",
 
+  /**
+   * Restores the session on app start.
+   *
+   * Only the server can end a session. This used to treat every failure as
+   * "not signed in", so a phone woken by a call — radio still attaching, first
+   * requests going nowhere — was shown the password screen although its
+   * session was untouched: the tokens were still in storage, and signing in by
+   * hand a moment later worked, because by then the network was up.
+   */
   bootstrap: async () => {
-    try {
-      const { user } = await usersApi.me();
-      set({ user, status: "authenticated" });
-    } catch {
-      set({ user: null, status: "anonymous" });
+    set({ status: "loading" });
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const { user } = await usersApi.me();
+        set({ user, status: "authenticated" });
+        return;
+      } catch (err) {
+        if (isAuthFailure(err)) {
+          set({ user: null, status: "anonymous" });
+          return;
+        }
+        if (attempt >= RETRY_DELAYS_MS.length) {
+          // Out of patience, but still not a sign-out: the app says it cannot
+          // reach the server and offers to try again.
+          set({ user: null, status: "offline" });
+          return;
+        }
+        await delay(RETRY_DELAYS_MS[attempt]);
+      }
     }
   },
 

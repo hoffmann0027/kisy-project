@@ -47,6 +47,25 @@ describe("api client session renewal", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("does not report a sign-out when the refresh never reached the server", async () => {
+    // A phone woken by a call: the access token expired while it slept and the
+    // radio is still attaching. Answering this with 401 made the app conclude
+    // the session was over and ask for the password — with the session intact.
+    fetchMock
+      .mockResolvedValueOnce(unauthorized())
+      .mockRejectedValueOnce(new TypeError("Failed to fetch")); // refresh never lands
+
+    await expect(apiClient.get("/users/me")).rejects.toMatchObject({ status: 0 });
+  });
+
+  it("treats a broken server as unreachable, not as a rejected session", async () => {
+    fetchMock
+      .mockResolvedValueOnce(unauthorized())
+      .mockResolvedValueOnce(new Response("nope", { status: 502 }));
+
+    await expect(apiClient.get("/users/me")).rejects.toMatchObject({ status: 0 });
+  });
+
   it("does not try to refresh a failed sign-in", async () => {
     fetchMock.mockResolvedValueOnce(unauthorized());
 

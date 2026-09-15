@@ -14,9 +14,19 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 // screen firing five queries does not spend five refresh tokens — and, since
 // refresh rotates the token, does not race itself into a reuse-detection
 // logout.
-let refreshInFlight: Promise<boolean> | null = null;
+/**
+ * "rejected" and "unreachable" are not the same answer and must never be
+ * treated as one. The server refusing the refresh token means the session is
+ * over; never reaching the server means nothing at all — and a phone that has
+ * just woken up, with its radio still attaching, produces the second one
+ * constantly. Collapsing them into `false` signed people out of a session that
+ * was still perfectly valid.
+ */
+export type RefreshOutcome = "ok" | "rejected" | "unreachable";
 
-export function refreshSession(): Promise<boolean> {
+let refreshInFlight: Promise<RefreshOutcome> | null = null;
+
+export function refreshSession(): Promise<RefreshOutcome> {
   refreshInFlight ??= (async () => {
     try {
       const response = await fetch(`${apiOrigin()}${API_BASE_URL}/auth/refresh`, {
@@ -27,17 +37,21 @@ export function refreshSession(): Promise<boolean> {
         // HttpOnly cookie and must send nothing.
         body: isNative() ? JSON.stringify({ refreshToken: loadTokens()?.refreshToken ?? "" }) : undefined,
       });
+      if (response.status >= 500) {
+        // The server is there but broken. That says nothing about the token.
+        return "unreachable";
+      }
       if (!response.ok) {
         // The refresh token is spent or revoked: drop it so the app stops
         // retrying with a credential the server has already rejected.
         if (isNative()) saveTokens(null);
-        return false;
+        return "rejected";
       }
       const envelope = (await response.json()) as ApiEnvelope<{ tokens?: NativeTokens }>;
       if (envelope.data?.tokens) saveTokens(envelope.data.tokens);
-      return true;
+      return "ok";
     } catch {
-      return false; // offline: keep the tokens, the next attempt may succeed
+      return "unreachable"; // keep the tokens, the next attempt may succeed
     } finally {
       refreshInFlight = null;
     }
@@ -65,7 +79,14 @@ async function request<T>(path: string, init?: RequestInit, allowRefresh = true)
   // replay the request once. /auth/* is excluded: a failed login must surface
   // as a failed login, and refreshing inside refresh would recurse.
   if (response.status === 401 && allowRefresh && !path.startsWith("/auth/")) {
-    if (await refreshSession()) return request<T>(path, init, false);
+    const outcome = await refreshSession();
+    if (outcome === "ok") return request<T>(path, init, false);
+    if (outcome === "unreachable") {
+      // The access token expired and the exchange never reached the server, so
+      // whether this session is still good is unknown. Reported as a transport
+      // failure — callers retry those, and only a "rejected" ends a session.
+      throw new ApiError("NETWORK_ERROR", "Не удалось обновить сессию", "", 0);
+    }
   }
 
   // 204 or empty bodies still return a valid (empty) result.

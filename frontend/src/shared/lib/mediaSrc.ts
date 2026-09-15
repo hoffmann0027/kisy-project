@@ -28,7 +28,7 @@ async function fetchAsset(url: string, allowRefresh = true): Promise<string> {
     credentials: "omit",
     headers: nativeAuthHeaders(),
   });
-  if (response.status === 401 && allowRefresh && (await refreshSession())) {
+  if (response.status === 401 && allowRefresh && (await refreshSession()) === "ok") {
     return fetchAsset(url, false);
   }
   if (!response.ok) throw new Error(`media: ${response.status}`);
