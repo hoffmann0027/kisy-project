@@ -1,19 +1,10 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import "./messenger.css";
 import { Rail } from "@widgets/rail/Rail";
 import { ChatList } from "@widgets/chat-list/ChatList";
 import { Conversation } from "@widgets/conversation/Conversation";
 import { GroupView } from "@widgets/conversation/GroupView";
-import { NewChatModal } from "@features/new-chat/NewChatModal";
-import { NewGroupModal } from "@features/new-chat/NewGroupModal";
-import { ProfileModal } from "@features/profile/ProfileModal";
-import { NotificationsModal } from "@features/notifications/NotificationsModal";
-import { FeedbackModal } from "@features/feedback/FeedbackModal";
-import { NotesModal } from "@features/notes/NotesModal";
-import { ConditionsModal } from "@features/conditions/ConditionsModal";
-import { VotingModal } from "@features/voting/VotingModal";
-import { CallHistoryModal } from "@features/call/CallHistoryModal";
 import { AppDrawer } from "@widgets/drawer/AppDrawer";
 import { useNotifications } from "@entities/notification/queries";
 import { Icon } from "@shared/ui/icons";
@@ -22,6 +13,19 @@ import type { Chat, Group } from "@shared/api/types";
 import { useChats } from "@entities/chat/queries";
 import { useGroups } from "@entities/group/queries";
 import { usePresenceStore } from "@shared/store/presence";
+
+// Dialogs are loaded the first time they are opened. Nine of them sat in the
+// entry chunk, parsed on every cold start, for screens most sessions never
+// touch.
+const NewChatModal = lazy(() => import("@features/new-chat/NewChatModal").then((m) => ({ default: m.NewChatModal })));
+const NewGroupModal = lazy(() => import("@features/new-chat/NewGroupModal").then((m) => ({ default: m.NewGroupModal })));
+const ProfileModal = lazy(() => import("@features/profile/ProfileModal").then((m) => ({ default: m.ProfileModal })));
+const NotificationsModal = lazy(() => import("@features/notifications/NotificationsModal").then((m) => ({ default: m.NotificationsModal })));
+const FeedbackModal = lazy(() => import("@features/feedback/FeedbackModal").then((m) => ({ default: m.FeedbackModal })));
+const NotesModal = lazy(() => import("@features/notes/NotesModal").then((m) => ({ default: m.NotesModal })));
+const ConditionsModal = lazy(() => import("@features/conditions/ConditionsModal").then((m) => ({ default: m.ConditionsModal })));
+const VotingModal = lazy(() => import("@features/voting/VotingModal").then((m) => ({ default: m.VotingModal })));
+const CallHistoryModal = lazy(() => import("@features/call/CallHistoryModal").then((m) => ({ default: m.CallHistoryModal })));
 
 export function MessengerPage() {
   const navigate = useNavigate();
@@ -108,15 +112,18 @@ export function MessengerPage() {
         </div>
       )}
 
-      <NewChatModal open={newChat} onClose={() => setNewChat(false)} onOpened={selectChat} />
-      <NewGroupModal open={newGroup} onClose={() => setNewGroup(false)} onCreated={selectGroup} />
-      <ProfileModal open={profile} onClose={() => setProfile(false)} />
-      <NotificationsModal open={notifications} onClose={() => setNotifications(false)} />
-      <FeedbackModal open={feedback} onClose={() => setFeedback(false)} />
-      <NotesModal open={notes} onClose={() => setNotes(false)} />
-      <ConditionsModal open={conditions} onClose={() => setConditions(false)} />
-      <VotingModal open={voting} onClose={() => setVoting(false)} />
-      <CallHistoryModal open={callHistory} onClose={() => setCallHistory(false)} />
+      <Suspense fallback={null}>
+      {newChat && <NewChatModal open onClose={() => setNewChat(false)} onOpened={selectChat} />}
+      {newGroup && <NewGroupModal open onClose={() => setNewGroup(false)} onCreated={selectGroup} />}
+      {profile && <ProfileModal open onClose={() => setProfile(false)} />}
+      {notifications && <NotificationsModal open onClose={() => setNotifications(false)} />}
+      {feedback && <FeedbackModal open onClose={() => setFeedback(false)} />}
+      {notes && <NotesModal open onClose={() => setNotes(false)} />}
+      {conditions && <ConditionsModal open onClose={() => setConditions(false)} />}
+      {voting && <VotingModal open onClose={() => setVoting(false)} />}
+      {callHistory && <CallHistoryModal open onClose={() => setCallHistory(false)} />}
+      </Suspense>
+
       <AppDrawer
         open={drawer}
         onClose={() => setDrawer(false)}

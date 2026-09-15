@@ -428,3 +428,28 @@ input[type="radio"] {
   padding: var(--space-6);
   height: 100%;
 }
+
+/* Placeholder for a route whose chunk is still loading (code-splitting).
+   Uses the same shimmer as the chat-list skeleton so a slow chunk looks like
+   the app thinking, not like a broken screen. */
+.route-fallback {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px;
+}
+.route-fallback__bar {
+  height: 14px;
+  width: 40%;
+  border-radius: 7px;
+  background: var(--hover);
+  animation: kisy-shimmer 1.6s ease-in-out infinite;
+}
+.route-fallback__bar--short {
+  width: 24%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .route-fallback__bar {
+    animation: none;
+  }
+}

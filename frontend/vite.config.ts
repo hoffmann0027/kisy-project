@@ -23,6 +23,23 @@ export default defineConfig(({ mode }) => {
         "@shared": path.resolve(__dirname, "src/shared"),
       },
     },
+    build: {
+      rollupOptions: {
+        output: {
+          // Split the heavyweight dependencies out of the entry chunk. They
+          // are big, they change rarely, and most of them are not needed to
+          // paint the first screen — keeping them separate lets the browser
+          // cache them across releases and parse them off the critical path.
+          manualChunks: {
+            sodium: ["libsodium-wrappers-sumo"],
+            mls: ["ts-mls"],
+            noble: ["@noble/curves", "@noble/hashes", "@noble/ciphers"],
+            query: ["@tanstack/react-query"],
+          },
+        },
+      },
+    },
+
     server: {
       host: true,
       port: 5173,

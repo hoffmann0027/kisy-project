@@ -2,15 +2,25 @@ import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
 import { LoginPage } from "@pages/auth/LoginPage";
 import { RegisterPage } from "@pages/auth/RegisterPage";
 import { MessengerPage } from "@pages/messenger/MessengerPage";
-import { RatingPage } from "@pages/rating/RatingPage";
-import { AdminPage } from "@pages/admin/AdminPage";
 import { RequireAuth, RequireCEO, RequireRatingAccess, RedirectIfAuth } from "./guards";
 import { useRealtime } from "./useRealtime";
 import { CallProvider } from "@features/call/CallProvider";
-import { HubPage } from "@pages/hub/HubPage";
 import { TabBar } from "@widgets/tabbar/TabBar";
-import { ProfileModal } from "@features/profile/ProfileModal";
-import { useState } from "react";
+import { RouteFallback } from "./RouteFallback";
+import { lazy, Suspense, useState } from "react";
+
+// Everything below the messenger is loaded on demand. They are whole screens
+// the app does not need to start — Rating drags in recharts, Admin its tables
+// — and bundling them into the entry chunk meant the phone parsed all of it
+// before it could paint the chat list.
+const RatingPage = lazy(() => import("@pages/rating/RatingPage").then((m) => ({ default: m.RatingPage })));
+const AdminPage = lazy(() => import("@pages/admin/AdminPage").then((m) => ({ default: m.AdminPage })));
+const HubPage = lazy(() => import("@pages/hub/HubPage").then((m) => ({ default: m.HubPage })));
+// The profile dialog is mounted on every authenticated screen but opened
+// rarely, so its code (and the theme switcher's) waits for the first open.
+const ProfileModal = lazy(() =>
+  import("@features/profile/ProfileModal").then((m) => ({ default: m.ProfileModal })),
+);
 
 // AuthedLayout keeps the WebSocket connection alive across every authenticated
 // route (messenger, rating, admin) so real-time events reach whichever page is
@@ -25,9 +35,16 @@ function AuthedLayout() {
   const [profileOpen, setProfileOpen] = useState(false);
   return (
     <CallProvider>
-      <Outlet />
+      <Suspense fallback={<RouteFallback />}>
+        <Outlet />
+      </Suspense>
       <TabBar onProfile={() => setProfileOpen(true)} />
-      <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
+      {/* Mounted only once opened: an unopened dialog should cost nothing. */}
+      {profileOpen && (
+        <Suspense fallback={null}>
+          <ProfileModal open onClose={() => setProfileOpen(false)} />
+        </Suspense>
+      )}
     </CallProvider>
   );
 }
