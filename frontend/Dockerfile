@@ -15,7 +15,7 @@ RUN npm run build
 # --- runtime ---
 # Unprivileged variant: the master process runs as the non-root "nginx" user
 # and listens on 8080 (container hardening — no root in the runtime image).
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.29-alpine
 COPY --from=builder /src/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 

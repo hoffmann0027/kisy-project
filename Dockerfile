@@ -25,7 +25,7 @@ COPY backend/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
 
 # --- runtime ---
-FROM alpine:3.20
+FROM alpine:3.22
 RUN apk add --no-cache ca-certificates wget && \
     addgroup -S kisy && adduser -S kisy -G kisy
 WORKDIR /app
