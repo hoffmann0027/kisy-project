@@ -1,7 +1,14 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { messagesApi, type SendMessageBody } from "@shared/api/endpoints";
 import type { ChatType, Message, MessagePage } from "@shared/api/types";
-import { cachePlaintext, e2eeSession, encryptForChat, hydrateMessages } from "@entities/e2ee";
+import {
+  adoptOutgoingPlaintext,
+  cacheOutgoingPlaintext,
+  cachePlaintext,
+  e2eeSession,
+  encryptForChat,
+  hydrateMessages,
+} from "@entities/e2ee";
 
 export const messageKeys = {
   list: (chatType: ChatType, chatId: string) => ["messages", chatType, chatId] as const,
@@ -89,20 +96,26 @@ export function useSendMessage(chatType: ChatType, chatId: string, peerUserId?: 
         threadRootId: args.threadRootId,
       };
       let sentEncrypted = false;
+      let ciphertext: string | null = null;
       if (s && chatType === "private" && peerUserId && args.text) {
         const enc = await encryptForChat(s, chatId, peerUserId, args.text).catch(() => null);
         if (enc) {
           body = { ...enc, replyTo: args.replyTo, attachmentIds: args.attachmentIds, contentKind: 1 };
           sentEncrypted = true;
+          ciphertext = enc.ciphertext;
+          // Before the request, not after: a sender cannot decrypt its own
+          // MLS message, so until this write lands the text exists nowhere
+          // but in memory. Keyed by the ciphertext digest because the server
+          // has not assigned an id yet.
+          await cacheOutgoingPlaintext(s, enc.ciphertext, args.text, null);
         }
       }
       const { message } = await messagesApi.send(chatType, chatId, body);
-      if (sentEncrypted && s) {
-        // Senders cannot decrypt their own MLS messages (keys are consumed
-        // at encryption time) — cache the plaintext under the real id now,
-        // tagged with the message's disappearing timer (stage J) so it
-        // self-evicts even if this device misses the deletion event.
-        await cachePlaintext(s, message.id, args.text, message.expiresAt);
+      if (sentEncrypted && s && ciphertext) {
+        // Re-key onto the real id and stamp it with the disappearing timer
+        // (stage J) so it self-evicts even if this device misses the
+        // deletion event.
+        await adoptOutgoingPlaintext(s, ciphertext, message.id, message.expiresAt);
         return { message: { ...message, text: args.text, encrypted: true } };
       }
       return { message };

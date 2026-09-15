@@ -5,6 +5,7 @@ export {
   type KeyStore,
   MemoryKeyStore,
   EncryptedIndexedDbKeyStore,
+  requestPersistentStorage,
 } from "./keystore";
 export {
   type DeviceIdentity,

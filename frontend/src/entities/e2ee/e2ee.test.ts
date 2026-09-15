@@ -119,6 +119,8 @@ import { MemoryKeyStore, loadOrCreateIdentity } from "@shared/crypto";
 import type { E2EESession } from "./session";
 import { topUpKeyPackages } from "./session";
 import {
+  adoptOutgoingPlaintext,
+  cacheOutgoingPlaintext,
   cachePlaintext,
   cachedPlaintext,
   cacheScheduledPlaintext,
@@ -130,6 +132,7 @@ import {
   processChatHandshake,
   processWelcomes,
   resetChatStatesForTests,
+  resetMLSState,
 } from "./chats";
 
 async function makeSession(userId: string): Promise<E2EESession> {
@@ -245,6 +248,66 @@ describe("E2EE private chat orchestration", () => {
     const got2 = await hydrateMessage(bob, messageDTO("h2", chatId, "user-alice", second!.ciphertext));
     expect(got1.text).toBe("первое");
     expect(got2.text).toBe("второе");
+  });
+
+  // --- own messages must stay readable (bug: everything turned into 🔒) ---
+
+  it("keeps a sent message readable when the app dies before the server replies", async () => {
+    // The sender cannot decrypt its own MLS message, so the cached copy is
+    // the only one. It used to be written after the send call returned; a
+    // kill in between left the message on the server and its text nowhere.
+    const alice = await makeSession("user-alice");
+    const bob = await makeSession("user-bob");
+    await publishPool(bob, 2);
+
+    const enc = await encryptForChat(alice, "chat-crash", "user-bob", "не потеряйся");
+    expect(enc).not.toBeNull();
+    await cacheOutgoingPlaintext(alice, enc!.ciphertext, "не потеряйся", null);
+
+    // …the response never arrived, so nothing was ever keyed by message id.
+    expect(await cachedPlaintext(alice, "msg-crash")).toBeNull();
+
+    // Next launch: history loads and the message is recovered by ciphertext.
+    const shown = await hydrateMessage(
+      alice,
+      messageDTO("msg-crash", "chat-crash", "user-alice", enc!.ciphertext),
+    );
+    expect(shown.text).toBe("не потеряйся");
+    expect(shown.undecryptable).toBeFalsy();
+  });
+
+  it("re-keys the pre-send copy onto the real id and stops holding two", async () => {
+    const alice = await makeSession("user-alice");
+    const bob = await makeSession("user-bob");
+    await publishPool(bob, 2);
+
+    const enc = await encryptForChat(alice, "chat-adopt", "user-bob", "привет");
+    await cacheOutgoingPlaintext(alice, enc!.ciphertext, "привет", null);
+    const adopted = await adoptOutgoingPlaintext(alice, enc!.ciphertext, "msg-adopt", null);
+
+    expect(adopted).toBe("привет");
+    expect(await cachedPlaintext(alice, "msg-adopt")).toBe("привет");
+    // The pre-send copy is gone: a second adopt finds nothing.
+    expect(await adoptOutgoingPlaintext(alice, enc!.ciphertext, "msg-other", null)).toBeNull();
+  });
+
+  it("keeps cached history when the MLS session state is reset", async () => {
+    // Resetting the crypto session (re-login, device re-key) must not take
+    // the decrypted history with it: the two live under different prefixes
+    // and only the state prefix may be cleared.
+    const alice = await makeSession("user-alice");
+    const bob = await makeSession("user-bob");
+    await publishPool(bob, 2);
+
+    const enc = await encryptForChat(alice, "chat-reset", "user-bob", "история");
+    await cachePlaintext(alice, "msg-reset", "история");
+    expect(enc).not.toBeNull();
+
+    await resetMLSState(alice);
+    // The state really is gone — otherwise this test would pass on its own.
+    expect(await alice.store.list("mls/")).toHaveLength(0);
+
+    expect(await cachedPlaintext(alice, "msg-reset")).toBe("история");
   });
 
   it("adopts a scheduled plaintext onto the delivered message id (stage I)", async () => {

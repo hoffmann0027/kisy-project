@@ -101,6 +101,14 @@ export const MessageBubble = memo(function MessageBubble({
   const [timerOpen, setTimerOpen] = useState(false);
   const [draft, setDraft] = useState(message.text ?? "");
   const previewUrl = message.text ? firstUrl(message.text) : null;
+  // Single source of truth for the padlock. The two render paths below used
+  // to decide it independently and disagreed: the compact row preferred the
+  // text, the bubble preferred the flag — so one message could show its text
+  // in one place and "🔒 Зашифрованное сообщение" in the other at the same
+  // time. Locked means "no plaintext for this message", not "the flag was set
+  // once": text that arrived later from the local cache makes it readable
+  // whatever the flag says.
+  const isLocked = Boolean(message.undecryptable) && !message.text;
 
   const startEdit = () => {
     setDraft(message.text ?? "");
@@ -135,7 +143,7 @@ export const MessageBubble = memo(function MessageBubble({
           {message.forwardedFrom && (
             <div className="bubble__forwarded">Переслано от {message.forwardedFrom.senderName || "пользователя"}</div>
           )}
-          <span>{message.text ? renderRichText(message.text) : message.undecryptable ? "🔒 Зашифрованное сообщение" : ""}</span>
+          <span>{message.text ? renderRichText(message.text) : isLocked ? "🔒 Зашифрованное сообщение" : ""}</span>
         </div>
       </div>
     );
@@ -303,7 +311,7 @@ export const MessageBubble = memo(function MessageBubble({
               </button>
             </div>
           </div>
-        ) : message.undecryptable ? (
+        ) : isLocked ? (
           <span className="bubble__locked" title="Сообщение зашифровано ключом, которого нет на этом устройстве">
             🔒 Зашифрованное сообщение
           </span>

@@ -38,6 +38,30 @@ export class MemoryKeyStore implements KeyStore {
 const DB_VERSION = 1;
 const BLOBS = "blobs";
 const META = "meta";
+/**
+ * Ask the browser to treat this origin's storage as persistent.
+ *
+ * Everything E2EE depends on lives in IndexedDB: the non-extractable key that
+ * encrypts the cache, and the decrypted message history itself. Without this
+ * the store is "best-effort" — Android evicts it under storage pressure or
+ * during battery optimisation, and the user's whole history turns into
+ * padlocks, their own sent messages included, because MLS keys are one-time
+ * and the server copy can no longer be decrypted by anyone.
+ *
+ * Best-effort by design: on Android the grant is automatic for installed
+ * apps, browsers may prompt or refuse, and a refusal must not stop E2EE from
+ * working — it only means the old, fragile behaviour.
+ */
+export async function requestPersistentStorage(): Promise<boolean> {
+  try {
+    if (!navigator.storage?.persist) return false;
+    if (await navigator.storage.persisted()) return true;
+    return await navigator.storage.persist();
+  } catch {
+    return false;
+  }
+}
+
 const LOCAL_KEY = "local-key";
 const IV_BYTES = 12;
 

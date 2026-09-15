@@ -7,6 +7,7 @@ import {
   loadOrCreateIdentity,
   createDeviceKeyPackage,
   getSodium,
+  requestPersistentStorage,
   type DeviceIdentity,
   type DeviceKeyPackage,
   type KeyStore,
@@ -56,6 +57,12 @@ export function resetE2EEForTests(): void {
 }
 
 async function bootstrap(userId: string): Promise<E2EESession> {
+  // Before anything is written: the cache and the key that protects it both
+  // live in IndexedDB, and an evicted store means the user's history is gone
+  // for good (MLS keys are one-time — nobody can re-derive it from the
+  // server copy). Best-effort; a refusal just leaves the old behaviour.
+  void requestPersistentStorage();
+
   const store = await EncryptedIndexedDbKeyStore.open(`kisy-e2ee-${userId}`);
   const identity = await loadOrCreateIdentity(store);
   const sodium = await getSodium();

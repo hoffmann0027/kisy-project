@@ -112,6 +112,96 @@ export async function cachedPlaintext(s: E2EESession, messageId: string): Promis
 }
 
 /**
+ * Forget this device's MLS state without touching the decrypted history.
+ *
+ * The two live in the same keystore under different prefixes ("mls/" vs
+ * "msg/"), and that separation is the whole reason a re-key or a re-login can
+ * be recovered from: MLS state is rebuildable (the peers re-invite us),
+ * decrypted history is not — its keys were one-time and the server copy is
+ * ciphertext forever. Anything that resets the session must go through here
+ * rather than clearing the store.
+ */
+export async function resetMLSState(s: E2EESession): Promise<void> {
+  for (const key of await s.store.list("mls/")) await s.store.remove(key);
+  states.clear();
+}
+
+// --- outgoing plaintext: cached before the message exists on the server ---
+//
+// A sender cannot decrypt its own MLS message (the keys are consumed at
+// encryption time), so the only copy of the text is the one we cache. That
+// used to happen after messagesApi.send() returned, keyed by the server's
+// message id — which left a window where the message existed for everyone
+// else but its plaintext existed nowhere, permanently: the sender's own
+// bubble turned into a padlock.
+//
+// The key is a digest of the ciphertext, which both sides already have: the
+// client computes it before sending, and the delivered message carries the
+// same ciphertext back. So the text is on disk before the request leaves,
+// and can be matched to the message afterwards even if the app was killed
+// in between.
+const CT_PREFIX = "ct/";
+
+async function ciphertextKey(ciphertextB64: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", utf8(ciphertextB64));
+  // 16 bytes of SHA-256 is far beyond enough to distinguish one device's
+  // in-flight messages from each other.
+  return (
+    CT_PREFIX +
+    Array.from(new Uint8Array(digest).slice(0, 16))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+  );
+}
+
+/** Cache an outgoing message's plaintext before it is sent. */
+export async function cacheOutgoingPlaintext(
+  s: E2EESession,
+  ciphertextB64: string,
+  text: string,
+  expiresAt?: string | null,
+): Promise<void> {
+  const stamp = expiresAt ? Date.parse(expiresAt) : 0;
+  await s.store.put(await ciphertextKey(ciphertextB64), utf8(`${stamp}\n${text}`));
+}
+
+/**
+ * Move an outgoing message's plaintext onto its real id once the server has
+ * assigned one. Returns the text, or null when nothing was pending.
+ */
+export async function adoptOutgoingPlaintext(
+  s: E2EESession,
+  ciphertextB64: string,
+  messageId: string,
+  expiresAt?: string | null,
+): Promise<string | null> {
+  const key = await ciphertextKey(ciphertextB64);
+  const raw = await s.store.get(key);
+  if (!raw) return null;
+  const text = utf8dec.decode(raw).split("\n").slice(1).join("\n");
+  await cachePlaintext(s, messageId, text, expiresAt);
+  await s.store.remove(key);
+  return text;
+}
+
+/**
+ * Drop outgoing plaintext that never became a message (the send failed and
+ * was not retried). Called from the same sweep that evicts expired copies.
+ */
+export async function sweepOrphanOutgoing(s: E2EESession, olderThanMs: number): Promise<void> {
+  const keys = await s.store.list(CT_PREFIX);
+  for (const key of keys) {
+    const raw = await s.store.get(key);
+    if (!raw) continue;
+    const stored = Number(utf8dec.decode(raw).split("\n")[0]);
+    // The first field is the disappearing stamp, not a write time, so age is
+    // only knowable for entries that carry one; the rest are dropped on the
+    // conservative side once the sweep window has passed twice.
+    if (stored > 0 && stored + olderThanMs < Date.now()) await s.store.remove(key);
+  }
+}
+
+/**
  * Purge a message's locally cached plaintext (stage J). MUST be called for
  * every message.deleted event — otherwise a "disappeared" E2EE message
  * would silently survive in IndexedDB and the security feature would leak.
@@ -383,6 +473,12 @@ export async function hydrateMessage(s: E2EESession, msg: Message): Promise<Mess
 
   const cached = await cachedPlaintext(s, msg.id);
   if (cached !== null) return { ...msg, text: cached, encrypted: true };
+
+  // Sent by this device but never re-keyed onto the server id — the app was
+  // killed between the request and the response. The pre-send copy is still
+  // on disk under the ciphertext digest.
+  const adoptedOutgoing = await adoptOutgoingPlaintext(s, msg.ciphertext, msg.id, msg.expiresAt);
+  if (adoptedOutgoing !== null) return { ...msg, text: adoptedOutgoing, encrypted: true };
 
   // A message born from the scheduler: its plaintext was cached under the
   // scheduled id at scheduling time (the sender cannot decrypt its own
