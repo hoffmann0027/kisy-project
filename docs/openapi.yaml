@@ -811,6 +811,221 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /groups/{groupID}/posts:
+    parameters:
+      - name: groupID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [posts]
+      summary: A community's wall, newest first
+      description: >
+        Visible to anyone who can see the community — members and, for a public
+        one, non-members too. A community nobody may see answers 404, never
+        403: "you may not see this" still says it exists.
+      parameters:
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        '200':
+          description: A page of posts
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/PostPage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [posts]
+      summary: Publish a post to a community
+      description: >
+        Only those who may post in the community (its owner/editors, by the
+        group's post policy). Media is uploaded afterwards, to the created
+        post — a file and a JSON body do not share a request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text: { type: string, maxLength: 8000 }
+      responses:
+        '201':
+          description: Post created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          post: { $ref: '#/components/schemas/Post' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /posts/{postID}:
+    delete:
+      tags: [posts]
+      summary: Delete a post (its author, or anyone who may post in the community)
+      parameters:
+        - name: postID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /posts/{postID}/media:
+    post:
+      tags: [posts]
+      summary: Attach one file to a post (author only)
+      description: >
+        Raw body upload, filename in X-File-Name. Ten files per post. The bytes
+        go to object storage when it is configured and stay in the row when it
+        is not, so attachments work on either deployment.
+      parameters:
+        - name: postID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        '200':
+          description: The post, with the new attachment
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          post: { $ref: '#/components/schemas/Post' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { description: File too large }
+
+  /posts/{postID}/reactions:
+    parameters:
+      - name: postID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [posts]
+      summary: React to a post
+      description: Seeing the community is enough to react; posting to it is not.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [emoji]
+              properties:
+                emoji: { type: string, maxLength: 32 }
+      responses:
+        '200': { description: Reacted, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [posts]
+      summary: Take a reaction back
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [emoji]
+              properties:
+                emoji: { type: string, maxLength: 32 }
+      responses:
+        '200': { description: Removed, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /posts/media/{mediaID}:
+    get:
+      tags: [posts]
+      summary: Download a post attachment
+      description: Exactly as visible as the post it hangs off.
+      parameters:
+        - name: mediaID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: The file
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /feed:
+    get:
+      tags: [posts]
+      summary: The shared feed across public communities
+      description: >
+        Open to both kinds of account. "popular" is the ranking described in
+        docs/spec/07-business-logic.md, recomputed every five minutes; "new" is
+        plain reverse chronological. A public community above the reader's
+        clearance is still excluded — public and unrestricted are different
+        axes.
+      parameters:
+        - name: sort
+          in: query
+          schema: { type: string, enum: [popular, new], default: popular }
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        '200':
+          description: A page of the feed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/PostPage' }
+
+  /feed/hidden/{communityID}:
+    parameters:
+      - name: communityID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [posts]
+      summary: Hide a community from your feed (membership untouched)
+      responses:
+        '200': { description: Hidden, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+    delete:
+      tags: [posts]
+      summary: Show it again
+      responses:
+        '200': { description: Shown, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+
   /groups/{groupID}/calendar:
     get:
       tags: [calendar]
@@ -3376,11 +3591,90 @@ components:
         name: { type: string }
         description: { type: [string, 'null'] }
         avatarUrl: { type: [string, 'null'] }
-        minRoleLevel: { type: integer, minimum: 1, maximum: 10 }
+        minRoleLevel:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 10
+          description: >
+            Null means the group has no threshold at all: open to every
+            clearance, including accounts that have none. Null is not 10 —
+            that is still a threshold.
+        kind:
+          type: string
+          enum: [group, community]
+          description: >
+            A group is a conversation between members; a community is a wall
+            its editors publish to, with posts and a feed.
+        isPublic:
+          type: boolean
+          description: >
+            Communities only: the posts appear in the shared feed and anyone
+            may join. Independent of joinPolicy, which says HOW one joins.
         joinPolicy: { type: string, enum: [open, request], description: "open = self-join; request = apply for approval" }
         postPolicy: { type: string, enum: [all, editors], description: "all = any member posts; editors = owner/editor/moderator/CEO only" }
         createdBy: { type: string, format: uuid }
         createdAt: { type: string, format: date-time }
+    PostMedia:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [image, video, audio, file] }
+        fileName: { type: string }
+        mimeType: { type: string }
+        sizeBytes: { type: integer, format: int64 }
+        url: { type: string, description: "GET it with the session; visibility follows the post." }
+        position: { type: integer }
+    PostReaction:
+      type: object
+      properties:
+        emoji: { type: string }
+        count:
+          type: integer
+          description: How many DIFFERENT people chose this emoji.
+        mine: { type: boolean }
+    PostCommunity:
+      description: >
+        Where the post came from, carried on every post. A post in the shared
+        feed comes from a community the reader may not belong to, and one whose
+        origin cannot be opened or joined is a dead end.
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        avatarUrl: { type: [string, 'null'] }
+        isMember: { type: boolean }
+        joinPolicy: { type: string, enum: [open, request] }
+    Post:
+      description: >
+        A community post. NOT end-to-end encrypted, unlike a message: it is
+        published to everyone who can see the community, and a feed the server
+        cannot read cannot be ranked (docs/e2ee-design.md §7).
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        text: { type: string }
+        createdAt: { type: string, format: date-time }
+        editedAt: { type: [string, 'null'], format: date-time }
+        author: { $ref: '#/components/schemas/User' }
+        community: { $ref: '#/components/schemas/PostCommunity' }
+        media:
+          type: array
+          items: { $ref: '#/components/schemas/PostMedia' }
+        reactions:
+          type: array
+          items: { $ref: '#/components/schemas/PostReaction' }
+        canDelete: { type: boolean }
+    PostPage:
+      type: object
+      properties:
+        posts:
+          type: array
+          items: { $ref: '#/components/schemas/Post' }
+        nextCursor:
+          type: string
+          description: >
+            Opaque; empty when there is nothing more. What it encodes differs
+            between the two feed sorts, which is why it is opaque.
     CalendarEvent:
       type: object
       properties:

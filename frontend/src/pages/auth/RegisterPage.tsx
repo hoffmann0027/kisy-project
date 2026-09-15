@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -5,11 +6,15 @@ import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { AuthLayout } from "./AuthLayout";
 import { Button, Input, toast } from "@shared/ui";
 import { useAuthStore } from "@shared/store/auth";
+import { authApi } from "@shared/api/endpoints";
 import { ApiError } from "@shared/api/envelope";
 
 const schema = z
   .object({
-    inviteToken: z.string().min(1, "Введите код приглашения"),
+    // Optional: an account can now be created without an invitation. A token
+    // that IS supplied still has to be valid — the server refuses a bad one
+    // rather than quietly handing out a lesser account.
+    inviteToken: z.string().optional(),
     username: z
       .string()
       .regex(/^[A-Za-z0-9_]{3,32}$/, "3–32 символа: буквы, цифры, подчёркивание"),
@@ -29,6 +34,25 @@ export function RegisterPage() {
   const registerUser = useAuthStore((s) => s.register);
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  // Whether this deployment accepts accounts without an invitation.
+  //
+  // Not "hide the page when closed": an invited person still needs this form.
+  // What closing changes is whether the code is optional — and saying so up
+  // front beats letting someone fill in four fields for a refusal.
+  const [openRegistration, setOpenRegistration] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let dropped = false;
+    void authApi
+      .registrationPolicy()
+      .then((p) => !dropped && setOpenRegistration(p.open))
+      // Unreachable server: assume the stricter of the two, so the form never
+      // promises something the deployment does not allow.
+      .catch(() => !dropped && setOpenRegistration(false));
+    return () => {
+      dropped = true;
+    };
+  }, []);
   const {
     register,
     handleSubmit,
@@ -39,8 +63,13 @@ export function RegisterPage() {
   });
 
   const onSubmit = async (data: Form) => {
+    const token = (data.inviteToken ?? "").trim();
+    if (!token && openRegistration === false) {
+      toast.error("На этом сервере регистрация только по приглашению");
+      return;
+    }
     try {
-      await registerUser(data.inviteToken, data.username, data.password);
+      await registerUser(token, data.username, data.password);
       toast.success("Аккаунт создан");
       navigate("/", { replace: true });
     } catch (e) {
@@ -55,11 +84,13 @@ export function RegisterPage() {
   };
 
   return (
-    <AuthLayout subtitle="Регистрация по приглашению">
+    <AuthLayout subtitle={openRegistration === false ? "Регистрация по приглашению" : "Создание аккаунта"}>
       <form className="auth-form" onSubmit={handleSubmit(onSubmit)}>
         <Input
           label="Код приглашения"
-          placeholder="Токен от администратора"
+          // Says outright that the field can be left alone: an empty box under
+          // a label reads as something you are missing.
+          placeholder={openRegistration === false ? "Обязательно на этом сервере" : "Не обязательно"}
           error={errors.inviteToken?.message}
           {...register("inviteToken")}
         />

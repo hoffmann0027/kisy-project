@@ -78,6 +78,9 @@ export const authApi = {
         isNative() ? { refreshToken: loadTokens()?.refreshToken ?? "" } : undefined,
       )
       .then(keepTokens),
+  // Whether this deployment lets anyone register without an invitation.
+  // Unauthenticated: the sign-up screen asks before it decides what to show.
+  registrationPolicy: () => apiClient.get<{ open: boolean }>("/auth/registration"),
   changePassword: (currentPassword: string, newPassword: string) =>
     apiClient.post<{ passwordChanged: boolean }>("/auth/password", { currentPassword, newPassword }),
 };
