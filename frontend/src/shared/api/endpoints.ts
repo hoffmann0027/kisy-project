@@ -510,8 +510,21 @@ export const pollsApi = {
   del: (id: string) => apiClient.del<{ deleted: boolean }>(`/polls/${id}`),
 };
 
+export interface PendingCall {
+  callId: string;
+  callerId: string;
+  callerName: string;
+  chatId: string;
+  offer: string;
+}
+
 export const callsApi = {
   iceConfig: () => apiClient.get<IceConfig>("/calls/ice-config"),
+  // Asked by a phone woken by a call push: the invite frame was published
+  // over the socket while the app was asleep and is gone.
+  pending: () => apiClient.get<{ call: PendingCall | null }>("/calls/pending"),
+  // Declining from a notification happens before the socket is up.
+  reject: (callId: string) => apiClient.post<{ rejected: boolean }>(`/calls/${callId}/reject`),
   history: (limit = 50, offset = 0) =>
     apiClient.get<{ calls: CallLogItem[] }>(`/calls/history?limit=${limit}&offset=${offset}`),
 };

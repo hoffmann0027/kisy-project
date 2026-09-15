@@ -138,9 +138,11 @@ func (s *Service) onInvite(ctx context.Context, actor Actor, data json.RawMessag
 
 	now := s.now()
 	logID := uuid.New()
+	callerName, _ := s.callerProfile(ctx, actor.UserID)
 	st := CallState{
 		ID: p.CallID, Caller: actor.UserID, Callee: p.ToUserID, ChatID: p.ChatID,
-		LogID: logID, Phase: phaseRinging, StartedAt: now,
+		LogID: logID, Phase: phaseRinging, Offer: p.SDP, CallerName: callerName,
+		StartedAt: now,
 	}
 	if err := s.store.Create(ctx, st); err != nil {
 		s.log.Warn("calls: store create failed", "error", err)
@@ -289,6 +291,34 @@ func (s *Service) onTerminate(ctx context.Context, actor Actor, data json.RawMes
 	_ = s.store.Delete(ctx, p.CallID)
 	s.auditCall(ctx, actor.UserID, p.CallID, action)
 	return nil
+}
+
+// PendingInvite returns the call currently ringing for this user, if any.
+// A phone woken by a push has no socket history to replay, so it asks.
+func (s *Service) PendingInvite(ctx context.Context, actor Actor) (CallState, bool) {
+	callID, marked, err := s.store.CallIDForUser(ctx, actor.UserID)
+	if err != nil || !marked {
+		return CallState{}, false
+	}
+	st, ok, err := s.store.Get(ctx, callID)
+	if err != nil || !ok {
+		return CallState{}, false
+	}
+	// Only the callee of a still-ringing call has something to answer.
+	if st.Callee != actor.UserID || st.Phase != phaseRinging {
+		return CallState{}, false
+	}
+	return st, true
+}
+
+// Reject ends a ringing call from the callee over REST. Declining from a
+// notification happens before the WebSocket is up, so it cannot depend on it.
+func (s *Service) Reject(ctx context.Context, actor Actor, callID uuid.UUID) error {
+	data, err := json.Marshal(refPayload{CallID: callID})
+	if err != nil {
+		return ErrValidation
+	}
+	return s.onTerminate(ctx, actor, data, SignalReject)
 }
 
 // canWake reports whether the callee has any device we could ring. Without

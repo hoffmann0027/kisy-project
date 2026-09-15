@@ -634,3 +634,57 @@ func TestCancelAndTimeoutSilenceThePhone(t *testing.T) {
 		t.Fatalf("ring timeout left the phone ringing: %v", got)
 	}
 }
+
+// A phone woken by a push has no socket history: the invite frame it would
+// have received was published while it was asleep and is gone. It has to be
+// able to ask what is ringing — offer included, or it cannot answer.
+func TestPendingInviteLetsAWokenPhoneAnswer(t *testing.T) {
+	h := newHarness(t)
+	h.svc.SetPusher(&fakePusher{devices: map[uuid.UUID]bool{h.bob: true}})
+	h.store.online[h.bob] = false
+
+	callID := uuid.New()
+	if err := h.invite(t, h.alice, h.bob, callID); err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+
+	st, ok := h.svc.PendingInvite(context.Background(), h.actor(h.bob))
+	if !ok {
+		t.Fatal("callee cannot discover the call that is ringing for them")
+	}
+	if st.Offer != "offer" {
+		t.Errorf("offer = %q; without it the callee has nothing to answer with", st.Offer)
+	}
+	if st.ID != callID || st.Caller != h.alice {
+		t.Errorf("wrong call returned: %+v", st)
+	}
+
+	// The caller must not see it as something to answer.
+	if _, ok := h.svc.PendingInvite(context.Background(), h.actor(h.alice)); ok {
+		t.Error("the caller was offered their own call to answer")
+	}
+}
+
+// Declining from a notification happens before the socket is up.
+func TestRejectOverRESTEndsTheCall(t *testing.T) {
+	h := newHarness(t)
+	callID := uuid.New()
+	if err := h.invite(t, h.alice, h.bob, callID); err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	if err := h.svc.Reject(context.Background(), h.actor(h.bob), callID); err != nil {
+		t.Fatalf("reject: %v", err)
+	}
+	if !h.pub.has("rejected", h.alice) {
+		t.Fatal("caller was never told the call was declined")
+	}
+	// And a stranger cannot decline someone else's call.
+	h2 := newHarness(t)
+	id2 := uuid.New()
+	if err := h2.invite(t, h2.alice, h2.bob, id2); err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	if err := h2.svc.Reject(context.Background(), Actor{UserID: uuid.New()}, id2); err == nil {
+		t.Fatal("an unrelated user was allowed to decline the call")
+	}
+}

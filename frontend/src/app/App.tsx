@@ -5,7 +5,7 @@ import { router } from "./router";
 import { useAuthStore } from "@shared/store/auth";
 import { useThemeStore } from "@shared/store/theme";
 import { useVisualViewport } from "@shared/lib/useVisualViewport";
-import { initNativePushNavigation, refreshNativePushToken } from "@shared/lib/nativePush";
+import { initNativeCallPush, initNativePushNavigation, refreshNativePushToken } from "@shared/lib/nativePush";
 import { ToastHost } from "@shared/ui";
 
 export function App() {
@@ -23,6 +23,9 @@ export function App() {
   // app is cold-starting.
   useEffect(() => {
     initNativePushNavigation((path) => void router.navigate(path));
+    // Data-only call pushes: the listener only announces them, useCall picks
+    // the invite up from the server.
+    initNativeCallPush();
   }, []);
 
   // Firebase tokens rotate and sign-out unbinds the device, so re-register on

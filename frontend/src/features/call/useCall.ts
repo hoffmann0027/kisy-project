@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { wsClient } from "@shared/ws/client";
+import { CALL_PUSH_EVENT } from "@shared/lib/nativePush";
 import type { CallIncomingData, ServerEvent } from "@shared/ws/events";
 import { callsApi } from "@shared/api/endpoints";
 import { ringtone } from "./ringtone";
@@ -270,6 +271,41 @@ export function useCall() {
     setView({ ...idleView, phase: "incoming", peer: data.from, role: "callee" });
     ringtone.incoming();
   }, []);
+
+  /**
+   * Pick up a call that started while this client had no socket.
+   *
+   * A phone woken by a call push missed the call.incoming frame — it was
+   * published to a connection that did not exist — so the invite is fetched
+   * instead. Also runs on mount and on returning to the foreground: waking to
+   * a ringing phone and finding a silent app is exactly the bug this closes.
+   */
+  const resumePending = useCallback(async () => {
+    if (session.current) return; // already ringing or talking here
+    const { call } = await callsApi.pending().catch(() => ({ call: null }));
+    if (!call || session.current) return;
+    onIncoming({
+      callId: call.callId,
+      from: { id: call.callerId, displayName: call.callerName, avatarUrl: null },
+      chatId: call.chatId,
+      sdp: call.offer,
+    });
+  }, [onIncoming]);
+
+  useEffect(() => {
+    void resumePending();
+
+    const onPush = () => void resumePending();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void resumePending();
+    };
+    window.addEventListener(CALL_PUSH_EVENT, onPush);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener(CALL_PUSH_EVENT, onPush);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [resumePending]);
 
   useEffect(() => {
     const unsub = wsClient.subscribe((e: ServerEvent) => {

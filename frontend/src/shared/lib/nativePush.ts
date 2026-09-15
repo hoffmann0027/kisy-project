@@ -177,6 +177,32 @@ let navigationWired = false;
  * Wires the notification tap. Called once at startup; `navigate` receives the
  * in-app path the backend attached to the push.
  */
+/** Fired when a call push arrives; useCall listens and shows the invite. */
+export const CALL_PUSH_EVENT = "kisy:call-push";
+
+let callPushWired = false;
+
+/**
+ * Listen for the data-only call pushes the backend sends when the callee has
+ * no live socket (backend/internal/calls: call_invite / call_cancel).
+ *
+ * The push deliberately carries no SDP — it is large and Firebase caps the
+ * payload — so this only wakes the app; the invite itself is fetched from
+ * /calls/pending. Announced as a DOM event rather than wired directly so the
+ * push layer stays ignorant of call state.
+ */
+export function initNativeCallPush(): void {
+  if (!nativePushSupported() || callPushWired) return;
+  callPushWired = true;
+  void PushNotifications.addListener("pushNotificationReceived", (n) => {
+    const kind = n.data?.type;
+    if (kind !== "call_invite" && kind !== "call_cancel") return;
+    window.dispatchEvent(
+      new CustomEvent(CALL_PUSH_EVENT, { detail: { type: kind, callId: n.data?.callId } }),
+    );
+  });
+}
+
 export function initNativePushNavigation(navigate: (path: string) => void): void {
   if (!nativePushSupported() || navigationWired) return;
   navigationWired = true;

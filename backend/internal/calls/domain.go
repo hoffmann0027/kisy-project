@@ -71,12 +71,17 @@ type Actor struct {
 // CallState is the minimal live state of an in-flight call, kept in the store
 // so any node can validate signaling and detect busy/timeout across instances.
 type CallState struct {
-	ID         uuid.UUID  `json:"id"`
-	Caller     uuid.UUID  `json:"caller"`
-	Callee     uuid.UUID  `json:"callee"`
-	ChatID     uuid.UUID  `json:"chatId"`
-	LogID      uuid.UUID  `json:"logId"`
-	Phase      string     `json:"phase"`
+	ID     uuid.UUID `json:"id"`
+	Caller uuid.UUID `json:"caller"`
+	Callee uuid.UUID `json:"callee"`
+	ChatID uuid.UUID `json:"chatId"`
+	LogID  uuid.UUID `json:"logId"`
+	Phase  string    `json:"phase"`
+	// The caller's SDP offer. Relayed over the socket as before, but also
+	// stored: a callee woken by a push never saw that frame, and an invite it
+	// cannot answer is no better than no invite.
+	Offer      string     `json:"offer,omitempty"`
+	CallerName string     `json:"callerName,omitempty"`
 	StartedAt  time.Time  `json:"startedAt"`
 	AnsweredAt *time.Time `json:"answeredAt,omitempty"`
 }
