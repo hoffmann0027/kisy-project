@@ -52,15 +52,15 @@ func NewService(
 		return nil, fmt.Errorf("auth: prepare dummy hash: %w", err)
 	}
 	return &Service{
-		pool:       pool,
-		users:      usersRepo,
-		sessions:   sessions,
-		invites:    invites,
-		audit:      rec,
-		tokens:     tokens,
-		refreshTTL: refreshTTL,
+		pool:             pool,
+		users:            usersRepo,
+		sessions:         sessions,
+		invites:          invites,
+		audit:            rec,
+		tokens:           tokens,
+		refreshTTL:       refreshTTL,
 		registrationOpen: registrationOpen,
-		dummyHash:  dummy,
+		dummyHash:        dummy,
 	}, nil
 }
 

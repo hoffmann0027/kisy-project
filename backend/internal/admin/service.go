@@ -20,11 +20,11 @@ import (
 )
 
 var (
-	ErrNotFound     = errors.New("admin: user not found")
-	ErrInvalidRole  = errors.New("admin: role level must be 1..10")
+	ErrNotFound    = errors.New("admin: user not found")
+	ErrInvalidRole = errors.New("admin: role level must be 1..10")
 	// ErrNotInvited: the account registered without an invitation and stands
 	// outside the role hierarchy, so it cannot be given a level.
-	ErrNotInvited = errors.New("admin: account registered without an invitation has no place in the role hierarchy")
+	ErrNotInvited   = errors.New("admin: account registered without an invitation has no place in the role hierarchy")
 	ErrSelfMutation = errors.New("admin: cannot perform this action on yourself")
 	ErrWeakPassword = errors.New("admin: password too weak")
 )
