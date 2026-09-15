@@ -5,6 +5,7 @@ import { Icon } from "@shared/ui/icons";
 import { roleLabel, type Group } from "@shared/api/types";
 import { useAuthStore } from "@shared/store/auth";
 import { useGroupViewer } from "@entities/group/queries";
+import { useBackHandler } from "@shared/lib/backStack";
 import { Conversation } from "./Conversation";
 import { BoardView } from "@widgets/board/BoardView";
 import { CalendarView } from "@widgets/calendar/CalendarView";
@@ -16,6 +17,10 @@ export function GroupView({ group }: { group: Group }) {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("chat");
   const [membersOpen, setMembersOpen] = useState(false);
+
+  // The board and the calendar are sub-views, not screens: back returns to the
+  // group's chat rather than leaving the group.
+  useBackHandler(tab !== "chat", () => setTab("chat"));
   const isFounder = useAuthStore((s) => s.user?.id === group.createdBy);
   const { data: viewer } = useGroupViewer(group.id);
   // Editors-only group where the viewer is a plain member → composer hidden.

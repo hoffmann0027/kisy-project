@@ -4,6 +4,7 @@ import { Avatar } from "@shared/ui";
 import { ThemeSwitcher } from "@features/profile/ThemeSwitcher";
 import { Icon } from "@shared/ui/icons";
 import { useAuthStore } from "@shared/store/auth";
+import { useBackHandler } from "@shared/lib/backStack";
 import { roleLabel } from "@shared/api/types";
 import "./drawer.css";
 
@@ -19,6 +20,8 @@ interface Props {
 export function AppDrawer({ open, onClose }: Props) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+
+  useBackHandler(open, onClose);
 
   useEffect(() => {
     if (!open) return;

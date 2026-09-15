@@ -3,6 +3,7 @@
 // images no longer open in a new tab.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@shared/lib/cn";
+import { useBackHandler } from "@shared/lib/backStack";
 import { ApiImage } from "./ApiImage";
 
 export interface MediaViewerItem {
@@ -20,6 +21,9 @@ interface Props {
 
 export function MediaViewer({ items, index, onClose, onIndexChange }: Props) {
   const [zoomed, setZoomed] = useState(false);
+  // Escape here is a React handler on the focused dialog, which the Android
+  // back gesture never triggers; it claims the gesture directly instead.
+  useBackHandler(true, onClose);
   const rootRef = useRef<HTMLDivElement>(null);
   const item = items[index];
 

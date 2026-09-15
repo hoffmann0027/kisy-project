@@ -3,6 +3,7 @@
 // mute state via the icon.
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@shared/ui/icons";
+import { useBackHandler } from "@shared/lib/backStack";
 import { toast } from "@shared/ui";
 import type { ChatType } from "@shared/api/types";
 import { isMuted, useMuteChat, useMutes } from "@entities/notif-prefs/queries";
@@ -20,6 +21,8 @@ export function MuteMenu({ chatType, chatId }: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const muted = isMuted(mutedSet, chatType, chatId);
+
+  useBackHandler(open, () => setOpen(false));
 
   useEffect(() => {
     if (!open) return;

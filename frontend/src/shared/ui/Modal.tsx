@@ -2,6 +2,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { IconButton } from "./IconButton";
 import { useVisualViewport } from "@shared/lib/useVisualViewport";
+import { useBackHandler } from "@shared/lib/backStack";
 
 interface Props {
   open: boolean;
@@ -14,6 +15,10 @@ export function Modal({ open, title, onClose, children }: Props) {
   const modalRef = useRef<HTMLDivElement>(null);
   const focusedRef = useRef<HTMLElement | null>(null);
   const keyboardInset = useVisualViewport();
+
+  // On Android, back closes the modal instead of the app. One registration
+  // here covers every modal in the app, nested ones included.
+  useBackHandler(open, onClose);
 
   useEffect(() => {
     if (!open) return;

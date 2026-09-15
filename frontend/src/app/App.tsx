@@ -6,6 +6,7 @@ import { useAuthStore } from "@shared/store/auth";
 import { useThemeStore } from "@shared/store/theme";
 import { useVisualViewport } from "@shared/lib/useVisualViewport";
 import { initNativeCallPush, initNativePushNavigation, refreshNativePushToken } from "@shared/lib/nativePush";
+import { initAndroidBack } from "@shared/lib/nativeBack";
 import { ToastHost } from "@shared/ui";
 
 export function App() {
@@ -27,6 +28,10 @@ export function App() {
     // the invite up from the server.
     initNativeCallPush();
   }, []);
+
+  // Android's back gesture. Without it the gesture closed the app from any
+  // screen; what it should do is described in shared/lib/backStack.ts.
+  useEffect(() => initAndroidBack(() => void router.navigate(-1)), []);
 
   // Firebase tokens rotate and sign-out unbinds the device, so re-register on
   // every sign-in. A no-op in the browser and for anyone who never opted in.

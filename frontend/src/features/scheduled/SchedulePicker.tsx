@@ -4,6 +4,7 @@
 // unreadable if the chat's keys rotate before send time.
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@shared/ui";
+import { useBackHandler } from "@shared/lib/backStack";
 
 interface Props {
   /** Show the E2EE epoch-drift warning (private chat with encryption). */
@@ -33,6 +34,7 @@ function presetTomorrowMorning(): Date {
 }
 
 export function SchedulePicker({ e2eeWarning, onPick, onClose }: Props) {
+  useBackHandler(true, onClose); // mounted only while the picker is open
   const [custom, setCustom] = useState(() => toLocalInput(new Date(Date.now() + 60 * 60 * 1000)));
   const rootRef = useRef<HTMLDivElement>(null);
 

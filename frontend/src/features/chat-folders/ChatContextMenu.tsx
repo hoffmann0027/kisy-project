@@ -4,6 +4,7 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "@shared/ui/icons";
+import { useBackHandler } from "@shared/lib/backStack";
 import { toast } from "@shared/ui";
 import type { ChatType } from "@shared/api/types";
 import {
@@ -28,6 +29,7 @@ interface Props {
 }
 
 export function ChatContextMenu({ target, onClose }: Props) {
+  useBackHandler(true, onClose); // mounted only while the menu is open
   const { folders } = useFolders();
   const { archivedSet } = useArchived();
   const archiveChat = useArchiveChat();

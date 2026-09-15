@@ -12,6 +12,7 @@ import { ForwardModal, type ForwardTarget } from "@features/forward/ForwardModal
 import { MuteMenu } from "@features/notif-prefs/MuteMenu";
 import { DisappearMenu } from "@features/disappear/DisappearMenu";
 import { useSetMessageExpiry } from "@entities/chat/disappearing";
+import { useBackHandler } from "@shared/lib/backStack";
 import type { Attachment, ChatMediaItem, ChatType, Message } from "@shared/api/types";
 import {
   flattenMessages,
@@ -97,6 +98,15 @@ export function Conversation({ target, headerActions, readOnly }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const selectionMode = selected.size > 0;
+
+  // Android's back gesture, innermost first. These are the overlays that never
+  // had an Escape key either: on a phone the only way out of a thread, a side
+  // panel or a half-made selection was to find the small × in the corner.
+  useBackHandler(threadRoot !== null, () => setThreadRoot(null));
+  useBackHandler(panelOpen, () => setPanelOpen(false));
+  useBackHandler(actionsOpen, () => setActionsOpen(false));
+  useBackHandler(selectionMode, () => setSelected(new Set()));
+  useBackHandler(replyTo !== null, () => setReplyTo(null));
 
   const messages = useMemo(() => flattenMessages(data?.pages), [data]);
   // The open thread's root, kept live: WS counter patches land in the main

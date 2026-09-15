@@ -1,4 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
+import { useBackHandler } from "@shared/lib/backStack";
 import "./call.css";
 import { useCall, type CallPeer } from "./useCall";
 import { IncomingCallCard } from "./IncomingCallCard";
@@ -28,6 +29,11 @@ export function useCallControls(): CallContextValue {
 export function CallProvider({ children }: { children: ReactNode }) {
   const { view, startCall, accept, reject, hangup, toggleMute } = useCall();
   const busy = view.phase !== "idle" && view.phase !== "ended";
+
+  // A call is not dismissed with back — hanging up is a decision, and the
+  // buttons are right there. Claiming the gesture swallows it so it cannot
+  // navigate away underneath a full-screen call either.
+  useBackHandler(busy, () => {});
 
   return (
     <CallContext.Provider value={{ startCall: (peer, chatId) => void startCall(peer, chatId), busy }}>

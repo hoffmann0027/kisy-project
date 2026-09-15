@@ -3,6 +3,7 @@
 // from a message's reaction menu (react with any emoji, not just the 5
 // quick ones). Closes on outside click / Esc.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useBackHandler } from "@shared/lib/backStack";
 import { EMOJI_CATEGORIES, searchEmojis } from "./emojiData";
 
 const RECENT_KEY = "kisy-emoji-recent";
@@ -30,6 +31,8 @@ interface Props {
 }
 
 export function EmojiPicker({ onPick, onClose, ignoreSelector }: Props) {
+  // Mounted only while open, so it always claims the back gesture.
+  useBackHandler(true, onClose);
   const [query, setQuery] = useState("");
   const [recent] = useState(loadRecent);
   const rootRef = useRef<HTMLDivElement>(null);
