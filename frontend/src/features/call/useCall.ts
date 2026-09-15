@@ -63,6 +63,9 @@ export function useCall() {
   const session = useRef<Session | null>(null);
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
   const iceCache = useRef<RTCConfiguration | null>(null);
+  // Decisions from the native ringing screen already acted on, so a tap that
+  // reaches us twice is not answered twice.
+  const handledNative = useRef<Set<string>>(new Set());
   const endTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   if (!remoteAudio.current && typeof window !== "undefined") {
@@ -206,6 +209,9 @@ export function useCall() {
   const accept = useCallback(async () => {
     const s = session.current;
     if (!s || s.role !== "callee") return;
+    // A session that already has a peer connection is being answered; a second
+    // accept would open a second microphone and a second connection.
+    if (s.pc) return;
     callLog("answering", s.callId);
     ringtone.stop();
     void stopNativeRinging();
@@ -328,6 +334,12 @@ export function useCall() {
    */
   const applyNativeDecision = useCallback(
     async (d: NativeCallDecision) => {
+      // The same tap can arrive twice: once as a live event from the plugin and
+      // once from the decision it also wrote to disk for a cold start.
+      const seen = `${d.action}:${d.callId}`;
+      if (handledNative.current.has(seen)) return;
+      handledNative.current.add(seen);
+
       if (d.action === "reject") {
         // Over REST, not the socket: the app was just started by the
         // notification and the socket may not be up yet.
