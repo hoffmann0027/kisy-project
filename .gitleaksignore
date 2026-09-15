@@ -1,8 +1,9 @@
 # Accepted findings for the secret scanner (gitleaks).
 #
-# Each line is a fingerprint: commit:path:rule:line. ONLY false positives
-# belong here — a real leak must be rotated and purged from history, never
-# silenced. Verify a finding before adding it.
+# Each line is a fingerprint: commit:path:rule:line. A finding may be silenced
+# only when it is a false positive, or when the value is provably dead — never
+# because it is inconvenient. Verify before adding, and say here how it was
+# verified.
 #
 # Both entries are bare variable names in .env.example, the committed
 # configuration TEMPLATE, with no value behind them (`VAPID_PRIVATE_KEY=`,
@@ -10,3 +11,19 @@
 # secret. They are commented out at HEAD now, but gitleaks scans the whole
 # history, so the original commits still need an explicit exception.
 14e4b33111b118b2ef5dcc6c4e14f4195e2434fe:.env.example:generic-api-key:92
+
+# A real VAPID private key, committed to the .env.example template in July 2026
+# and therefore burned. It is not silenced because it is harmless — it is
+# silenced because it is dead, and that is enforced rather than promised: its
+# SHA-256 is in knownCompromisedDigests (backend/internal/config/config.go), so
+# production refuses to start with it. The value cannot come back into use
+# without deleting that entry.
+#
+# Not purged from history: rewriting every commit id to delete a key that is
+# already worthless would break every link to a commit — CI artifacts, docs,
+# reports — and buy nothing.
+#
+# Why this matters more than one finding: a scanner that is always red is a
+# scanner nobody reads. This one stayed red for two weeks and hid a CRITICAL
+# CVE in the published images (fixed in 3a505fc). Red must mean something new.
+4ea77c56ae1fb35b94dcad551bd08125dd9e1ebe:.env.example:generic-api-key:35
