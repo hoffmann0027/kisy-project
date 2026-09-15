@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -208,7 +209,6 @@ func (h *Handler) uploadMedia(w http.ResponseWriter, r *http.Request) {
 	}
 	dto, err := h.svc.AttachMedia(r.Context(), postID, UploadedFile{
 		FileName: r.Header.Get("X-File-Name"),
-		MimeType: r.Header.Get("Content-Type"),
 		Bytes:    raw,
 	}, actor)
 	h.write(w, r, dto, err, http.StatusOK)
@@ -225,14 +225,38 @@ func (h *Handler) serveMedia(w http.ResponseWriter, r *http.Request) {
 		notFound(w, r)
 		return
 	}
-	raw, mime, err := h.svc.ReadMedia(r.Context(), mediaID, actor)
+	raw, mime, name, err := h.svc.ReadMedia(r.Context(), mediaID, actor)
 	if err != nil {
 		h.fail(w, r, err)
 		return
 	}
-	w.Header().Set("Content-Type", mime)
+
+	// The type was sniffed from the bytes at upload, never taken from the
+	// uploader's header, so it cannot be used to smuggle active content.
+	//
+	// Pictures, audio and video render in place. Everything else is served as
+	// an opaque download with a neutral type — not as whatever it claims to
+	// be. An uploaded .html handed back as text/html from this origin would be
+	// stored XSS on the one screen every member of a community looks at, and
+	// the file the browser never interprets cannot be one.
+	disposition := "attachment"
+	serveType := "application/octet-stream"
+	if strings.HasPrefix(mime, "image/") || strings.HasPrefix(mime, "audio/") || strings.HasPrefix(mime, "video/") {
+		disposition = "inline"
+		serveType = mime
+	}
+	w.Header().Set("Content-Type", serveType)
+	w.Header().Set("Content-Length", strconv.Itoa(len(raw)))
 	w.Header().Set("Cache-Control", "private, max-age=3600")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Disposition", disposition+`; filename*=UTF-8''`+url.PathEscape(name))
+	// #nosec G705 -- these are user-uploaded bytes, and the analysis is right
+	// about that; what it cannot see is that they are never handed to the
+	// browser as active content. The type is sniffed from the bytes rather
+	// than believed from a header, anything that is not a picture, audio or
+	// video is served as application/octet-stream with Content-Disposition:
+	// attachment, and nosniff is set. Message attachments serve files the same
+	// way. The filename defences have their own tests in media_test.go.
 	_, _ = w.Write(raw)
 }
 

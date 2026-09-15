@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -53,9 +54,11 @@ type MediaStore interface {
 }
 
 // UploadedFile is one file on its way onto a post.
+//
+// No MimeType field on purpose: the type is read from the bytes, and a field
+// here would invite someone to trust the uploader's header again.
 type UploadedFile struct {
 	FileName string
-	MimeType string
 	Bytes    []byte
 }
 
@@ -306,14 +309,18 @@ func (s *Service) AttachMedia(
 		return nil, ErrTooLong
 	}
 
-	name := strings.TrimSpace(file.FileName)
-	if name == "" {
-		name = "file"
-	}
+	name := safeFileName(file.FileName)
+
+	// The content type is read from the BYTES, never from the uploader's
+	// header. A client that declares "text/html" and is believed gets its file
+	// served as active content from this origin — stored XSS, on the one
+	// screen every member of a community looks at. The attachments module has
+	// always done this; posts inherited the rule the moment they grew files.
+	mime := http.DetectContentType(file.Bytes)
 	m := Media{
-		Kind:      mediaKindFor(file.MimeType),
+		Kind:      mediaKindFor(mime),
 		FileName:  name,
-		MimeType:  file.MimeType,
+		MimeType:  mime,
 		SizeBytes: int64(len(file.Bytes)),
 		Position:  len(existing[postID]),
 	}
@@ -322,7 +329,7 @@ func (s *Service) AttachMedia(
 	// bucket — would make the feature depend on infrastructure the user never
 	// asked about.
 	if s.media != nil {
-		path, err := s.media.Put(ctx, name, file.MimeType, file.Bytes)
+		path, err := s.media.Put(ctx, name, mime, file.Bytes)
 		if err != nil {
 			return nil, fmt.Errorf("posts: store media: %w", err)
 		}
@@ -343,35 +350,35 @@ func (s *Service) AttachMedia(
 
 // ReadMedia streams one post attachment back, after checking that the reader
 // may see the post it hangs off.
-func (s *Service) ReadMedia(ctx context.Context, mediaID uuid.UUID, actor ActorMeta) ([]byte, string, error) {
+func (s *Service) ReadMedia(ctx context.Context, mediaID uuid.UUID, actor ActorMeta) ([]byte, string, string, error) {
 	m, postID, err := s.repo.MediaByID(ctx, s.pool, mediaID)
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 	p, err := s.repo.Get(ctx, s.pool, postID)
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 	// The community decides: a file is exactly as visible as its post.
 	if _, err := s.communities.Resolve(ctx, p.CommunityID, actor); err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 	// Whichever half of the XOR this row uses (migration 44).
 	if len(m.Bytes) > 0 {
-		return m.Bytes, m.MimeType, nil
+		return m.Bytes, m.MimeType, m.FileName, nil
 	}
 	if s.media == nil {
 		// The row points at an object store this process does not have.
-		return nil, "", ErrNotFound
+		return nil, "", "", ErrNotFound
 	}
 	raw, mime, err := s.media.Get(ctx, m.StoragePath)
 	if err != nil {
-		return nil, "", fmt.Errorf("posts: read media: %w", err)
+		return nil, "", "", fmt.Errorf("posts: read media: %w", err)
 	}
 	if mime == "" {
 		mime = m.MimeType
 	}
-	return raw, mime, nil
+	return raw, mime, m.FileName, nil
 }
 
 // mediaKindFor maps a content type to the kind stored on the row, which is
@@ -528,4 +535,36 @@ func decodeOffset(cursor string) int {
 		return 0
 	}
 	return n
+}
+
+// safeFileName reduces an uploaded name to something that is only ever a name.
+//
+// It arrives in a header the client controls, gets stored, and comes back in a
+// Content-Disposition — so anything that could be read as structure rather
+// than text is removed here, once, instead of being escaped correctly at every
+// later use. Directory separators go because a file name is not a path;
+// control characters go because they are how a header gets a second line.
+func safeFileName(raw string) string {
+	cleaned := strings.Map(func(r rune) rune {
+		switch {
+		case r < 0x20 || r == 0x7f: // control characters, CR and LF among them
+			return -1
+		case r == '/' || r == '\\':
+			return '_'
+		default:
+			return r
+		}
+	}, raw)
+
+	cleaned = strings.TrimSpace(cleaned)
+	// Leading dots would make it a hidden file, and "." / ".." are not names.
+	cleaned = strings.TrimLeft(cleaned, ".")
+	if cleaned == "" {
+		return "file"
+	}
+	const maxNameLength = 120
+	if len(cleaned) > maxNameLength {
+		cleaned = cleaned[:maxNameLength]
+	}
+	return cleaned
 }
