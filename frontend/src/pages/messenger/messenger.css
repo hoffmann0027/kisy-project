@@ -1401,6 +1401,38 @@
     max-height: 86dvh;
   }
 }
+/* Phone: the action bar moves to the bottom edge.
+   At the top it sat under the camera cutout and the status bar on a device
+   with a notch — the buttons were both covered and out of thumb reach, so
+   the picture could not be closed. fixed (not absolute) so it anchors to the
+   viewport rather than to the padded box below, and the safe-area inset keeps
+   it clear of the home indicator. */
+@media (max-width: 760px), (max-height: 500px) {
+  .mviewer {
+    /* Reserve the bar's height and both insets; the image centres in what is
+       left, so it can never hide under the controls. */
+    padding: calc(8px + var(--safe-top)) 0 calc(72px + var(--safe-bottom));
+  }
+  .mviewer__bar {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    /* Above the image and the zoom/nav layers. */
+    z-index: 2;
+    padding: 12px 16px calc(12px + var(--safe-bottom));
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+  }
+  .mviewer__btn {
+    /* docs/mobile.md: 44px is the minimum tap target on a phone. */
+    width: 44px;
+    height: 44px;
+  }
+  .mviewer__img {
+    max-width: 100%;
+    max-height: 100%;
+  }
+}
+
 .mviewer__img--zoomed {
   transform: scale(2);
   cursor: zoom-out;
