@@ -50,12 +50,22 @@ export interface Group {
   name: string;
   description: string | null;
   avatarUrl: string | null;
-  minRoleLevel: number;
+  /**
+   * Null when the group has no threshold: open to everyone, accounts outside
+   * the role hierarchy included. Not 10 — that is still a threshold.
+   */
+  minRoleLevel: number | null;
+  /** A group is a conversation; a community is a wall with a feed. */
+  kind: GroupKind;
+  /** Communities only: the posts appear in the shared feed. */
+  isPublic: boolean;
   joinPolicy: JoinPolicy;
   postPolicy: PostPolicy;
   createdBy: string;
   createdAt: string;
 }
+
+export type GroupKind = "group" | "community";
 
 /** A group in the "find a group" catalogue plus the actor's request status. */
 export interface DirectoryGroup extends Group {
@@ -516,4 +526,73 @@ export function roleLabel(level: number | null | undefined): string {
 export function userSubtitle(user: Pick<User, "username" | "roleLevel">): string {
   const label = roleLabel(user.roleLevel);
   return label ? `@${user.username} · ${label}` : `@${user.username}`;
+}
+
+// --- Community posts and the feed (stage 2, step 3) ---
+
+export interface PostMedia {
+  id: string;
+  kind: "image" | "video" | "audio" | "file";
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  url: string;
+  position: number;
+}
+
+export interface PostReaction {
+  emoji: string;
+  count: number;
+  /** Whether the signed-in user is one of the people who chose it. */
+  mine: boolean;
+}
+
+/**
+ * Where a post came from, carried on every post.
+ *
+ * Without this a reader sees a post in the feed and cannot tell whose wall it
+ * is, let alone get to it — which is what makes "open" and "join" possible
+ * straight from the card.
+ */
+export interface PostCommunity {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  isMember: boolean;
+  /** "open" joins instantly; "request" sends an application. */
+  joinPolicy: JoinPolicy;
+}
+
+export interface Post {
+  id: string;
+  text: string;
+  createdAt: string;
+  editedAt: string | null;
+  author: Pick<User, "id" | "displayName" | "username" | "avatarUrl">;
+  community: PostCommunity;
+  media: PostMedia[];
+  reactions: PostReaction[];
+  canDelete: boolean;
+}
+
+export interface PostPage {
+  posts: Post[];
+  /** Empty when there is nothing more to load. */
+  nextCursor: string;
+}
+
+/** Feed ordering: the ranking, or plain reverse chronological. */
+export type FeedSort = "popular" | "new";
+
+/**
+ * The line under a group's name in a list.
+ *
+ * Three facts, and each may be absent: a community is not a group, and a
+ * group with no threshold has no level to name — "от  и выше" with a hole in
+ * the middle is what happens when that is forgotten.
+ */
+export function groupSubtitle(group: Pick<Group, "kind" | "minRoleLevel" | "isPublic">): string {
+  const noun = group.kind === "community" ? (group.isPublic ? "Открытое сообщество" : "Сообщество") : "Группа";
+  if (group.minRoleLevel === null) return noun;
+  return `${noun} · от ${roleLabel(group.minRoleLevel)} и выше`;
 }

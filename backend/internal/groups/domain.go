@@ -164,3 +164,13 @@ func canPost(postPolicy, role string, level int) bool {
 // validJoinPolicy / validPostPolicy guard incoming values.
 func validJoinPolicy(p string) bool { return p == PolicyJoinOpen || p == PolicyJoinRequest }
 func validPostPolicy(p string) bool { return p == PolicyPostAll || p == PolicyPostEditors }
+
+// policyForKind gives a new group its starting post policy. A community is a
+// wall: its editors publish and its members read, until its owners decide
+// otherwise.
+func policyForKind(kind string) string {
+	if kind == KindCommunity {
+		return PolicyPostEditors
+	}
+	return PolicyPostAll
+}

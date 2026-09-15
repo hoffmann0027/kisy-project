@@ -235,8 +235,14 @@ func (s *Service) Create(ctx context.Context, in CreateInput, actor ActorMeta) (
 		Kind:         kind,
 		// Only a community can be public: an ordinary group has no wall to
 		// show, so publishing it to the feed would mean nothing.
-		IsPublic:  kind == KindCommunity && in.IsPublic,
-		CreatedBy: actor.UserID,
+		IsPublic: kind == KindCommunity && in.IsPublic,
+		// A community starts without open discussion, which is the difference
+		// between a wall and a group chat. Reusing post_policy rather than
+		// adding a second flag: "who may write messages here" is exactly the
+		// question, and it is already asked. Its owners can open it later in
+		// the group's settings.
+		PostPolicy: policyForKind(kind),
+		CreatedBy:  actor.UserID,
 	}
 
 	tx, err := s.pool.Begin(ctx)

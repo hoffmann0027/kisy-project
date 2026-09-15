@@ -120,7 +120,14 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
 
       <div className="ui-field">
         <label className="ui-field__label">Уровень доступа</label>
-        {isCEO ? (
+        {group.minRoleLevel === null ? (
+          // No threshold at all. Not shown as a level, because it is not one:
+          // this group is open to everyone, accounts outside the hierarchy
+          // included.
+          <div className="ui-input" style={{ display: "flex", alignItems: "center" }}>
+            Без ограничения по уровню
+          </div>
+        ) : isCEO ? (
           <select className="ui-input" value={group.minRoleLevel} disabled={updateLevel.isPending} onChange={(e) => changeLevel(Number(e.target.value))}>
             {Object.entries(ROLE_LABELS).map(([lvl, label]) => (
               <option key={lvl} value={lvl}>
@@ -134,9 +141,11 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
           </div>
         )}
         <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
-          {isCEO
-            ? "Как CEO вы можете менять уровень группы. Она видна пользователям выбранного уровня и выше."
-            : "Группа видна пользователям этого уровня и выше."}
+          {group.minRoleLevel === null
+            ? "Группа открыта всем."
+            : isCEO
+              ? "Как CEO вы можете менять уровень группы. Она видна пользователям выбранного уровня и выше."
+              : "Группа видна пользователям этого уровня и выше."}
         </span>
       </div>
 

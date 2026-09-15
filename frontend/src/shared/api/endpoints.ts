@@ -23,7 +23,11 @@ import type {
   GroupMember,
   GroupViewer,
   GroupRole,
+  GroupKind,
   JoinPolicy,
+  Post,
+  PostPage,
+  FeedSort,
   PostPolicy,
   IceConfig,
   Invitation,
@@ -310,8 +314,18 @@ export const chatsApi = {
 
 export const groupsApi = {
   list: () => apiClient.get<{ groups: Group[] }>("/groups"),
-  create: (name: string, minRoleLevel: number, description?: string) =>
-    apiClient.post<{ group: Group }>("/groups", { name, minRoleLevel, description }),
+  /**
+   * minRoleLevel null means "no threshold": open to everyone, including
+   * accounts outside the role hierarchy — which is the only kind of group
+   * such an account can create.
+   */
+  create: (body: {
+    name: string;
+    minRoleLevel: number | null;
+    description?: string;
+    kind?: GroupKind;
+    isPublic?: boolean;
+  }) => apiClient.post<{ group: Group }>("/groups", body),
   get: (groupId: string) => apiClient.get<{ group: Group }>(`/groups/${groupId}`),
   updateLevel: (groupId: string, minRoleLevel: number) =>
     apiClient.patch<{ group: Group }>(`/groups/${groupId}`, { minRoleLevel }),
@@ -549,4 +563,30 @@ export const adminApi = {
     if (action) params.set("action", action);
     return apiClient.get<{ entries: AuditEntry[] }>(`/admin/audit?${params.toString()}`);
   },
+};
+
+export const postsApi = {
+  /** One community's wall, newest first. */
+  ofCommunity: (communityId: string, cursor = "") =>
+    apiClient.get<PostPage>(`/groups/${communityId}/posts${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`),
+  create: (communityId: string, text: string) =>
+    apiClient.post<{ post: Post }>(`/groups/${communityId}/posts`, { text }),
+  remove: (postId: string) => apiClient.del<{ deleted: boolean }>(`/posts/${postId}`),
+  /** Appends one file to a post the caller just created. */
+  attach: (postId: string, file: File) =>
+    apiClient.uploadFile<{ post: Post }>(`/posts/${postId}/media`, file),
+  react: (postId: string, emoji: string) =>
+    apiClient.post<{ ok: boolean }>(`/posts/${postId}/reactions`, { emoji }),
+  unreact: (postId: string, emoji: string) =>
+    apiClient.del<{ ok: boolean }>(`/posts/${postId}/reactions`, { emoji }),
+};
+
+export const feedApi = {
+  list: (sort: FeedSort, cursor = "") => {
+    const params = new URLSearchParams({ sort });
+    if (cursor) params.set("cursor", cursor);
+    return apiClient.get<PostPage>(`/feed?${params.toString()}`);
+  },
+  hide: (communityId: string) => apiClient.post<{ hidden: boolean }>(`/feed/hidden/${communityId}`),
+  show: (communityId: string) => apiClient.del<{ hidden: boolean }>(`/feed/hidden/${communityId}`),
 };

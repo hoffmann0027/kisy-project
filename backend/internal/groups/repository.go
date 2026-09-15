@@ -91,10 +91,10 @@ func scanGroup(row pgx.Row) (*Group, error) {
 
 func (r *PostgresRepository) Create(ctx context.Context, q db.DBTX, g *Group) error {
 	err := q.QueryRow(ctx, `
-		INSERT INTO groups (name, description, avatar_url, min_role_level, kind, is_public, created_by)
-		VALUES ($1, $2, $3, NULLIF($4, 0), $5, $6, $7)
+		INSERT INTO groups (name, description, avatar_url, min_role_level, kind, is_public, post_policy, created_by)
+		VALUES ($1, $2, $3, NULLIF($4, 0), $5, $6, $7, $8)
 		RETURNING id, join_policy, post_policy, is_archived, created_at, updated_at`,
-		g.Name, g.Description, g.AvatarURL, g.MinRoleLevel, g.Kind, g.IsPublic, g.CreatedBy,
+		g.Name, g.Description, g.AvatarURL, g.MinRoleLevel, g.Kind, g.IsPublic, g.PostPolicy, g.CreatedBy,
 	).Scan(&g.ID, &g.JoinPolicy, &g.PostPolicy, &g.IsArchived, &g.CreatedAt, &g.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("groups: create: %w", err)
@@ -110,12 +110,10 @@ func (r *PostgresRepository) ListVisible(ctx context.Context, q db.DBTX, actorLe
 	rows, err := q.Query(ctx, `
 		SELECT `+groupColumns+`
 		FROM groups
-		-- $1 is the actor's level. Zero means no level at all, and an account
-		-- outside the hierarchy clears no threshold — without the range guard
-		-- zero would sit below every min_role_level and match every group.
 		-- A group with no threshold is open to everyone, including accounts
 		-- outside the hierarchy; one with a threshold still needs a level that
-		-- clears it, and $1 = 0 ("no level") clears none.
+		-- clears it, and $1 = 0 ("no level") clears none — hence the range
+		-- guard, without which zero would sit below every threshold.
 		WHERE is_archived = false
 		  AND (min_role_level IS NULL OR ($1 BETWEEN 1 AND 10 AND min_role_level >= $1))
 		ORDER BY created_at DESC, id DESC`, actorLevel)

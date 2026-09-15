@@ -1,35 +1,74 @@
+import { useState } from "react";
+import { Button, Spinner } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
+import type { FeedSort } from "@shared/api/types";
+import { useFeed } from "@entities/post/queries";
+import { PostCard } from "@widgets/feed/PostCard";
+import "@widgets/feed/feed.css";
 
-// The feed of community posts.
+// The shared feed: posts from every open community, ranked or chronological.
 //
-// This is a placeholder, and deliberately a small honest one rather than a
-// blank screen: the tab exists from this commit because an account without a
-// rating board needs something in that slot, while the posts themselves arrive
-// with communities in the next step. It offers nothing to press, because
-// nothing here would work yet.
+// Both orderings are offered because they answer different questions. "Новые"
+// is what just happened; "Популярные" is what people reacted to, which on a
+// quiet day is the only one with anything in it (the ranking and the reasoning
+// behind it are in docs/spec/07-business-logic.md).
 
 export function FeedPage() {
+  const [sort, setSort] = useState<FeedSort>("popular");
+  const feed = useFeed(sort);
+
+  const posts = feed.data?.pages.flatMap((p) => p.posts) ?? [];
+
   return (
-    <div
-      style={{
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 12,
-        padding: "24px",
-        paddingBottom: "calc(24px + var(--safe-bottom))",
-        textAlign: "center",
-      }}
-    >
-      <span style={{ color: "var(--color-text-tertiary)" }} aria-hidden="true">
-        <Icon.Board size={40} />
-      </span>
-      <h1 style={{ margin: 0, fontSize: 19, fontWeight: 640 }}>Лента</h1>
-      <p style={{ margin: 0, maxWidth: 320, color: "var(--color-text-secondary)", fontSize: 14 }}>
-        Здесь появятся посты открытых сообществ. Раздел готовится.
-      </p>
+    <div className="feed">
+      <header className="feed__head">
+        <h1 className="feed__title">Лента</h1>
+        <div className="feed__sort" role="tablist" aria-label="Сортировка ленты">
+          {(["popular", "new"] as FeedSort[]).map((value) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={sort === value}
+              className={`feed__sort-btn${sort === value ? " feed__sort-btn--active" : ""}`}
+              onClick={() => setSort(value)}
+            >
+              {value === "popular" ? "Популярные" : "Новые"}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      <div className="feed__scroll">
+        {feed.isPending ? (
+          <div style={{ display: "flex", justifyContent: "center", padding: 32 }}>
+            <Spinner size={28} />
+          </div>
+        ) : posts.length === 0 ? (
+          <div className="feed__empty">
+            <div style={{ marginBottom: 10, color: "var(--color-text-tertiary)" }}>
+              <Icon.Board size={36} />
+            </div>
+            Здесь появятся посты открытых сообществ. Вступите в сообщество или создайте своё — и лента
+            оживёт.
+          </div>
+        ) : (
+          <>
+            {posts.map((post) => (
+              <PostCard key={post.id} post={post} />
+            ))}
+            {feed.hasNextPage && (
+              <Button
+                variant="secondary"
+                onClick={() => void feed.fetchNextPage()}
+                loading={feed.isFetchingNextPage}
+              >
+                Показать ещё
+              </Button>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { groupsApi } from "@shared/api/endpoints";
-import type { Group, GroupRole, JoinPolicy, PostPolicy } from "@shared/api/types";
+import type { Group, GroupKind, GroupRole, JoinPolicy, PostPolicy } from "@shared/api/types";
 
 export const groupKeys = {
   list: ["groups"] as const,
@@ -20,8 +20,14 @@ export function useGroups() {
 export function useCreateGroup() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (args: { name: string; minRoleLevel: number; description?: string }) =>
-      groupsApi.create(args.name, args.minRoleLevel, args.description),
+    mutationFn: (args: {
+      name: string;
+      /** Null means "no threshold" — see groupsApi.create. */
+      minRoleLevel: number | null;
+      description?: string;
+      kind?: GroupKind;
+      isPublic?: boolean;
+    }) => groupsApi.create(args),
     onSuccess: ({ group }) => {
       qc.setQueryData<Group[]>(groupKeys.list, (prev) => (prev ? [group, ...prev] : [group]));
     },

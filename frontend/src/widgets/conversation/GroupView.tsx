@@ -10,34 +10,54 @@ import { Conversation } from "./Conversation";
 import { BoardView } from "@widgets/board/BoardView";
 import { CalendarView } from "@widgets/calendar/CalendarView";
 import { GroupMembersModal } from "@features/profile/GroupMembersModal";
+import { CommunityWall } from "@widgets/feed/CommunityWall";
 
-type Tab = "chat" | "board" | "calendar";
+type Tab = "chat" | "board" | "calendar" | "posts";
 
 export function GroupView({ group }: { group: Group }) {
   const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>("chat");
+  // A community opens on its wall; a group opens on its conversation.
+  const isCommunity = group.kind === "community";
+  const [tab, setTab] = useState<Tab>(isCommunity ? "posts" : "chat");
   const [membersOpen, setMembersOpen] = useState(false);
 
   // The board and the calendar are sub-views, not screens: back returns to the
   // group's chat rather than leaving the group.
-  useBackHandler(tab !== "chat", () => setTab("chat"));
+  const homeTab: Tab = isCommunity ? "posts" : "chat";
+  useBackHandler(tab !== homeTab, () => setTab(homeTab));
   const isFounder = useAuthStore((s) => s.user?.id === group.createdBy);
   const { data: viewer } = useGroupViewer(group.id);
   // Editors-only group where the viewer is a plain member → composer hidden.
   const readOnly = viewer && !viewer.canPost ? "Писать могут только редакторы" : undefined;
   // Group's clearance, shown in the header so the level is visible in-chat.
-  const levelLabel = `Группа · от ${roleLabel(group.minRoleLevel)} и выше`;
+  // "No threshold" is not a level, so it is not announced as one.
+  const levelLabel = group.minRoleLevel === null
+    ? (isCommunity ? "Сообщество" : "Группа")
+    : `${isCommunity ? "Сообщество" : "Группа"} · от ${roleLabel(group.minRoleLevel)} и выше`;
 
   // On a phone this row wraps onto its own line under the header (see
   // .group-tabs in messenger.css), so the group name keeps the first line.
   const tabs = (
     <div className="group-tabs">
-      <button
-        className={cn("group-tab", tab === "chat" && "group-tab--active")}
-        onClick={() => setTab("chat")}
-      >
-        Чат
-      </button>
+      {isCommunity && (
+        <button
+          className={cn("group-tab", tab === "posts" && "group-tab--active")}
+          onClick={() => setTab("posts")}
+        >
+          Посты
+        </button>
+      )}
+      {/* A community starts as a wall: the conversation tab appears only once
+          its owners open posting to everyone (post_policy), which is the same
+          question asked once instead of a second flag beside it. */}
+      {(!isCommunity || group.postPolicy === "all") && (
+        <button
+          className={cn("group-tab", tab === "chat" && "group-tab--active")}
+          onClick={() => setTab("chat")}
+        >
+          {isCommunity ? "Обсуждение" : "Чат"}
+        </button>
+      )}
       <button
         className={cn("group-tab", tab === "board" && "group-tab--active")}
         onClick={() => setTab("board")}
@@ -55,6 +75,25 @@ export function GroupView({ group }: { group: Group }) {
       </button>
     </div>
   );
+
+  if (tab === "posts") {
+    return (
+      <section className="conv">
+        <header className="conv__header">
+          <button className="conv__back" title="Назад" onClick={() => navigate("/communities")}>
+            <Icon.Back size={22} />
+          </button>
+          <div className="conv__header-body">
+            <div className="conv__title">{group.name}</div>
+            <div className="conv__status">{group.isPublic ? "Открытое сообщество" : "Закрытое сообщество"}</div>
+          </div>
+          {tabs}
+        </header>
+        <CommunityWall group={group} canPost={viewer?.canPost ?? false} />
+        <GroupMembersModal group={group} canAdd={isFounder} open={membersOpen} onClose={() => setMembersOpen(false)} />
+      </section>
+    );
+  }
 
   if (tab === "board" || tab === "calendar") {
     return (

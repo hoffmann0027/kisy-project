@@ -63,14 +63,7 @@ export function HubPage() {
   ];
 
   const actions = [
-    // Creating a group means choosing the clearance it requires, and an
-    // account outside the hierarchy has none to choose from — the server
-    // refuses it. Groups without a threshold, which is what such an account
-    // will create, arrive with communities in the next step; until then the
-    // action is hidden rather than left to fail.
-    ...(caps.isInvited
-      ? [{ key: "group", label: "Новая группа", icon: Icon.FolderPlus, run: () => setModal("group") }]
-      : []),
+    { key: "group", label: "Новая группа", icon: Icon.FolderPlus, run: () => setModal("group") },
     ...(caps.canVoteLevels
       ? [{ key: "poll", label: "Создать опрос", icon: Icon.Vote, run: () => setModal("voting") }]
       : []),
