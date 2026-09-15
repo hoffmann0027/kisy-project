@@ -4,4 +4,12 @@
     <string name="title_activity_main">KISY</string>
     <string name="package_name">com.kisy.messenger</string>
     <string name="custom_url_scheme">com.kisy.messenger</string>
+
+    <!-- Incoming calls (com.kisy.messenger.calls) -->
+    <string name="call_channel_name">Звонки</string>
+    <string name="call_channel_description">Входящие звонки</string>
+    <string name="call_incoming">Входящий звонок</string>
+    <string name="call_unknown_caller">Неизвестный номер</string>
+    <string name="call_accept">Ответить</string>
+    <string name="call_decline">Отклонить</string>
 </resources>

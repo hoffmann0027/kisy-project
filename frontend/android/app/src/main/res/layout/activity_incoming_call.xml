@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The ringing screen. Shown over the lock screen by a full-screen intent,
+     with no WebView behind it, so everything here is plain Android views. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#0B1220"
+    android:fitsSystemWindows="true"
+    android:gravity="center_horizontal">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="96dp"
+        android:text="@string/call_incoming"
+        android:textColor="#93A4C0"
+        android:textSize="16sp" />
+
+    <TextView
+        android:id="@+id/call_caller"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:gravity="center"
+        android:textColor="#FFFFFF"
+        android:textSize="30sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/app_name"
+        android:textColor="#5B6B88"
+        android:textSize="14sp" />
+
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="88dp"
+        android:paddingStart="40dp"
+        android:paddingEnd="40dp"
+        android:weightSum="2">
+
+        <!-- 64dp tall, half the width each: this is tapped half-awake, in the dark. -->
+        <Button
+            android:id="@+id/call_decline"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="64dp"
+            android:layout_marginEnd="12dp"
+            android:text="@string/call_decline"
+            android:textColor="#FFFFFF"
+            android:textAllCaps="false"
+            android:textSize="17sp"
+            android:background="#D9364C" />
+
+        <Button
+            android:id="@+id/call_accept"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="64dp"
+            android:layout_marginStart="12dp"
+            android:text="@string/call_accept"
+            android:textColor="#FFFFFF"
+            android:textAllCaps="false"
+            android:textSize="17sp"
+            android:background="#1FA971" />
+    </LinearLayout>
+</LinearLayout>

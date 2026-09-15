@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { wsClient } from "@shared/ws/client";
 import { CALL_PUSH_EVENT } from "@shared/lib/nativePush";
+import { callLog } from "@shared/lib/callLog";
+import {
+  onNativeCallDecision,
+  reportFullScreenIntent,
+  stopNativeRinging,
+  takeNativeCallDecision,
+  type NativeCallDecision,
+} from "@shared/lib/nativeCall";
 import type { CallIncomingData, ServerEvent } from "@shared/ws/events";
 import { callsApi } from "@shared/api/endpoints";
 import { ringtone } from "./ringtone";
@@ -75,6 +83,9 @@ export function useCall() {
 
   const cleanupMedia = useCallback(() => {
     ringtone.stop();
+    // The native notification rings on its own timer; whatever ended the call
+    // here has to silence it too.
+    void stopNativeRinging();
     const s = session.current;
     if (s?.pc) {
       s.pc.onicecandidate = null;
@@ -195,7 +206,9 @@ export function useCall() {
   const accept = useCallback(async () => {
     const s = session.current;
     if (!s || s.role !== "callee") return;
+    callLog("answering", s.callId);
     ringtone.stop();
+    void stopNativeRinging();
     let localStream: MediaStream;
     try {
       localStream = await getMic();
@@ -226,6 +239,7 @@ export function useCall() {
   const reject = useCallback(() => {
     const s = session.current;
     if (!s) return;
+    callLog("declining in the app", s.callId);
     wsClient.send({ type: "call.reject", data: { callId: s.callId } });
     teardown();
   }, [teardown]);
@@ -270,6 +284,11 @@ export function useCall() {
     };
     setView({ ...idleView, phase: "incoming", peer: data.from, role: "callee" });
     ringtone.incoming();
+    callLog("ringing in the app", data.callId);
+    // Only when the app is actually on screen. A backgrounded app ringing
+    // through a hidden WebView is a phone that looks silent — there the
+    // native notification is the ring, and taking it away would hide the call.
+    if (document.visibilityState === "visible") void stopNativeRinging();
   }, []);
 
   /**
@@ -282,8 +301,16 @@ export function useCall() {
    */
   const resumePending = useCallback(async () => {
     if (session.current) return; // already ringing or talking here
-    const { call } = await callsApi.pending().catch(() => ({ call: null }));
-    if (!call || session.current) return;
+    const { call } = await callsApi.pending().catch((err) => {
+      callLog("/calls/pending failed", err);
+      return { call: null };
+    });
+    if (!call) {
+      callLog("no call waiting");
+      return;
+    }
+    if (session.current) return;
+    callLog("call waiting on the server", call.callId);
     onIncoming({
       callId: call.callId,
       from: { id: call.callerId, displayName: call.callerName, avatarUrl: null },
@@ -292,20 +319,64 @@ export function useCall() {
     });
   }, [onIncoming]);
 
-  useEffect(() => {
-    void resumePending();
+  /**
+   * Carry out what the user tapped on the native ringing screen.
+   *
+   * That screen is plain Android: it can wake the phone and take the answer,
+   * but it has no session and no WebRTC, so the tap only becomes a real answer
+   * here (see android/.../calls/KisyCallPlugin.java).
+   */
+  const applyNativeDecision = useCallback(
+    async (d: NativeCallDecision) => {
+      if (d.action === "reject") {
+        // Over REST, not the socket: the app was just started by the
+        // notification and the socket may not be up yet.
+        callLog("declining on the server", d.callId);
+        await callsApi.reject(d.callId).catch((err) => callLog("decline failed", err));
+        if (session.current?.callId === d.callId) teardown();
+        return;
+      }
+      await resumePending();
+      if (session.current?.callId !== d.callId) {
+        // Answered too late: the caller hung up, or the ring timed out while
+        // the app was starting.
+        callLog("answered a call that is no longer ringing", d.callId);
+        return;
+      }
+      await accept();
+    },
+    [accept, resumePending, teardown],
+  );
 
-    const onPush = () => void resumePending();
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void resumePending();
+  useEffect(() => {
+    void reportFullScreenIntent();
+
+    // One entry point for every way a call can turn up: a cold start from the
+    // notification, a push, coming back to the foreground.
+    const pickUp = async () => {
+      await resumePending();
+      const decided = await takeNativeCallDecision();
+      if (decided) await applyNativeDecision(decided);
     };
+
+    void pickUp();
+
+    const onPush = () => {
+      callLog("push woke the app");
+      void pickUp();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void pickUp();
+    };
+    const offNative = onNativeCallDecision((d) => void applyNativeDecision(d));
     window.addEventListener(CALL_PUSH_EVENT, onPush);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
+      offNative();
       window.removeEventListener(CALL_PUSH_EVENT, onPush);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [resumePending]);
+  }, [applyNativeDecision, resumePending]);
 
   useEffect(() => {
     const unsub = wsClient.subscribe((e: ServerEvent) => {

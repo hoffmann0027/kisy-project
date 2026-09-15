@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <application
         android:allowBackup="true"
@@ -23,6 +24,39 @@
             </intent-filter>
 
         </activity>
+
+        <!-- Incoming calls, the part that has to work with the app killed.
+             Its own task (taskAffinity="") and out of Recents: this screen is
+             a doorbell, not somewhere to come back to. showWhenLocked and
+             turnScreenOn are what make it appear on a sleeping phone. -->
+        <activity
+            android:name=".calls.IncomingCallActivity"
+            android:theme="@style/AppTheme.IncomingCall"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density" />
+
+        <receiver
+            android:name=".calls.CallActionReceiver"
+            android:exported="false" />
+
+        <!-- Firebase delivers to exactly one service. Ours extends the push
+             plugin's and calls through to it, so the plugin's own declaration
+             is removed rather than left to race with this one. -->
+        <service
+            android:name=".calls.CallPushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+        <service
+            android:name="com.capacitorjs.plugins.pushnotifications.MessagingService"
+            tools:node="remove" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -49,6 +83,14 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- Keep the socket alive briefly while the screen is off during a call. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- An incoming call has to take over a locked screen, not queue up as a
+         banner. On Android 14+ the system grants this only to apps it knows to
+         be calling apps; a sideloaded build falls back to a heads-up
+         notification, which the app detects and reports. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- The phone buzzes while it rings, including on a silent-but-not-mute profile. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Calls are pointless without a mic, but the app is still useful for
          chat on a device without one, so do not make it a hard requirement. -->
     <uses-feature android:name="android.hardware.microphone" android:required="false" />

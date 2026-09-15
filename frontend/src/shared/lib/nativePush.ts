@@ -2,6 +2,7 @@ import { PushNotifications } from "@capacitor/push-notifications";
 import type { PluginListenerHandle } from "@capacitor/core";
 import { pushApi } from "@shared/api/endpoints";
 import { isNative } from "@shared/lib/native";
+import { callLog } from "@shared/lib/callLog";
 
 // Push notifications for the packaged mobile app.
 //
@@ -197,6 +198,7 @@ export function initNativeCallPush(): void {
   void PushNotifications.addListener("pushNotificationReceived", (n) => {
     const kind = n.data?.type;
     if (kind !== "call_invite" && kind !== "call_cancel") return;
+    callLog(`push received: ${kind}`, n.data?.callId);
     window.dispatchEvent(
       new CustomEvent(CALL_PUSH_EVENT, { detail: { type: kind, callId: n.data?.callId } }),
     );
