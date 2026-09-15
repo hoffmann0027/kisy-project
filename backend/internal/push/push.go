@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
 	"github.com/google/uuid"
@@ -183,6 +184,59 @@ type payload struct {
 func (s *Service) Notify(ctx context.Context, userID uuid.UUID, title, body, url string) {
 	s.notifyBrowsers(ctx, userID, title, body, url)
 	s.notifyDevices(ctx, userID, title, body, url)
+}
+
+// CallInviteTTL bounds how long FCM keeps trying to deliver a ring. Past it
+// the caller has long given up, and a phone that rings for a call nobody is
+// making is worse than a missed one. It also sets the floor for how long the
+// callee's side may take before the call is written off as missed.
+const CallInviteTTL = 45 * time.Second
+
+// HasDevices reports whether the user has any registered mobile device.
+// Used to decide whether an offline callee is merely asleep or genuinely
+// unreachable, without spending a message to find out.
+func (s *Service) HasDevices(ctx context.Context, userID uuid.UUID) bool {
+	if s.fcm == nil {
+		return false
+	}
+	devices, err := s.repo.ListDevicesForUser(ctx, s.pool, userID)
+	if err != nil {
+		s.log.Warn("push device list failed", "error", err)
+		return false
+	}
+	return len(devices) > 0
+}
+
+// SendData delivers a data-only message to every device of one user.
+//
+// Data-only on purpose: a notification payload is drawn by Android itself and
+// the app is never started, so a swiped-away app could not ring. Here the app
+// is woken and decides what to show. Returns whether at least one device
+// accepted it — the caller uses that to tell "nobody has this app installed"
+// from "the phone is merely asleep".
+func (s *Service) SendData(ctx context.Context, userID uuid.UUID, data map[string]string, ttl time.Duration) bool {
+	if s.fcm == nil {
+		return false
+	}
+	devices, err := s.repo.ListDevicesForUser(ctx, s.pool, userID)
+	if err != nil {
+		s.log.Warn("push device list failed", "error", err)
+		return false
+	}
+	delivered := false
+	for _, d := range devices {
+		switch err := s.fcm.SendData(ctx, d.Token, data, ttl); {
+		case err == nil:
+			delivered = true
+		case errors.Is(err, ErrDeviceUnregistered):
+			if delErr := s.repo.DeleteDevice(ctx, s.pool, d.Token); delErr != nil {
+				s.log.Warn("push device prune failed", "error", delErr)
+			}
+		default:
+			s.log.Warn("push data send failed", "error", err)
+		}
+	}
+	return delivered
 }
 
 // notifyDevices delivers to the packaged mobile apps through Firebase.

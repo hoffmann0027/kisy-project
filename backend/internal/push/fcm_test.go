@@ -283,3 +283,85 @@ func TestFCMSendSurfacesTokenExchangeFailure(t *testing.T) {
 		t.Fatalf("sends = %d, want 0 — no token, no request", got)
 	}
 }
+
+// A call has to reach a phone whose app the user swiped away. Android only
+// starts the app for a message with no notification payload — anything with
+// one is drawn by the system and the app never runs, so it could not ring.
+// These assertions are the contract with the Android side.
+func TestSendDataWakesTheApp(t *testing.T) {
+	srv := newFCMServer(t)
+	f := newTestFCM(t, srv)
+
+	data := map[string]string{
+		"type":       "call_invite",
+		"callId":     "11111111-1111-1111-1111-111111111111",
+		"callerId":   "22222222-2222-2222-2222-222222222222",
+		"callerName": "Анна",
+	}
+	if err := f.SendData(context.Background(), "device-1", data, 30*time.Second); err != nil {
+		t.Fatalf("SendData: %v", err)
+	}
+
+	var sent struct {
+		Message struct {
+			Token        string            `json:"token"`
+			Notification *json.RawMessage  `json:"notification"`
+			Data         map[string]string `json:"data"`
+			Android      struct {
+				Priority     string           `json:"priority"`
+				TTL          string           `json:"ttl"`
+				Notification *json.RawMessage `json:"notification"`
+			} `json:"android"`
+		} `json:"message"`
+	}
+	body := srv.lastBody.Load().(json.RawMessage)
+	if err := json.Unmarshal(body, &sent); err != nil {
+		t.Fatalf("decode sent message: %v", err)
+	}
+
+	if sent.Message.Notification != nil {
+		t.Errorf("notification payload present (%s): Android would draw it itself and never wake the app",
+			*sent.Message.Notification)
+	}
+	if sent.Message.Android.Notification != nil {
+		t.Errorf("android.notification present: same problem")
+	}
+	if sent.Message.Android.Priority != "HIGH" {
+		t.Errorf("priority = %q, want HIGH — a normal-priority data message may be held until the device wakes up on its own",
+			sent.Message.Android.Priority)
+	}
+	if sent.Message.Android.TTL != "30s" {
+		t.Errorf("ttl = %q, want 30s — without it FCM keeps a ring for four weeks", sent.Message.Android.TTL)
+	}
+	if sent.Message.Data["type"] != "call_invite" || sent.Message.Data["callerName"] != "Анна" {
+		t.Errorf("data payload lost fields: %v", sent.Message.Data)
+	}
+	if sent.Message.Token != "device-1" {
+		t.Errorf("token = %q", sent.Message.Token)
+	}
+}
+
+// The ordinary message path must keep its notification payload: those are
+// meant to be drawn by the system even when the app never starts.
+func TestSendKeepsNotificationPayload(t *testing.T) {
+	srv := newFCMServer(t)
+	f := newTestFCM(t, srv)
+
+	if err := f.Send(context.Background(), "device-1", "Заголовок", "Текст", "/chat/1"); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	body := srv.lastBody.Load().(json.RawMessage)
+	var sent struct {
+		Message struct {
+			Notification *struct {
+				Title string `json:"title"`
+			} `json:"notification"`
+		} `json:"message"`
+	}
+	if err := json.Unmarshal(body, &sent); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if sent.Message.Notification == nil || sent.Message.Notification.Title != "Заголовок" {
+		t.Fatalf("notification payload missing from a normal push: %s", body)
+	}
+}

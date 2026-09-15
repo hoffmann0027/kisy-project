@@ -46,6 +46,7 @@ type Service struct {
 	// ringTimeout, now and afterFunc are overridable in tests for
 	// deterministic timeout/duration assertions.
 	ringTimeout time.Duration
+	pusher      CallPusher
 	now         func() time.Time
 	afterFunc   func(d time.Duration, f func())
 }
@@ -61,6 +62,9 @@ func NewService(pool *pgxpool.Pool, repo Repository, store CallStore, access Cha
 
 // SetPublisher wires the WebSocket publisher (avoids a calls→ws cycle).
 func (s *Service) SetPublisher(p CallPublisher) { s.pub = p }
+
+// SetPusher supplies the wake-up channel for callees with no live socket.
+func (s *Service) SetPusher(p CallPusher) { s.pusher = p }
 
 // SetProfileLookup wires caller-identity enrichment for the ringing UI.
 func (s *Service) SetProfileLookup(p ProfileLookup) { s.profile = p }
@@ -121,7 +125,12 @@ func (s *Service) onInvite(ctx context.Context, actor Actor, data json.RawMessag
 		s.auditCall(ctx, actor.UserID, p.CallID, "call.busy")
 		return nil
 	}
-	if online, _ := s.store.IsOnline(ctx, p.ToUserID); !online {
+	// An offline callee used to end the call here and now: the invite existed
+	// only as a WebSocket frame, so a phone with the app closed — the normal
+	// state of a phone — could never be called. It rings through Firebase
+	// instead, and only a silent ring timeout writes the call off as missed.
+	online, _ := s.store.IsOnline(ctx, p.ToUserID)
+	if !online && !s.canWake(ctx, p.ToUserID) {
 		s.logInstant(ctx, actor.UserID, p, StatusMissed)
 		s.pub.Timeout(actor.UserID, p.CallID)
 		return nil
@@ -146,6 +155,17 @@ func (s *Service) onInvite(ctx context.Context, actor Actor, data json.RawMessag
 
 	name, avatar := s.callerProfile(ctx, actor.UserID)
 	s.pub.Incoming(p.ToUserID, p.CallID, actor.UserID, name, avatar, p.ChatID, p.SDP)
+	// Always, not only when offline: the socket may be a stale half-open one
+	// the server still believes in, and a duplicate ring is recoverable while
+	// a silent phone is not. The SDP does not travel in the push — it is
+	// large and the app fetches the call on wake.
+	s.wake(ctx, p.ToUserID, map[string]string{
+		"type":       "call_invite",
+		"callId":     p.CallID.String(),
+		"callerId":   actor.UserID.String(),
+		"callerName": name,
+		"chatId":     p.ChatID.String(),
+	})
 	s.auditCall(ctx, actor.UserID, p.CallID, "call.started")
 
 	callID := p.CallID
@@ -247,6 +267,12 @@ func (s *Service) onTerminate(ctx context.Context, actor Actor, data json.RawMes
 		}
 		status, action = StatusCanceled, "call.canceled"
 		s.pub.Canceled(st.Callee, p.CallID)
+		// The callee may be ringing from a push rather than a socket, so the
+		// cancellation has to travel the same way the invite did.
+		s.wake(ctx, st.Callee, map[string]string{
+			"type":   "call_cancel",
+			"callId": p.CallID.String(),
+		})
 	default: // SignalHangup — either party
 		if answered {
 			status = StatusCompleted
@@ -265,6 +291,23 @@ func (s *Service) onTerminate(ctx context.Context, actor Actor, data json.RawMes
 	return nil
 }
 
+// canWake reports whether the callee has any device we could ring. Without
+// one an offline callee is genuinely unreachable and the caller should be
+// told immediately rather than listening to a ringtone for 45 seconds.
+func (s *Service) canWake(ctx context.Context, userID uuid.UUID) bool {
+	return s.pusher != nil && s.pusher.HasDevices(ctx, userID)
+}
+
+// wake delivers a call event to the callee's devices. Best-effort by design:
+// the WebSocket path is the primary one and a push failure must not fail the
+// call.
+func (s *Service) wake(ctx context.Context, userID uuid.UUID, data map[string]string) {
+	if s.pusher == nil {
+		return
+	}
+	s.pusher.SendData(ctx, userID, data, CallPushTTL)
+}
+
 // onRingTimeout fires ringTimeout after an invite. If the call is still
 // ringing, it is marked missed and both parties are told.
 func (s *Service) onRingTimeout(ctx context.Context, callID uuid.UUID) {
@@ -276,6 +319,12 @@ func (s *Service) onRingTimeout(ctx context.Context, callID uuid.UUID) {
 	_ = s.store.Delete(ctx, callID)
 	s.pub.Timeout(st.Caller, callID)
 	s.pub.Timeout(st.Callee, callID)
+	// Dismiss the notification on a phone that was woken by push and never
+	// reached the socket.
+	s.wake(ctx, st.Callee, map[string]string{
+		"type":   "call_cancel",
+		"callId": callID.String(),
+	})
 	s.auditCall(ctx, st.Caller, callID, "call.timeout")
 }
 

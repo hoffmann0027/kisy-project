@@ -739,6 +739,9 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		log,
 	)
 	callsSvc.SetPublisher(wsPublisher)
+	// Lets a call reach a phone whose app is closed. Without Firebase this
+	// stays nil and calls behave as before: connected clients only.
+	callsSvc.SetPusher(pushSvc)
 	callsSvc.SetProfileLookup(func(ctx context.Context, id uuid.UUID) (string, *string, bool) {
 		u, err := usersRepo.GetByID(ctx, pool, id)
 		if err != nil || !u.IsActive {

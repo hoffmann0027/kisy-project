@@ -152,7 +152,7 @@ func (f *FCM) assertion(now time.Time) (string, error) {
 type fcmMessage struct {
 	Message struct {
 		Token        string            `json:"token"`
-		Notification fcmNotification   `json:"notification"`
+		Notification *fcmNotification  `json:"notification,omitempty"`
 		Data         map[string]string `json:"data,omitempty"`
 		Android      fcmAndroid        `json:"android"`
 	} `json:"message"`
@@ -164,8 +164,11 @@ type fcmNotification struct {
 }
 
 type fcmAndroid struct {
-	Priority     string             `json:"priority"`
-	Notification fcmAndroidNotifOpt `json:"notification"`
+	Priority string `json:"priority"`
+	// Seconds, as FCM wants it ("60s"). Empty means the default four weeks,
+	// which is nonsense for a ringing phone.
+	TTL          string              `json:"ttl,omitempty"`
+	Notification *fcmAndroidNotifOpt `json:"notification,omitempty"`
 }
 
 type fcmAndroidNotifOpt struct {
@@ -182,6 +185,30 @@ type fcmAndroidNotifOpt struct {
 // (frontend/src/shared/lib/nativePush.ts).
 const AndroidChannelID = "kisy_messages"
 
+// SendData delivers a data-only message: no notification payload at all, so
+// Android hands it to the app instead of drawing it in the tray itself. That
+// is the only shape that wakes an app the user swiped away — which is exactly
+// the state a phone is in when someone calls it. The caller owns what the
+// user sees; here we only guarantee delivery.
+//
+// ttl bounds how long FCM keeps trying: a call invite is worthless once the
+// caller has hung up, and a ring arriving ten minutes late is worse than none.
+func (f *FCM) SendData(ctx context.Context, deviceToken string, data map[string]string, ttl time.Duration) error {
+	access, err := f.accessToken(ctx)
+	if err != nil {
+		return err
+	}
+
+	var msg fcmMessage
+	msg.Message.Token = deviceToken
+	msg.Message.Data = data
+	msg.Message.Android = fcmAndroid{
+		Priority: "HIGH",
+		TTL:      fmt.Sprintf("%ds", int(ttl.Seconds())),
+	}
+	return f.post(ctx, access, msg)
+}
+
 // Send delivers one notification to one device. A returned
 // ErrDeviceUnregistered tells the caller to forget the token.
 func (f *FCM) Send(ctx context.Context, deviceToken, title, body, link string) error {
@@ -192,16 +219,23 @@ func (f *FCM) Send(ctx context.Context, deviceToken, title, body, link string) e
 
 	var msg fcmMessage
 	msg.Message.Token = deviceToken
-	msg.Message.Notification = fcmNotification{Title: title, Body: body}
+	msg.Message.Notification = &fcmNotification{Title: title, Body: body}
 	if link != "" {
 		// The app reads this on tap to open the right chat.
 		msg.Message.Data = map[string]string{"url": link}
 	}
 	msg.Message.Android = fcmAndroid{
 		Priority:     "HIGH",
-		Notification: fcmAndroidNotifOpt{Tag: "kisy", ChannelID: AndroidChannelID},
+		Notification: &fcmAndroidNotifOpt{Tag: "kisy", ChannelID: AndroidChannelID},
 	}
 
+	return f.post(ctx, access, msg)
+}
+
+// post sends one already-built message and maps FCM's answer onto our
+// errors. Shared by the notification and data-only senders so both treat a
+// dead token the same way.
+func (f *FCM) post(ctx context.Context, access string, msg fcmMessage) error {
 	payload, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("push: encode FCM message: %w", err)

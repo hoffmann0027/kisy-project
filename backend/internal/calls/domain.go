@@ -95,6 +95,27 @@ func (c CallState) other(userID uuid.UUID) uuid.UUID {
 
 // --- ports (all injected in the composition root to avoid import cycles) ---
 
+// CallPusher wakes a callee whose app is not connected. Satisfied by
+// *push.Service; nil when Firebase is not configured, in which case calls
+// keep working exactly as before between connected clients.
+type CallPusher interface {
+	// HasDevices reports whether the user has anything we could ring.
+	HasDevices(ctx context.Context, userID uuid.UUID) bool
+	// SendData delivers a data-only message to every device of a user and
+	// reports whether any device took it.
+	SendData(ctx context.Context, userID uuid.UUID, data map[string]string, ttl time.Duration) bool
+}
+
+// CallPushTTL bounds how long Firebase keeps trying to deliver a ring. Past
+// it the caller has long hung up, and a phone ringing for a call nobody is
+// making is worse than a missed one.
+//
+// Deliberately shorter than RingTimeout: a push delivered at the last
+// possible moment must still leave the callee time to pick up. Equal values
+// would let the call be written off as missed in the same second the phone
+// started ringing. TestRingTimeoutOutlivesPush guards the gap.
+const CallPushTTL = 30 * time.Second
+
 // CallPublisher pushes server→client call events to a specific user's
 // connected clients (any node). Satisfied structurally by *ws.Publisher.
 type CallPublisher interface {

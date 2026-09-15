@@ -528,3 +528,109 @@ func TestUnknownSignalRejected(t *testing.T) {
 		t.Fatalf("got %v, want ErrValidation", err)
 	}
 }
+
+// fakePusher stands in for Firebase.
+type fakePusher struct {
+	devices map[uuid.UUID]bool
+	sent    []map[string]string
+	to      []uuid.UUID
+}
+
+func (p *fakePusher) HasDevices(_ context.Context, userID uuid.UUID) bool { return p.devices[userID] }
+func (p *fakePusher) SendData(_ context.Context, userID uuid.UUID, data map[string]string, _ time.Duration) bool {
+	p.to = append(p.to, userID)
+	p.sent = append(p.sent, data)
+	return p.devices[userID]
+}
+func (p *fakePusher) last(kind string) map[string]string {
+	for i := len(p.sent) - 1; i >= 0; i-- {
+		if p.sent[i]["type"] == kind {
+			return p.sent[i]
+		}
+	}
+	return nil
+}
+
+// The bug: a callee with no live WebSocket was written off as missed on the
+// spot, so a phone with the app closed — the normal state of a phone — could
+// never be called at all.
+func TestInviteRingsOfflineCalleeThroughPush(t *testing.T) {
+	h := newHarness(t)
+	pusher := &fakePusher{devices: map[uuid.UUID]bool{h.bob: true}}
+	h.svc.SetPusher(pusher)
+	h.store.online[h.bob] = false
+
+	callID := uuid.New()
+	if err := h.invite(t, h.alice, h.bob, callID); err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+
+	if h.pub.has("timeout", h.alice) {
+		t.Fatal("caller was told the call timed out immediately; the phone never got a chance to ring")
+	}
+	invite := pusher.last("call_invite")
+	if invite == nil {
+		t.Fatal("no call_invite push was sent to the offline callee")
+	}
+	if invite["callId"] != callID.String() {
+		t.Errorf("callId = %q, want %q", invite["callId"], callID)
+	}
+	if invite["callerId"] != h.alice.String() {
+		t.Errorf("callerId = %q", invite["callerId"])
+	}
+	// The call must exist, otherwise answering the push would find nothing.
+	if _, ok, _ := h.store.Get(context.Background(), callID); !ok {
+		t.Fatal("call state was not created for a pushed invite")
+	}
+}
+
+// Nothing to ring: the caller should learn that at once rather than listen to
+// a ringtone for the full timeout.
+func TestInviteFailsFastWhenCalleeHasNoDevices(t *testing.T) {
+	h := newHarness(t)
+	h.svc.SetPusher(&fakePusher{devices: map[uuid.UUID]bool{}})
+	h.store.online[h.bob] = false
+
+	if err := h.invite(t, h.alice, h.bob, uuid.New()); err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	if !h.pub.has("timeout", h.alice) {
+		t.Fatal("caller was left ringing for a callee that cannot be reached")
+	}
+}
+
+// A notification left ringing for a call the caller already dropped is the
+// worst outcome of the whole feature.
+func TestCancelAndTimeoutSilenceThePhone(t *testing.T) {
+	h := newHarness(t)
+	pusher := &fakePusher{devices: map[uuid.UUID]bool{h.bob: true}}
+	h.svc.SetPusher(pusher)
+	h.store.online[h.bob] = false
+
+	callID := uuid.New()
+	if err := h.invite(t, h.alice, h.bob, callID); err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	if err := h.signal(t, h.alice, SignalCancel, refPayload{CallID: callID}); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+	if got := pusher.last("call_cancel"); got == nil || got["callId"] != callID.String() {
+		t.Fatalf("cancel push missing or wrong: %v", got)
+	}
+
+	// And the same when nobody picks up.
+	h2 := newHarness(t)
+	pusher2 := &fakePusher{devices: map[uuid.UUID]bool{h2.bob: true}}
+	h2.svc.SetPusher(pusher2)
+	h2.store.online[h2.bob] = false
+	callID2 := uuid.New()
+	if err := h2.invite(t, h2.alice, h2.bob, callID2); err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	for _, f := range h2.fired {
+		f()
+	}
+	if got := pusher2.last("call_cancel"); got == nil || got["callId"] != callID2.String() {
+		t.Fatalf("ring timeout left the phone ringing: %v", got)
+	}
+}
