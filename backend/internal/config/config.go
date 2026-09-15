@@ -407,11 +407,20 @@ func loadDBPool() (DBPoolConfig, error) {
 		return DBPoolConfig{}, err
 	}
 
-	if maxConns < 1 {
-		return DBPoolConfig{}, fmt.Errorf("config: DB_POOL_MAX_CONNS must be >= 1")
+	// The upper bound is not cosmetic: pgxpool takes int32, and a value above
+	// it wraps to a negative pool size instead of a large one. It is also far
+	// past anything a managed Postgres would accept — Neon's free tier caps
+	// out around 100 — so a number this big is a typo, and saying so at start
+	// beats a pool that silently misbehaves.
+	const maxPoolConns = 10_000
+	if maxConns < 1 || maxConns > maxPoolConns {
+		return DBPoolConfig{}, fmt.Errorf("config: DB_POOL_MAX_CONNS must be between 1 and %d", maxPoolConns)
 	}
-	if minConns < 0 || minConns > maxConns {
-		return DBPoolConfig{}, fmt.Errorf("config: DB_POOL_MIN_CONNS must be between 0 and DB_POOL_MAX_CONNS")
+	if minConns < 0 || minConns > maxPoolConns {
+		return DBPoolConfig{}, fmt.Errorf("config: DB_POOL_MIN_CONNS must be between 0 and %d", maxPoolConns)
+	}
+	if minConns > maxConns {
+		return DBPoolConfig{}, fmt.Errorf("config: DB_POOL_MIN_CONNS must not exceed DB_POOL_MAX_CONNS")
 	}
 
 	return DBPoolConfig{

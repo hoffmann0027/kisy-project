@@ -187,3 +187,23 @@ func TestDBPoolRejectsInvalidSizing(t *testing.T) {
 		t.Fatal("expected an error when MaxConns is zero")
 	}
 }
+
+func TestDBPoolRejectsSizesThatWouldWrap(t *testing.T) {
+	// pgxpool takes int32. A value past it does not become a huge pool, it
+	// becomes a negative one — the failure looks nothing like the typo that
+	// caused it, so it is refused by name at load.
+	for _, v := range []string{"2147483648", "4294967296"} {
+		setBaseEnv(t)
+		t.Setenv("DB_POOL_MAX_CONNS", v)
+		if _, err := Load(); err == nil {
+			t.Fatalf("expected an error for DB_POOL_MAX_CONNS=%s", v)
+		}
+
+		setBaseEnv(t)
+		t.Setenv("DB_POOL_MAX_CONNS", "10")
+		t.Setenv("DB_POOL_MIN_CONNS", v)
+		if _, err := Load(); err == nil {
+			t.Fatalf("expected an error for DB_POOL_MIN_CONNS=%s", v)
+		}
+	}
+}

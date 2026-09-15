@@ -7,9 +7,24 @@ package spa
 import (
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
+
+// resolve maps a request path to a file inside dir, and can only ever name a
+// file inside it.
+//
+// The containment is structural rather than a check after the fact: a URL path
+// is rooted at "/" before it is cleaned, so every ".." is resolved against that
+// root and the leftovers are dropped — "/a/../../../etc/passwd" becomes
+// "/etc/passwd", which then joins onto dir. It is the same approach net/http
+// uses for its own file server, and it does not depend on the caller having
+// normalised anything: chi hands over the raw (percent-decoded) path, where a
+// traversal attempt arrives intact.
+func resolve(dir, urlPath string) string {
+	return filepath.Join(dir, filepath.FromSlash(path.Clean("/"+urlPath)))
+}
 
 // Handler serves static assets from dir and returns index.html for any
 // path that does not map to an existing file (SPA history routing). Assets
@@ -20,14 +35,7 @@ func Handler(dir string) http.Handler {
 	indexPath := filepath.Join(dir, "index.html")
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		clean := filepath.Clean(r.URL.Path)
-		full := filepath.Join(dir, clean)
-
-		// Guard against path traversal outside the web root.
-		if !strings.HasPrefix(full, filepath.Clean(dir)) {
-			http.NotFound(w, r)
-			return
-		}
+		full := resolve(dir, r.URL.Path)
 
 		if info, err := os.Stat(full); err == nil && !info.IsDir() {
 			if strings.HasPrefix(r.URL.Path, "/assets/") {
