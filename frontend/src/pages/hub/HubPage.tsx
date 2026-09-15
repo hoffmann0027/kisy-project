@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Icon } from "@shared/ui/icons";
 import { useNotifications } from "@entities/notification/queries";
-import { useAuthStore } from "@shared/store/auth";
+import { useCapabilities } from "@shared/lib/useCapabilities";
 import { NotificationsModal } from "@features/notifications/NotificationsModal";
 import { NotesModal } from "@features/notes/NotesModal";
 import { VotingModal } from "@features/voting/VotingModal";
@@ -23,7 +23,7 @@ export function HubPage() {
   const navigate = useNavigate();
   const [modal, setModal] = useState<Modal>(null);
   const { data: notif } = useNotifications();
-  const user = useAuthStore((st) => st.user);
+  const caps = useCapabilities();
   const unread = notif?.unreadCount ?? 0;
 
   const cards = [
@@ -34,7 +34,27 @@ export function HubPage() {
       icon: Icon.Bell,
       tint: "violet",
     },
-    { key: "voting" as const, title: "Голосования", hint: "Опросы команды", icon: Icon.Vote, tint: "orange" },
+    // The company vote board: the CEO runs it and everyone in the organisation
+    // votes. An account that nobody invited is not part of that body — and the
+    // server refuses /polls for it, so the card would only lead to an error.
+    ...(caps.canVoteLevels
+      ? [{ key: "voting" as const, title: "Голосования", hint: "Опросы команды", icon: Icon.Vote, tint: "orange" }]
+      : []),
+    // The feed's one door. An account without a rating board reaches it from
+    // the tab bar instead, and then it must not also sit here — one
+    // destination, one door (docs/spec/02-frontend-ux.md).
+    ...(caps.feedPlacement === "hub"
+      ? [
+          {
+            key: "feed" as const,
+            title: "Лента",
+            hint: "Посты сообществ",
+            icon: Icon.Board,
+            tint: "green",
+            run: () => navigate("/feed"),
+          },
+        ]
+      : []),
     { key: "notes" as const, title: "Заметки", hint: "Личные записи", icon: Icon.Note, tint: "amber" },
     { key: "feedback" as const, title: "Отзывы", hint: "Идеи и проблемы", icon: Icon.Feedback, tint: "green" },
     // Used to be reachable only from the desktop rail, i.e. not at all on a
@@ -43,13 +63,26 @@ export function HubPage() {
   ];
 
   const actions = [
-    { key: "group", label: "Новая группа", icon: Icon.FolderPlus, run: () => setModal("group") },
-    { key: "poll", label: "Создать опрос", icon: Icon.Vote, run: () => setModal("voting") },
+    // Creating a group means choosing the clearance it requires, and an
+    // account outside the hierarchy has none to choose from — the server
+    // refuses it. Groups without a threshold, which is what such an account
+    // will create, arrive with communities in the next step; until then the
+    // action is hidden rather than left to fail.
+    ...(caps.isInvited
+      ? [{ key: "group", label: "Новая группа", icon: Icon.FolderPlus, run: () => setModal("group") }]
+      : []),
+    ...(caps.canVoteLevels
+      ? [{ key: "poll", label: "Создать опрос", icon: Icon.Vote, run: () => setModal("voting") }]
+      : []),
     { key: "note", label: "Новая заметка", icon: Icon.Edit, run: () => setModal("notes") },
-    { key: "levels", label: "Условия повышения", icon: Icon.Levels, run: () => setModal("conditions") },
+    // Promotion is movement inside the role hierarchy, so it only exists for
+    // accounts that are in it.
+    ...(caps.canSeeConditions
+      ? [{ key: "levels", label: "Условия повышения", icon: Icon.Levels, run: () => setModal("conditions") }]
+      : []),
     // Invites and user management: the phone has no side rail, so the Hub and
     // the drawer are the two ways in. CEO only, as on the desktop.
-    ...(user?.roleLevel === 1
+    ...(caps.canAdmin
       ? [{ key: "admin", label: "Администрирование", icon: Icon.Shield, run: () => navigate("/admin") }]
       : []),
   ];
@@ -61,7 +94,14 @@ export function HubPage() {
 
         <div className="hub__grid">
           {cards.map((c) => (
-            <button key={c.key} type="button" className="hub-card" onClick={() => setModal(c.key)}>
+            <button
+              key={c.key}
+              type="button"
+              className="hub-card"
+              // Most cards open a dialog; a card that leads to a screen of its
+              // own says so with its own `run`.
+              onClick={() => ("run" in c && c.run ? c.run() : setModal(c.key as Modal))}
+            >
               <span className={`hub-card__badge hub-card__badge--${c.tint}`}>
                 <c.icon size={22} />
               </span>

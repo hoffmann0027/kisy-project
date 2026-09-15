@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@shared/lib/cn";
+import { useCapabilities } from "@shared/lib/useCapabilities";
 import { formatRelative } from "@shared/lib/format";
 import { Avatar, Badge, IconButton } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
@@ -35,6 +36,7 @@ interface Props {
 type Tab = "all" | "unread" | "mentions" | string;
 
 export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, onNewGroup, onOpenDrawer }: Props) {
+  const caps = useCapabilities();
   const communities = view === "communities";
   const me = useAuthStore((s) => s.user);
   const { data: chats, isPending } = useChats();
@@ -201,8 +203,8 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
           ? "Создайте группу или найдите существующую по названию"
           : "Начните диалог с коллегой или создайте групповой чат"
       }
-      actionLabel={communities ? "Новая группа" : "Новый чат"}
-      onAction={communities ? onNewGroup : onNewChat}
+      actionLabel={communities ? (caps.isInvited ? "Новая группа" : undefined) : "Новый чат"}
+      onAction={communities ? (caps.isInvited ? onNewGroup : undefined) : onNewChat}
     />
   );
 
@@ -215,9 +217,15 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
         <h1 className="chatlist__title">{communities ? "Сообщества" : "Сообщения"}</h1>
         <div style={{ display: "flex", gap: 2 }}>
           {communities ? (
-            <IconButton label="Новая группа" onClick={onNewGroup}>
-              <Icon.Plus />
-            </IconButton>
+            // Creating a group means picking the clearance it requires, which
+            // an account outside the hierarchy cannot do (the server refuses
+            // it). Communities, which such an account will create, arrive in
+            // the next step.
+            caps.isInvited && (
+              <IconButton label="Новая группа" onClick={onNewGroup}>
+                <Icon.Plus />
+              </IconButton>
+            )
           ) : (
             <>
               <IconButton label="Папки чатов" onClick={() => setManagerOpen(true)}>

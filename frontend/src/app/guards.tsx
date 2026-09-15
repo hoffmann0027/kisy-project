@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuthStore } from "@shared/store/auth";
+import { capabilitiesOf } from "@shared/lib/useCapabilities";
 import { Spinner } from "@shared/ui";
 import { ForcePasswordChange } from "@features/auth/ForcePasswordChange";
 import { OfflineNotice } from "./OfflineNotice";
@@ -34,10 +35,13 @@ export function RequireCEO({ children }: { children: ReactNode }) {
   // password form.
   if (status === "offline") return <OfflineNotice />;
   if (status === "anonymous") return <Navigate to="/login" replace />;
-  if (user?.roleLevel !== 1) return <Navigate to="/" replace />;
+  if (!capabilitiesOf(user).canAdmin) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
+// The rating board and the admin panel are both hierarchy screens: the rule
+// for who may open them lives in useCapabilities, so the guard, the rail and
+// the tab bar cannot drift apart.
 // Rating (clan board) is open to clearance levels 1–9. Level 10 ("not in a
 // clan") is bounced to the messenger; the rail shows a popup on click, this
 // guards direct URL navigation.
@@ -49,7 +53,7 @@ export function RequireRatingAccess({ children }: { children: ReactNode }) {
   // password form.
   if (status === "offline") return <OfflineNotice />;
   if (status === "anonymous") return <Navigate to="/login" replace />;
-  if ((user?.roleLevel ?? 99) > 9) return <Navigate to="/" replace />;
+  if (!capabilitiesOf(user).canSeeRating) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 

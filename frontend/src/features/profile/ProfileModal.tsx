@@ -114,7 +114,11 @@ export function ProfileModal({ open, onClose }: Props) {
         <AvatarCropper name={user.displayName} url={user.avatarUrl} size={56} onUpload={uploadAvatar} />
         <div>
           <div style={{ fontWeight: 640, fontSize: 17 }}>{user.displayName}</div>
-          <div style={{ color: "var(--color-text-secondary)", fontSize: 14 }}>{roleLabel(user.roleLevel)}</div>
+          {/* No level, no badge: inventing a rank for an account outside the
+              hierarchy would say something untrue about it. */}
+          <div style={{ color: "var(--color-text-secondary)", fontSize: 14 }}>
+            {roleLabel(user.roleLevel) || `@${user.username}`}
+          </div>
         </div>
       </div>
 

@@ -507,3 +507,13 @@ export function roleLabel(level: number | null | undefined): string {
   if (level == null) return "";
   return ROLE_LABELS[level] ?? `Level ${level}`;
 }
+
+/**
+ * The line under someone's name in a list: "@name · Руководитель", or just
+ * "@name" for an account with no level. Written once because the separator is
+ * the trap — "@name · " with nothing after it is how a missing level shows up.
+ */
+export function userSubtitle(user: Pick<User, "username" | "roleLevel">): string {
+  const label = roleLabel(user.roleLevel);
+  return label ? `@${user.username} · ${label}` : `@${user.username}`;
+}

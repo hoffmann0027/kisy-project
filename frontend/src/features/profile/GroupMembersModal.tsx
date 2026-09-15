@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Avatar, Button, Modal, Spinner, toast } from "@shared/ui";
-import { ROLE_LABELS, roleLabel, type Group, type GroupRole, type JoinPolicy, type PostPolicy } from "@shared/api/types";
+import { ROLE_LABELS, roleLabel, userSubtitle, type Group, type GroupRole, type JoinPolicy, type PostPolicy } from "@shared/api/types";
 import { groupsApi, usersApi } from "@shared/api/endpoints";
 import {
   groupKeys,
@@ -169,7 +169,7 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
                 <Avatar name={u.displayName} url={u.avatarUrl} size={34} />
                 <div style={{ flex: 1 }}>
                   <div className="user-row__name">{u.displayName}</div>
-                  <div className="user-row__role">@{u.username} · {roleLabel(u.roleLevel)}</div>
+                  <div className="user-row__role">{userSubtitle(u)}</div>
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
                   <Button variant="secondary" loading={decide.isPending} onClick={() => decide.mutate({ groupId: group.id, userId: u.id, approve: true })}>
@@ -206,7 +206,7 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
               <div style={{ flex: 1 }}>
                 <div className="user-row__name">{m.user.displayName}</div>
                 <div className="user-row__role">
-                  @{m.user.username} · {roleLabel(m.user.roleLevel)}
+                  {userSubtitle(m.user)}
                   {founder ? " · основатель" : m.role !== "member" ? ` · ${GROUP_ROLE_LABEL[m.role]}` : ""}
                 </div>
               </div>
@@ -263,7 +263,7 @@ function AddMemberPicker({ group, onDone }: { group: Group; onDone: () => void }
             <div>
               <div className="user-row__name">{u.displayName}</div>
               <div className="user-row__role">
-                @{u.username} · {roleLabel(u.roleLevel)}
+                {userSubtitle(u)}
               </div>
             </div>
           </button>

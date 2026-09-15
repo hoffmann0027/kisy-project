@@ -4,12 +4,9 @@ import { cn } from "@shared/lib/cn";
 import { Avatar, Badge, Button, Logo, Modal } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import { useAuthStore } from "@shared/store/auth";
+import { useCapabilities } from "@shared/lib/useCapabilities";
 import { useNotifications } from "@entities/notification/queries";
 import { useChats } from "@entities/chat/queries";
-
-// Rating (the clan board) is open to clearance levels 1–9; the weakest
-// level (10) is "not in a clan" and gets a small popup instead of access.
-const RATING_MAX_LEVEL = 9;
 
 interface Props {
   onProfile: () => void;
@@ -29,6 +26,7 @@ export function Rail({ onProfile }: Props) {
   const unread = notif?.unreadCount ?? 0;
   const chatUnread = chats?.reduce((sum, c) => sum + c.unreadCount, 0) ?? 0;
   const [noClan, setNoClan] = useState(false);
+  const caps = useCapabilities();
 
   if (!user) return null;
 
@@ -37,10 +35,10 @@ export function Rail({ onProfile }: Props) {
   // therefore highlights Сообщества, not Чаты.
   const onCommunities = pathname.startsWith("/communities") || pathname.startsWith("/group/");
   const onChats = !onRating && !onCommunities;
-  // An account with no level is not at the bottom of the hierarchy, it is
-  // outside it, so no threshold admits it.
-  const canRating = user.roleLevel !== null && user.roleLevel <= RATING_MAX_LEVEL;
-  const openRating = () => (canRating ? navigate("/rating") : setNoClan(true));
+  // The rail follows the same rule as the tab bar (docs/spec/02-frontend-ux.md):
+  // one door per destination, and the same destinations on both.
+  const onFeed = pathname.startsWith("/feed");
+  const openRating = () => (caps.canSeeRating ? navigate("/rating") : setNoClan(true));
 
   return (
     <nav className="rail">
@@ -48,9 +46,15 @@ export function Rail({ onProfile }: Props) {
         <Logo size={34} />
       </div>
       <div className="rail__nav">
-        <button className={cn("rail__item", onRating && "rail__item--active")} title="Рейтинг" onClick={openRating}>
-          <Icon.Trophy />
-        </button>
+        {caps.isInvited ? (
+          <button className={cn("rail__item", onRating && "rail__item--active")} title="Рейтинг" onClick={openRating}>
+            <Icon.Trophy />
+          </button>
+        ) : (
+          <button className={cn("rail__item", onFeed && "rail__item--active")} title="Лента" onClick={() => navigate("/feed")}>
+            <Icon.Board />
+          </button>
+        )}
         <button className={cn("rail__item", onChats && "rail__item--active")} title="Чаты" onClick={() => navigate("/")}>
           <Icon.Chat />
           {chatUnread > 0 && (

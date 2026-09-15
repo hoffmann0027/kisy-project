@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Avatar, Modal, Spinner, toast } from "@shared/ui";
 import { usersApi } from "@shared/api/endpoints";
-import { roleLabel, type Chat } from "@shared/api/types";
+import { userSubtitle, type Chat } from "@shared/api/types";
 import { useOpenChat } from "@entities/chat/queries";
 import { ApiError } from "@shared/api/envelope";
 
@@ -71,7 +71,7 @@ export function NewChatModal({ open, onClose, onOpened }: Props) {
             <div>
               <div className="user-row__name">{u.displayName}</div>
               <div className="user-row__role">
-                @{u.username} · {roleLabel(u.roleLevel)}
+                {userSubtitle(u)}
               </div>
             </div>
           </button>

@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@shared/lib/cn";
 import { Icon } from "@shared/ui/icons";
+import { useCapabilities } from "@shared/lib/useCapabilities";
 import "./tabbar.css";
 
 // Bottom navigation for the phone layout (design_handoff_kisy_mobile §6): a
@@ -29,6 +30,7 @@ interface Props {
 export function TabBar({ onProfile }: Props) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const caps = useCapabilities();
 
   const slots: Slot[] = [
     {
@@ -45,13 +47,24 @@ export function TabBar({ onProfile }: Props) {
       to: "/communities",
       match: (p) => p.startsWith("/communities") || p.startsWith("/group/"),
     },
-    {
-      key: "rating",
-      label: "Рейтинг",
-      icon: Icon.Trophy,
-      to: "/rating",
-      match: (p) => p.startsWith("/rating"),
-    },
+    // The third tab is whichever of the two this account actually has. An
+    // account outside the role hierarchy has no rating board — the feed takes
+    // the place rather than leaving a gap or a button that answers 403.
+    caps.canSeeRating
+      ? {
+          key: "rating",
+          label: "Рейтинг",
+          icon: Icon.Trophy,
+          to: "/rating",
+          match: (p) => p.startsWith("/rating"),
+        }
+      : {
+          key: "feed",
+          label: "Лента",
+          icon: Icon.Board,
+          to: "/feed",
+          match: (p) => p.startsWith("/feed"),
+        },
     {
       key: "profile",
       label: "Профиль",

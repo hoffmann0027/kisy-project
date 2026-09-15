@@ -16,6 +16,7 @@ import { lazy, Suspense, useState } from "react";
 const RatingPage = lazy(() => import("@pages/rating/RatingPage").then((m) => ({ default: m.RatingPage })));
 const AdminPage = lazy(() => import("@pages/admin/AdminPage").then((m) => ({ default: m.AdminPage })));
 const HubPage = lazy(() => import("@pages/hub/HubPage").then((m) => ({ default: m.HubPage })));
+const FeedPage = lazy(() => import("@pages/feed/FeedPage").then((m) => ({ default: m.FeedPage })));
 // The profile dialog is mounted on every authenticated screen but opened
 // rarely, so its code (and the theme switcher's) waits for the first open.
 const ProfileModal = lazy(() =>
@@ -74,6 +75,7 @@ export const router = createBrowserRouter([
       { path: "/communities", element: <RequireAuth><MessengerPage /></RequireAuth> },
       { path: "/group/:groupId", element: <RequireAuth><MessengerPage /></RequireAuth> },
       { path: "/hub", element: <RequireAuth><HubPage /></RequireAuth> },
+      { path: "/feed", element: <RequireAuth><FeedPage /></RequireAuth> },
       { path: "/rating", element: <RequireRatingAccess><RatingPage /></RequireRatingAccess> },
       { path: "/admin", element: <RequireCEO><AdminPage /></RequireCEO> },
     ],
