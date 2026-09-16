@@ -419,6 +419,37 @@ func TestCommunityWorkspaceIsForEditors(t *testing.T) {
 	}
 }
 
+// The "find a group" catalogue read min_role_level without COALESCE after it
+// became nullable, so a single community without a threshold made the whole
+// directory fail — for everyone.
+func TestDirectoryListsGroupsWithoutAThreshold(t *testing.T) {
+	svc, pool := newGroups(t)
+	ctx := context.Background()
+	owner := testdb.SeedUser(t, pool, "owner", 5)
+	reader := testdb.SeedUser(t, pool, "reader", 8)
+
+	c, err := svc.Create(ctx, groups.CreateInput{Name: "Open wall", Kind: groups.KindCommunity, IsPublic: true}, actor(owner, 5))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir, err := svc.Directory(ctx, actor(reader, 8))
+	if err != nil {
+		t.Fatalf("directory with a threshold-less community: %v", err)
+	}
+	var found *groups.DirectoryEntry
+	for i := range dir {
+		if dir[i].ID == c.ID {
+			found = &dir[i]
+		}
+	}
+	if found == nil {
+		t.Fatal("the open community must be in the directory")
+	}
+	if found.Kind != groups.KindCommunity || !found.IsPublic {
+		t.Fatalf("directory entry lost its kind/public flag: %+v", found.Group)
+	}
+}
+
 func containsGroup(list []groups.Group, id uuid.UUID) bool {
 	for i := range list {
 		if list[i].ID == id {

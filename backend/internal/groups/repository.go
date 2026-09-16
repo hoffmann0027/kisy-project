@@ -210,7 +210,7 @@ func (r *PostgresRepository) ListDirectory(ctx context.Context, q db.DBTX, actor
 	var out []DirectoryEntry
 	for rows.Next() {
 		var e DirectoryEntry
-		if err := rows.Scan(&e.ID, &e.Name, &e.Description, &e.AvatarURL, &e.MinRoleLevel,
+		if err := rows.Scan(&e.ID, &e.Name, &e.Description, &e.AvatarURL, &e.MinRoleLevel, &e.Kind, &e.IsPublic,
 			&e.JoinPolicy, &e.PostPolicy, &e.CreatedBy, &e.IsArchived, &e.CreatedAt, &e.UpdatedAt,
 			&e.RequestStatus); err != nil {
 			return nil, fmt.Errorf("groups: scan directory row: %w", err)
@@ -291,11 +291,18 @@ func (r *PostgresRepository) DecidePendingRequest(ctx context.Context, q db.DBTX
 	return nil
 }
 
-// prefixedGroupColumns returns groupColumns with a table alias prefix.
+// prefixedGroupColumns returns groupColumns with a table alias prefix — the
+// same columns in the same order, so rows scan through scanGroupInto.
+//
+// It used to be a hand-kept copy, and it drifted: when min_role_level became
+// nullable (migration 43) groupColumns gained its COALESCE and kind/is_public,
+// this copy gained neither, and one community without a threshold made the
+// whole "find a group" directory fail to scan.
 func prefixedGroupColumns(alias string) string {
-	return alias + ".id, " + alias + ".name, " + alias + ".description, " + alias + ".avatar_url, " +
-		alias + ".min_role_level, " + alias + ".join_policy, " + alias + ".post_policy, " +
-		alias + ".created_by, " + alias + ".is_archived, " + alias + ".created_at, " + alias + ".updated_at"
+	a := alias + "."
+	return a + "id, " + a + "name, " + a + "description, " + a + "avatar_url, COALESCE(" + a + "min_role_level, 0), " +
+		a + "kind, " + a + "is_public, " + a + "join_policy, " + a + "post_policy, " +
+		a + "created_by, " + a + "is_archived, " + a + "created_at, " + a + "updated_at"
 }
 
 func (r *PostgresRepository) AddMember(ctx context.Context, q db.DBTX, m *Member) error {
