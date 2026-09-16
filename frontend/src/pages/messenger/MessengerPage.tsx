@@ -84,6 +84,7 @@ export function MessengerPage() {
             chatType: "private",
             chatId: activeChat.id,
             title: other.displayName,
+            verified: !!other.verifiedAt,
             avatarName: other.displayName,
             avatarUrl: other.avatarUrl,
             online: chatOnline,

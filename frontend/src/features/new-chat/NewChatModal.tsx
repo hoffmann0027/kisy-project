@@ -5,6 +5,7 @@ import { usersApi } from "@shared/api/endpoints";
 import { userSubtitle, type Chat } from "@shared/api/types";
 import { useOpenChat } from "@entities/chat/queries";
 import { ApiError } from "@shared/api/envelope";
+import { VerifiedName } from "@shared/ui/VerifiedBadge";
 
 interface Props {
   open: boolean;
@@ -69,7 +70,9 @@ export function NewChatModal({ open, onClose, onOpened }: Props) {
           <button key={u.id} className="user-row" onClick={() => select(u.id)} disabled={openChat.isPending}>
             <Avatar name={u.displayName} url={u.avatarUrl} size={40} />
             <div>
-              <div className="user-row__name">{u.displayName}</div>
+              <div className="user-row__name">
+                <VerifiedName name={u.displayName} verified={!!u.verifiedAt} />
+              </div>
               <div className="user-row__role">
                 {userSubtitle(u)}
               </div>

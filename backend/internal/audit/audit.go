@@ -32,6 +32,11 @@ const (
 	ActionUserActivated      = "user.activated"
 	ActionUserDeactivated    = "user.deactivated"
 	ActionMessageForwarded   = "message.forwarded"
+	// The verification mark (migration 47), given and taken by the CEO.
+	ActionUserVerified    = "user.verified"
+	ActionUserUnverified  = "user.unverified"
+	ActionGroupVerified   = "group.verified"
+	ActionGroupUnverified = "group.unverified"
 )
 
 // Event is one audit record. Optional fields are pointers/empty strings.

@@ -840,6 +840,9 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 
 	// --- admin (CEO) ---
 	adminSvc := admin.NewService(pool, usersRepo, sessionsRepo, auditRec)
+	adminSvc.SetGroupsRepository(groupsRepo)
+	adminSvc.SetUserChanged(usersSvc.ProfileChanged)
+	adminSvc.SetGroupChanged(wsPublisher.PublishGroupChanged)
 	adminHandler := admin.NewHandler(adminSvc, audit.NewReader(pool), func(r *http.Request) (admin.ActorMeta, bool) {
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {

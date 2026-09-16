@@ -49,8 +49,11 @@ type User struct {
 	// name broke the display-name rule or collided with an earlier account's.
 	// Cleared by choosing a new name.
 	DisplayNameNeedsChange bool
-	CreatedAt              time.Time
-	UpdatedAt              time.Time
+	// VerifiedAt is when the CEO gave this account the verification mark;
+	// nil when it has none (migration 47).
+	VerifiedAt *time.Time
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 // DTO is the public representation from docs/spec/09-api-contracts.md
@@ -69,6 +72,8 @@ type DTO struct {
 	IsActive    bool       `json:"isActive"`
 	LastSeen    *time.Time `json:"lastSeen"`
 	CreatedAt   time.Time  `json:"createdAt"`
+	// VerifiedAt is non-null while the account carries the verification mark.
+	VerifiedAt *time.Time `json:"verifiedAt"`
 	// MustChangePassword is surfaced (omitempty → only when true) so the
 	// client can force a password change before granting access. Relevant on
 	// the self ("/me", login) response; harmless elsewhere.
@@ -95,6 +100,7 @@ func (u *User) ToDTO() DTO {
 		IsActive:               u.IsActive,
 		LastSeen:               u.LastSeenAt,
 		CreatedAt:              u.CreatedAt,
+		VerifiedAt:             u.VerifiedAt,
 		MustChangePassword:     u.MustChangePassword,
 		DisplayNameNeedsChange: u.DisplayNameNeedsChange,
 	}

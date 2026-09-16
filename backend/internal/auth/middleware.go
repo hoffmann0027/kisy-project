@@ -17,6 +17,14 @@ import (
 
 type ctxKey struct{}
 
+// ContextWithClaims returns ctx carrying claims, as RequireAuth leaves it.
+// For code that sits behind authentication without a request of its own —
+// and for tests of the gates that read the claims (RequireClearance,
+// RequireInvited), which should not need a database to be exercised.
+func ContextWithClaims(ctx context.Context, claims *token.AccessClaims) context.Context {
+	return context.WithValue(ctx, ctxKey{}, claims)
+}
+
 // ClaimsFromContext returns the authenticated claims placed by RequireAuth.
 func ClaimsFromContext(ctx context.Context) (*token.AccessClaims, bool) {
 	claims, ok := ctx.Value(ctxKey{}).(*token.AccessClaims)

@@ -4,8 +4,10 @@ package admin_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	"kisy-backend/internal/admin"
 	"kisy-backend/internal/audit"
 	"kisy-backend/internal/auth"
+	"kisy-backend/internal/groups"
 	"kisy-backend/internal/platform/testdb"
 	"kisy-backend/internal/users"
 )
@@ -117,5 +120,79 @@ func TestChangeRoleKeepsActorSession(t *testing.T) {
 	}
 	if s.RevokedAt != nil {
 		t.Error("the acting CEO was logged out by their own role change")
+	}
+}
+
+// The verification mark: given and taken by the CEO, visible on the DTO the
+// rest of the app renders from, and every change in the audit log.
+func TestVerificationMarkForUsersAndGroups(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	e.svc.SetGroupsRepository(groups.NewPostgresRepository())
+	gsvc := groups.NewService(e.pool, groups.NewPostgresRepository(),
+		audit.NewPostgresRecorder(slog.New(slog.NewTextHandler(io.Discard, nil))))
+
+	ceo := testdb.SeedUser(t, e.pool, "the_ceo", 1)
+	anna := testdb.SeedUser(t, e.pool, "anna", 5)
+	actor := admin.ActorMeta{UserID: ceo, SessionID: openSession(t, e, ceo), IPHash: "h", RequestID: "r"}
+	club, err := gsvc.Create(ctx, groups.CreateInput{Name: "Горный клуб", Kind: groups.KindCommunity}, groups.ActorMeta{UserID: anna, RoleLevel: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var userEvents, groupEvents []uuid.UUID
+	e.svc.SetUserChanged(func(_ context.Context, id uuid.UUID) { userEvents = append(userEvents, id) })
+	e.svc.SetGroupChanged(func(id uuid.UUID) { groupEvents = append(groupEvents, id) })
+
+	u, err := e.svc.SetUserVerified(ctx, anna, true, actor)
+	if err != nil || u.VerifiedAt == nil {
+		t.Fatalf("verify user: %v, %+v", err, u)
+	}
+	firstVerifiedAt := *u.VerifiedAt
+	// Giving it again keeps the original date.
+	if u, _ = e.svc.SetUserVerified(ctx, anna, true, actor); u.VerifiedAt == nil || !u.VerifiedAt.Equal(firstVerifiedAt) {
+		t.Fatalf("re-verifying moved the date: %v", u.VerifiedAt)
+	}
+	g, err := e.svc.SetGroupVerified(ctx, club.ID, true, actor)
+	if err != nil || g.VerifiedAt == nil {
+		t.Fatalf("verify group: %v, %+v", err, g)
+	}
+
+	found, err := e.svc.SearchForVerification(ctx, "горн")
+	if err != nil || len(found.Groups) != 1 || found.Groups[0].VerifiedAt == nil {
+		t.Fatalf("search by part of a name: %v, %+v", err, found)
+	}
+
+	if u, _ = e.svc.SetUserVerified(ctx, anna, false, actor); u.VerifiedAt != nil {
+		t.Fatal("taking the mark away must clear it")
+	}
+	if g, _ = e.svc.SetGroupVerified(ctx, club.ID, false, actor); g.VerifiedAt != nil {
+		t.Fatal("taking the group's mark away must clear it")
+	}
+
+	if len(userEvents) != 3 || len(groupEvents) != 2 {
+		t.Fatalf("clients must hear about every change: users %d, groups %d", len(userEvents), len(groupEvents))
+	}
+
+	var actions []string
+	rows, err := e.pool.Query(ctx, `SELECT action FROM audit_logs WHERE actor_id = $1 AND action LIKE '%verified' ORDER BY created_at`, ceo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var a string
+		_ = rows.Scan(&a)
+		actions = append(actions, a)
+	}
+	want := []string{"user.verified", "user.verified", "group.verified", "user.unverified", "group.unverified"}
+	if strings.Join(actions, ",") != strings.Join(want, ",") {
+		t.Fatalf("audit trail = %v, want %v", actions, want)
+	}
+
+	if _, err := e.svc.SetUserVerified(ctx, uuid.New(), true, actor); !errors.Is(err, admin.ErrNotFound) {
+		t.Fatalf("unknown user: %v", err)
+	}
+	if _, err := e.svc.SetGroupVerified(ctx, uuid.New(), true, actor); !errors.Is(err, admin.ErrGroupNotFound) {
+		t.Fatalf("unknown group: %v", err)
 	}
 }

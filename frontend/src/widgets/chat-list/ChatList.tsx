@@ -18,6 +18,7 @@ import { ChatListEmpty } from "./ChatListEmpty";
 import { ChatListSkeleton } from "./ChatListSkeleton";
 import { usePresenceStore } from "@shared/store/presence";
 import { useAuthStore } from "@shared/store/auth";
+import { VerifiedName } from "@shared/ui/VerifiedBadge";
 
 interface Props {
   /** Which column to render: private chats ("chats") or groups ("communities"). */
@@ -160,7 +161,7 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
         <Avatar name={name} url={chat.otherUser?.avatarUrl} presence={isOnline ? "online" : undefined} />
         <div className="chat-item__body">
           <div className="chat-item__row">
-            <span className="chat-item__name">{name}</span>
+            <VerifiedName className="chat-item__name" name={name} verified={!!chat.otherUser?.verifiedAt} />
             <span className="chat-item__time">{formatRelative(chat.createdAt)}</span>
           </div>
           <div className="chat-item__preview">@{chat.otherUser?.username ?? "—"}</div>

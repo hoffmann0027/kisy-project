@@ -1,0 +1,23 @@
+/* The verification mark and the name it sits beside. Colours come from the
+   SVG itself (theme tokens), so there is nothing to theme here — only layout. */
+
+.verified-badge {
+  display: inline-block;
+  flex: none;
+  vertical-align: -0.12em;
+}
+
+.verified-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.verified-name__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

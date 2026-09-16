@@ -37,11 +37,15 @@ import { useTypingStore } from "@shared/store/typing";
 import { useReadReceiptStore } from "@shared/store/readReceipts";
 import { MessageBubble, type DeliveryStatus } from "./MessageBubble";
 import { Composer } from "./Composer";
+import { VerifiedName } from "@shared/ui/VerifiedBadge";
 
 export interface ConversationTarget {
   chatType: ChatType;
   chatId: string;
   title: string;
+  /** The person or the group carries the verification mark. */
+  verified?: boolean;
+  verifiedSubject?: "user" | "group";
   avatarName: string;
   avatarUrl?: string | null;
   online?: boolean;
@@ -370,7 +374,9 @@ export function Conversation({ target, headerActions, readOnly }: Props) {
         </button>
         <Avatar name={target.avatarName} url={target.avatarUrl} presence={target.online ? "online" : undefined} />
         <div className="conv__header-body">
-          <div className="conv__title">{target.title}</div>
+          <div className="conv__title">
+            <VerifiedName name={target.title} verified={!!target.verified} subject={target.verifiedSubject} />
+          </div>
           <div className={cn("conv__status", target.online && "conv__status--online")}>
             {typers.length > 0
               ? "печатает…"

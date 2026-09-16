@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Avatar, Button, EmojiPicker, IconButton, toast } from "@shared/ui";
+import { Avatar, Button, EmojiPicker, IconButton, VerifiedName, toast } from "@shared/ui";
 import { ApiImage } from "@shared/ui/ApiImage";
 import { Icon } from "@shared/ui/icons";
 import { formatRelative } from "@shared/lib/format";
@@ -71,7 +71,7 @@ export function PostCard({ post, showCommunity = true }: Props) {
     <>
       <Avatar name={post.community.name} url={post.community.avatarUrl} size={40} />
       <span className="post__who">
-        <span className="post__community">{post.community.name}</span>
+        <VerifiedName className="post__community" name={post.community.name} verified={post.community.verified} subject="group" />
         <span className="post__time">
           {formatRelative(post.createdAt)}
           {post.editedAt && " · изменено"}

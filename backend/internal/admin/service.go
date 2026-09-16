@@ -16,6 +16,7 @@ import (
 	"kisy-backend/internal/audit"
 	"kisy-backend/internal/auth"
 	"kisy-backend/internal/auth/password"
+	"kisy-backend/internal/groups"
 	"kisy-backend/internal/users"
 )
 
@@ -42,6 +43,12 @@ type Service struct {
 	users    users.Repository
 	sessions auth.SessionRepository
 	audit    audit.Recorder
+
+	// groups backs the verification mark on groups/communities; optional so
+	// the user-only admin surface keeps working without it.
+	groups       groups.Repository
+	userChanged  func(ctx context.Context, id uuid.UUID)
+	groupChanged func(id uuid.UUID)
 }
 
 func NewService(pool *pgxpool.Pool, usersRepo users.Repository, sessions auth.SessionRepository, rec audit.Recorder) *Service {

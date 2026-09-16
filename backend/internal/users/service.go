@@ -33,6 +33,12 @@ func (s *Service) SetBroadcaster(b ProfileBroadcaster) { s.broadcast = b }
 
 // notifyProfileChanged pushes the user's fresh profile to their audience plus
 // their own other sessions. Best-effort: failures never block the edit.
+// ProfileChanged tells the user's audience that their public profile changed
+// — for changes made outside this service (the CEO's verification mark).
+func (s *Service) ProfileChanged(ctx context.Context, userID uuid.UUID) {
+	s.notifyProfileChanged(ctx, userID)
+}
+
 func (s *Service) notifyProfileChanged(ctx context.Context, userID uuid.UUID) {
 	if s.broadcast == nil {
 		return

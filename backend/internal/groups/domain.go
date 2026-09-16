@@ -86,8 +86,10 @@ type Group struct {
 	PostPolicy   string
 	CreatedBy    uuid.UUID
 	IsArchived   bool
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	// VerifiedAt is when the CEO verified the group; nil when unverified.
+	VerifiedAt *time.Time
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 type Member struct {
@@ -124,6 +126,8 @@ type DTO struct {
 	PostPolicy   string    `json:"postPolicy"`
 	CreatedBy    uuid.UUID `json:"createdBy"`
 	CreatedAt    time.Time `json:"createdAt"`
+	// VerifiedAt is non-null while the group carries the verification mark.
+	VerifiedAt *time.Time `json:"verifiedAt"`
 }
 
 func (g *Group) ToDTO() DTO {
@@ -139,6 +143,7 @@ func (g *Group) ToDTO() DTO {
 		PostPolicy:   g.PostPolicy,
 		CreatedBy:    g.CreatedBy,
 		CreatedAt:    g.CreatedAt,
+		VerifiedAt:   g.VerifiedAt,
 	}
 }
 

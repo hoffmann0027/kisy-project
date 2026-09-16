@@ -105,6 +105,8 @@ type CommunityCard struct {
 	// JoinPolicy is "open" (join instantly) or "request" (apply and wait), so
 	// the button can say which one it is before it is pressed.
 	JoinPolicy string `json:"joinPolicy"`
+	// Verified: shown as the verification mark beside the community's name.
+	Verified bool `json:"verified"`
 }
 
 // MediaDTO is a post attachment as the API returns it.

@@ -7,6 +7,7 @@ import { useAuthStore } from "@shared/store/auth";
 import { useBackHandler } from "@shared/lib/backStack";
 import { roleLabel } from "@shared/api/types";
 import "./drawer.css";
+import { VerifiedName } from "@shared/ui/VerifiedBadge";
 
 // Side drawer for the phone layout (design_handoff_kisy_mobile §7), opened by
 // the avatar in the Messages header. It carries the sections that do not fit
@@ -46,7 +47,9 @@ export function AppDrawer({ open, onClose }: Props) {
         <header className="drawer__head">
           <Avatar name={user.displayName} url={user.avatarUrl} size={46} />
           <div className="drawer__who">
-            <div className="drawer__name">{user.displayName}</div>
+            <div className="drawer__name">
+              <VerifiedName name={user.displayName} verified={!!user.verifiedAt} />
+            </div>
             <div className="drawer__role">{roleLabel(user.roleLevel)}</div>
           </div>
           <button type="button" className="drawer__close" aria-label="Закрыть" onClick={onClose}>

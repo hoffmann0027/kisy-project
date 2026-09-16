@@ -34,6 +34,8 @@ export interface User {
    * behind a rename screen until a new one is chosen. Present only when true.
    */
   displayNameNeedsChange?: boolean;
+  /** When the CEO verified the account; null/absent when it carries no mark. */
+  verifiedAt?: string | null;
 }
 
 export interface Chat {
@@ -69,6 +71,8 @@ export interface Group {
   postPolicy: PostPolicy;
   createdBy: string;
   createdAt: string;
+  /** When the CEO verified the group or community; null when it carries no mark. */
+  verifiedAt?: string | null;
 }
 
 export type GroupKind = "group" | "community";
@@ -569,6 +573,8 @@ export interface PostCommunity {
   isMember: boolean;
   /** "open" joins instantly; "request" sends an application. */
   joinPolicy: JoinPolicy;
+  /** The community carries the verification mark. */
+  verified: boolean;
 }
 
 export interface Post {

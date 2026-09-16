@@ -6,8 +6,9 @@ import { Icon } from "@shared/ui/icons";
 import { UsersTab } from "./UsersTab";
 import { InvitesTab } from "./InvitesTab";
 import { AuditTab } from "./AuditTab";
+import { VerificationTab } from "./VerificationTab";
 
-type Tab = "users" | "invites" | "audit";
+type Tab = "users" | "invites" | "verification" | "audit";
 
 export function AdminPage() {
   const [tab, setTab] = useState<Tab>("users");
@@ -29,6 +30,9 @@ export function AdminPage() {
         <button className={tabCn(tab === "invites")} onClick={() => setTab("invites")}>
           Приглашения
         </button>
+        <button className={tabCn(tab === "verification")} onClick={() => setTab("verification")}>
+          Верификация
+        </button>
         <button className={tabCn(tab === "audit")} onClick={() => setTab("audit")}>
           Аудит
         </button>
@@ -37,6 +41,7 @@ export function AdminPage() {
       <div className="admin__content">
         {tab === "users" && <UsersTab />}
         {tab === "invites" && <InvitesTab />}
+        {tab === "verification" && <VerificationTab />}
         {tab === "audit" && <AuditTab />}
       </div>
     </div>

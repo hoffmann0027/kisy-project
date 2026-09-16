@@ -3242,6 +3242,69 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /admin/verification:
+    get:
+      tags: [admin]
+      summary: Find accounts and groups for the verification mark (CEO only)
+      description: >
+        Every account (by login prefix or any part of the display name, case-
+        and space-insensitive) and every group or community (by part of the
+        name), verified ones first. No clearance filter.
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: Matches
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          users: { type: array, items: { $ref: '#/components/schemas/User' } }
+                          groups: { type: array, items: { $ref: '#/components/schemas/Group' } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/users/{userID}/verification:
+    put:
+      tags: [admin]
+      summary: Give or take away an account's verification mark (CEO only, audited)
+      description: >
+        Giving the mark again keeps its original date. Recorded in the audit
+        log as user.verified / user.unverified; the account's audience is told
+        to refetch the profile (user.updated).
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [verified], properties: { verified: { type: boolean } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Envelope' }, { properties: { data: { type: object, properties: { user: { $ref: '#/components/schemas/User' } } } } } ] } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/groups/{groupID}/verification:
+    put:
+      tags: [admin]
+      summary: Give or take away a group's or community's verification mark (CEO only, audited)
+      description: Recorded as group.verified / group.unverified; members are told via group.changed.
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [verified], properties: { verified: { type: boolean } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Envelope' }, { properties: { data: { type: object, properties: { group: { $ref: '#/components/schemas/Group' } } } } } ] } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /admin/audit:
     get:
       tags: [admin]
@@ -3618,6 +3681,10 @@ components:
         mustChangePassword:
           type: boolean
           description: Present (true) only while a new password must be set before using the app.
+        verifiedAt:
+          type: [string, 'null']
+          format: date-time
+          description: When the CEO gave the account its verification mark; null without one.
         displayNameNeedsChange:
           type: boolean
           description: >
@@ -3661,6 +3728,10 @@ components:
         postPolicy: { type: string, enum: [all, editors], description: "all = any member posts; editors = owner/editor/moderator/CEO only" }
         createdBy: { type: string, format: uuid }
         createdAt: { type: string, format: date-time }
+        verifiedAt:
+          type: [string, 'null']
+          format: date-time
+          description: When the CEO gave the group its verification mark; null without one.
     PostMedia:
       type: object
       properties:
@@ -3690,6 +3761,7 @@ components:
         name: { type: string }
         avatarUrl: { type: [string, 'null'] }
         isMember: { type: boolean }
+        verified: { type: boolean, description: The community carries the verification mark. }
         joinPolicy: { type: string, enum: [open, request] }
     Post:
       description: >

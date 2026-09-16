@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Avatar, Button, Modal, Spinner, toast } from "@shared/ui";
+import { Avatar, Button, Modal, Spinner, VerifiedName, toast } from "@shared/ui";
 import { ROLE_LABELS, roleLabel, userSubtitle, type Group, type GroupRole, type JoinPolicy, type PostPolicy } from "@shared/api/types";
 import { groupsApi, usersApi } from "@shared/api/endpoints";
 import {
@@ -115,7 +115,9 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
           <Avatar name={group.name} url={group.avatarUrl} size={56} />
         )}
         <div>
-          <div style={{ fontWeight: 640, fontSize: 17 }}>{group.name}</div>
+          <div style={{ fontWeight: 640, fontSize: 17 }}>
+            <VerifiedName name={group.name} verified={!!group.verifiedAt} size={20} subject="group" />
+          </div>
           <div style={{ color: "var(--color-text-secondary)", fontSize: 14 }}>
             {canManage ? "Нажмите на аватар, чтобы изменить" : noun[0].toUpperCase() + noun.slice(1)}
           </div>
@@ -187,7 +189,9 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
               <div key={u.id} className="user-row" style={{ cursor: "default" }}>
                 <Avatar name={u.displayName} url={u.avatarUrl} size={34} />
                 <div style={{ flex: 1 }}>
-                  <div className="user-row__name">{u.displayName}</div>
+                  <div className="user-row__name">
+                    <VerifiedName name={u.displayName} verified={!!u.verifiedAt} />
+                  </div>
                   <div className="user-row__role">{userSubtitle(u)}</div>
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
@@ -223,7 +227,9 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
             <div key={m.user.id} className="user-row" style={{ cursor: "default" }}>
               <Avatar name={m.user.displayName} url={m.user.avatarUrl} size={38} />
               <div style={{ flex: 1 }}>
-                <div className="user-row__name">{m.user.displayName}</div>
+                <div className="user-row__name">
+                  <VerifiedName name={m.user.displayName} verified={!!m.user.verifiedAt} />
+                </div>
                 <div className="user-row__role">
                   {userSubtitle(m.user)}
                   {founder ? " · основатель" : m.role !== "member" ? ` · ${GROUP_ROLE_LABEL[m.role]}` : ""}
@@ -286,7 +292,9 @@ function AddMemberPicker({ group, onDone }: { group: Group; onDone: () => void }
           <button key={u.id} className="user-row" onClick={() => pick(u.id)} disabled={add.isPending}>
             <Avatar name={u.displayName} url={u.avatarUrl} size={34} />
             <div>
-              <div className="user-row__name">{u.displayName}</div>
+              <div className="user-row__name">
+                <VerifiedName name={u.displayName} verified={!!u.verifiedAt} />
+              </div>
               <div className="user-row__role">
                 {userSubtitle(u)}
               </div>

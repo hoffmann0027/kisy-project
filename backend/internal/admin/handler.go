@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/access"
 	"kisy-backend/internal/audit"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
@@ -32,6 +33,94 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Post("/users/{userID}/activate", h.activate)
 	r.Post("/users/{userID}/deactivate", h.deactivate)
 	r.Get("/audit", h.auditLog)
+	r.Get("/verification", h.searchVerification)
+	r.Put("/users/{userID}/verification", h.setUserVerified)
+	r.Put("/groups/{groupID}/verification", h.setGroupVerified)
+}
+
+// Mount attaches /admin to r with its gates. The gates live here, next to the
+// routes, rather than at the call site: a route added to Routes is gated by
+// construction, and admin_access_test.go walks every route to prove it.
+func Mount(r chi.Router, gates Gates, h *Handler) {
+	r.Route("/admin", func(r chi.Router) {
+		r.Use(gates.RequireInvited)
+		r.Use(gates.RequireClearance(access.CEOLevel))
+		h.Routes(r)
+	})
+}
+
+// Gates is the part of the auth middleware /admin needs.
+type Gates interface {
+	RequireInvited(next http.Handler) http.Handler
+	RequireClearance(maxLevel int) func(http.Handler) http.Handler
+}
+
+func (h *Handler) searchVerification(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.actor(r); !ok {
+		unauth(w, r)
+		return
+	}
+	res, err := h.svc.SearchForVerification(r.Context(), r.URL.Query().Get("q"))
+	if err != nil {
+		internal(w, r)
+		return
+	}
+	httpresponse.OK(w, r, http.StatusOK, res)
+}
+
+type verificationRequest struct {
+	Verified bool `json:"verified"`
+}
+
+func (h *Handler) setUserVerified(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actor(r)
+	if !ok {
+		unauth(w, r)
+		return
+	}
+	targetID, ok := parseTarget(w, r)
+	if !ok {
+		return
+	}
+	var req verificationRequest
+	if err := httpjson.Decode(w, r, &req); err != nil {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "malformed JSON body")
+		return
+	}
+	dto, err := h.svc.SetUserVerified(r.Context(), targetID, req.Verified, actor)
+	if err != nil {
+		h.writeResult(w, r, err)
+		return
+	}
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"user": dto})
+}
+
+func (h *Handler) setGroupVerified(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actor(r)
+	if !ok {
+		unauth(w, r)
+		return
+	}
+	groupID, err := uuid.Parse(chi.URLParam(r, "groupID"))
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "group not found")
+		return
+	}
+	var req verificationRequest
+	if err := httpjson.Decode(w, r, &req); err != nil {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "malformed JSON body")
+		return
+	}
+	dto, err := h.svc.SetGroupVerified(r.Context(), groupID, req.Verified, actor)
+	if errors.Is(err, ErrGroupNotFound) {
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "group not found")
+		return
+	}
+	if err != nil {
+		internal(w, r)
+		return
+	}
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"group": dto})
 }
 
 func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {

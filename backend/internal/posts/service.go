@@ -23,6 +23,8 @@ type CommunityView struct {
 	IsPublic   bool
 	JoinPolicy string
 	IsMember   bool
+	// Verified: the community carries the CEO's verification mark.
+	Verified bool
 	// CanPost follows the group's own post policy and in-group role.
 	CanPost bool
 }
@@ -451,6 +453,7 @@ func (s *Service) render(ctx context.Context, rows []Post, actor ActorMeta) ([]D
 				AvatarURL:  community.AvatarURL,
 				IsMember:   community.IsMember,
 				JoinPolicy: community.JoinPolicy,
+				Verified:   community.Verified,
 			},
 			Media:     mediaDTOs(media[p.ID]),
 			Reactions: reactions[p.ID],

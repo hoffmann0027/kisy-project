@@ -561,6 +561,13 @@ export const adminApi = {
     apiClient.post<{ ok: boolean }>(`/admin/users/${userId}/reset-password`, { newPassword }),
   activate: (userId: string) => apiClient.post<{ ok: boolean }>(`/admin/users/${userId}/activate`),
   deactivate: (userId: string) => apiClient.post<{ ok: boolean }>(`/admin/users/${userId}/deactivate`),
+  /** Accounts and groups for the verification tab: login prefix or part of a name. */
+  searchVerification: (q: string) =>
+    apiClient.get<{ users: User[]; groups: Group[] }>(`/admin/verification?q=${encodeURIComponent(q)}`),
+  setUserVerified: (userId: string, verified: boolean) =>
+    apiClient.put<{ user: User }>(`/admin/users/${userId}/verification`, { verified }),
+  setGroupVerified: (groupId: string, verified: boolean) =>
+    apiClient.put<{ group: Group }>(`/admin/groups/${groupId}/verification`, { verified }),
   audit: (action = "", limit = 100, offset = 0) => {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
     if (action) params.set("action", action);

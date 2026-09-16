@@ -1,6 +1,6 @@
 import { ThemeSwitcher } from "@features/profile/ThemeSwitcher";
 import { useEffect, useState } from "react";
-import { Button, Input, Modal, toast } from "@shared/ui";
+import { Button, Input, Modal, VerifiedName, toast } from "@shared/ui";
 import { roleLabel } from "@shared/api/types";
 import { authApi, usersApi } from "@shared/api/endpoints";
 import { useAuthStore } from "@shared/store/auth";
@@ -117,7 +117,9 @@ export function ProfileModal({ open, onClose }: Props) {
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <AvatarCropper name={user.displayName} url={user.avatarUrl} size={56} onUpload={uploadAvatar} />
         <div>
-          <div style={{ fontWeight: 640, fontSize: 17 }}>{user.displayName}</div>
+          <div style={{ fontWeight: 640, fontSize: 17 }}>
+            <VerifiedName name={user.displayName} verified={!!user.verifiedAt} size={20} />
+          </div>
           {/* No level, no badge: inventing a rank for an account outside the
               hierarchy would say something untrue about it. */}
           <div style={{ color: "var(--color-text-secondary)", fontSize: 14 }}>

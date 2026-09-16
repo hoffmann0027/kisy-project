@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -30,6 +31,11 @@ type Repository interface {
 	DeleteGroupMessages(ctx context.Context, q db.DBTX, groupID uuid.UUID) error
 	// SetAvatarURL points the group's avatar_url at a (versioned) URL.
 	SetAvatarURL(ctx context.Context, q db.DBTX, id uuid.UUID, url string) error
+	// SetVerified gives or takes away the verification mark (CEO only, via admin).
+	SetVerified(ctx context.Context, q db.DBTX, id, by uuid.UUID, verified bool) error
+	// AdminSearch finds any group or community by part of its name, for the
+	// CEO's screens: no clearance filter, archived ones included.
+	AdminSearch(ctx context.Context, q db.DBTX, query string, limit int) ([]Group, error)
 	// SetMinRoleLevel changes the group's minimum clearance (its "level").
 	SetMinRoleLevel(ctx context.Context, q db.DBTX, id uuid.UUID, level int) error
 	// SetPolicies updates a group's join_policy and post_policy.
@@ -70,11 +76,11 @@ func NewPostgresRepository() *PostgresRepository { return &PostgresRepository{} 
 // the same convention users.role_id uses. Zero is never a valid level, and
 // every rule that looks at one goes through internal/access.
 const groupColumns = `id, name, description, avatar_url, COALESCE(min_role_level, 0), kind, is_public,
-	join_policy, post_policy, created_by, is_archived, created_at, updated_at`
+	join_policy, post_policy, created_by, is_archived, verified_at, created_at, updated_at`
 
 func scanGroupInto(row pgx.Row, g *Group) error {
 	return row.Scan(&g.ID, &g.Name, &g.Description, &g.AvatarURL, &g.MinRoleLevel, &g.Kind, &g.IsPublic,
-		&g.JoinPolicy, &g.PostPolicy, &g.CreatedBy, &g.IsArchived, &g.CreatedAt, &g.UpdatedAt)
+		&g.JoinPolicy, &g.PostPolicy, &g.CreatedBy, &g.IsArchived, &g.VerifiedAt, &g.CreatedAt, &g.UpdatedAt)
 }
 
 func scanGroup(row pgx.Row) (*Group, error) {
@@ -211,7 +217,7 @@ func (r *PostgresRepository) ListDirectory(ctx context.Context, q db.DBTX, actor
 	for rows.Next() {
 		var e DirectoryEntry
 		if err := rows.Scan(&e.ID, &e.Name, &e.Description, &e.AvatarURL, &e.MinRoleLevel, &e.Kind, &e.IsPublic,
-			&e.JoinPolicy, &e.PostPolicy, &e.CreatedBy, &e.IsArchived, &e.CreatedAt, &e.UpdatedAt,
+			&e.JoinPolicy, &e.PostPolicy, &e.CreatedBy, &e.IsArchived, &e.VerifiedAt, &e.CreatedAt, &e.UpdatedAt,
 			&e.RequestStatus); err != nil {
 			return nil, fmt.Errorf("groups: scan directory row: %w", err)
 		}
@@ -302,7 +308,7 @@ func prefixedGroupColumns(alias string) string {
 	a := alias + "."
 	return a + "id, " + a + "name, " + a + "description, " + a + "avatar_url, COALESCE(" + a + "min_role_level, 0), " +
 		a + "kind, " + a + "is_public, " + a + "join_policy, " + a + "post_policy, " +
-		a + "created_by, " + a + "is_archived, " + a + "created_at, " + a + "updated_at"
+		a + "created_by, " + a + "is_archived, " + a + "verified_at, " + a + "created_at, " + a + "updated_at"
 }
 
 func (r *PostgresRepository) AddMember(ctx context.Context, q db.DBTX, m *Member) error {
@@ -389,4 +395,41 @@ func (r *PostgresRepository) ListMemberIDs(ctx context.Context, q db.DBTX, group
 		ids = append(ids, id)
 	}
 	return ids, rows.Err()
+}
+
+func (r *PostgresRepository) SetVerified(ctx context.Context, q db.DBTX, id, by uuid.UUID, verified bool) error {
+	tag, err := q.Exec(ctx, `
+		UPDATE groups
+		SET verified_at = CASE WHEN $2 THEN COALESCE(verified_at, now()) END,
+		    verified_by = CASE WHEN $2 THEN COALESCE(verified_by, $3) END
+		WHERE id = $1`, id, verified, by)
+	if err != nil {
+		return fmt.Errorf("groups: set verified: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *PostgresRepository) AdminSearch(ctx context.Context, q db.DBTX, query string, limit int) ([]Group, error) {
+	rows, err := q.Query(ctx, `
+		SELECT `+groupColumns+`
+		FROM groups
+		WHERE $1 = '' OR strpos(lower(name), lower($1)) > 0
+		ORDER BY (verified_at IS NULL), created_at DESC, id DESC
+		LIMIT $2`, strings.TrimSpace(query), limit)
+	if err != nil {
+		return nil, fmt.Errorf("groups: admin search: %w", err)
+	}
+	defer rows.Close()
+	var out []Group
+	for rows.Next() {
+		var g Group
+		if err := scanGroupInto(rows, &g); err != nil {
+			return nil, fmt.Errorf("groups: scan admin search row: %w", err)
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
 }

@@ -59,6 +59,10 @@ type Repository interface {
 	UpdateRole(ctx context.Context, q db.DBTX, id uuid.UUID, roleID int) error
 	SetActive(ctx context.Context, q db.DBTX, id uuid.UUID, active bool) error
 	List(ctx context.Context, q db.DBTX, limit, offset int) ([]User, error)
+	// SetVerified gives or takes away the verification mark (CEO only, via admin).
+	SetVerified(ctx context.Context, q db.DBTX, id, by uuid.UUID, verified bool) error
+	// AdminSearch finds any account by login prefix or part of the name.
+	AdminSearch(ctx context.Context, q db.DBTX, query string, limit int) ([]User, error)
 	// Search returns the active users an actor is allowed to find, excluding
 	// themselves. What that means depends on whether the actor has a level at
 	// all — see the implementation.
@@ -80,15 +84,22 @@ func NewPostgresRepository() *PostgresRepository { return &PostgresRepository{} 
 const userColumns = `
 	id, username::text, display_name, password_hash, COALESCE(role_id, 0), account_kind,
 	avatar_url, status, last_seen_at, is_active, failed_login_attempts, locked_until,
-	must_change_password, display_name_needs_change, created_at, updated_at`
+	must_change_password, display_name_needs_change, verified_at, created_at, updated_at`
+
+// scanUserInto reads one row of userColumns. The one place the column order is
+// spelled out on the Go side: four hand-kept copies of this list were how a
+// new column could reach three queries and silently miss the fourth.
+func scanUserInto(row pgx.Row, u *User) error {
+	return row.Scan(
+		&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &u.RoleID, &u.AccountKind,
+		&u.AvatarURL, &u.Status, &u.LastSeenAt, &u.IsActive, &u.FailedLoginAttempts,
+		&u.LockedUntil, &u.MustChangePassword, &u.DisplayNameNeedsChange, &u.VerifiedAt, &u.CreatedAt, &u.UpdatedAt,
+	)
+}
 
 func scanUser(row pgx.Row) (*User, error) {
 	var u User
-	err := row.Scan(
-		&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &u.RoleID, &u.AccountKind,
-		&u.AvatarURL, &u.Status, &u.LastSeenAt, &u.IsActive, &u.FailedLoginAttempts,
-		&u.LockedUntil, &u.MustChangePassword, &u.DisplayNameNeedsChange, &u.CreatedAt, &u.UpdatedAt,
-	)
+	err := scanUserInto(row, &u)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -278,12 +289,53 @@ func (r *PostgresRepository) List(ctx context.Context, q db.DBTX, limit, offset 
 	var out []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(
-			&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &u.RoleID, &u.AccountKind,
-			&u.AvatarURL, &u.Status, &u.LastSeenAt, &u.IsActive, &u.FailedLoginAttempts,
-			&u.LockedUntil, &u.MustChangePassword, &u.DisplayNameNeedsChange, &u.CreatedAt, &u.UpdatedAt,
-		); err != nil {
+		if err := scanUserInto(rows, &u); err != nil {
 			return nil, fmt.Errorf("users: scan list row: %w", err)
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// SetVerified gives (verified) or takes away the verification mark. by is the
+// CEO who gave it; it is cleared along with the mark. Giving it again keeps the
+// original date.
+func (r *PostgresRepository) SetVerified(ctx context.Context, q db.DBTX, id, by uuid.UUID, verified bool) error {
+	tag, err := q.Exec(ctx, `
+		UPDATE users
+		SET verified_at = CASE WHEN $2 THEN COALESCE(verified_at, now()) END,
+		    verified_by = CASE WHEN $2 THEN COALESCE(verified_by, $3) END
+		WHERE id = $1`, id, verified, by)
+	if err != nil {
+		return fmt.Errorf("users: set verified: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// AdminSearch finds accounts for the CEO's verification screen: every account,
+// by the start of the login or any part of the display name. Not the directory
+// (Search) — no clearance filter, inactive accounts included.
+func (r *PostgresRepository) AdminSearch(ctx context.Context, q db.DBTX, query string, limit int) ([]User, error) {
+	query = strings.TrimSpace(query)
+	rows, err := q.Query(ctx, `SELECT`+userColumns+`
+		FROM users
+		WHERE $1 = ''
+		   OR strpos(lower(username::text), lower($1)) = 1
+		   OR strpos(display_name_key, kisy_display_name_key($1)) > 0
+		ORDER BY (verified_at IS NULL), username
+		LIMIT $2`, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("users: admin search: %w", err)
+	}
+	defer rows.Close()
+	var out []User
+	for rows.Next() {
+		var u User
+		if err := scanUserInto(rows, &u); err != nil {
+			return nil, fmt.Errorf("users: scan admin search row: %w", err)
 		}
 		out = append(out, u)
 	}
@@ -322,11 +374,7 @@ func (r *PostgresRepository) Search(ctx context.Context, q db.DBTX, actorID uuid
 	var out []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(
-			&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &u.RoleID, &u.AccountKind,
-			&u.AvatarURL, &u.Status, &u.LastSeenAt, &u.IsActive, &u.FailedLoginAttempts,
-			&u.LockedUntil, &u.MustChangePassword, &u.DisplayNameNeedsChange, &u.CreatedAt, &u.UpdatedAt,
-		); err != nil {
+		if err := scanUserInto(rows, &u); err != nil {
 			return nil, fmt.Errorf("users: scan search row: %w", err)
 		}
 		out = append(out, u)
@@ -359,11 +407,7 @@ func (r *PostgresRepository) searchByFullName(
 	var out []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(
-			&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &u.RoleID, &u.AccountKind,
-			&u.AvatarURL, &u.Status, &u.LastSeenAt, &u.IsActive, &u.FailedLoginAttempts,
-			&u.LockedUntil, &u.MustChangePassword, &u.DisplayNameNeedsChange, &u.CreatedAt, &u.UpdatedAt,
-		); err != nil {
+		if err := scanUserInto(rows, &u); err != nil {
 			return nil, fmt.Errorf("users: scan name lookup row: %w", err)
 		}
 		out = append(out, u)

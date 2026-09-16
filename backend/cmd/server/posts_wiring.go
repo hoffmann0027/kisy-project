@@ -48,6 +48,7 @@ func (c postsCommunities) Resolve(
 		IsPublic:   g.IsPublic,
 		JoinPolicy: g.JoinPolicy,
 		IsMember:   vs.Member,
+		Verified:   g.VerifiedAt != nil,
 		CanPost:    vs.CanPost,
 	}, nil
 }

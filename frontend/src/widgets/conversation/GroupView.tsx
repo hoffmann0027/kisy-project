@@ -11,6 +11,7 @@ import { BoardView } from "@widgets/board/BoardView";
 import { CalendarView } from "@widgets/calendar/CalendarView";
 import { GroupMembersModal } from "@features/profile/GroupMembersModal";
 import { CommunityWall } from "@widgets/feed/CommunityWall";
+import { VerifiedName } from "@shared/ui/VerifiedBadge";
 
 type Tab = "chat" | "board" | "calendar" | "posts";
 
@@ -103,7 +104,9 @@ export function GroupView({ group }: { group: Group }) {
             <Icon.Back size={22} />
           </button>
           <div className="conv__header-body">
-            <div className="conv__title">{group.name}</div>
+            <div className="conv__title">
+              <VerifiedName name={group.name} verified={!!group.verifiedAt} subject="group" />
+            </div>
             <div className="conv__status">{group.isPublic ? "Открытое сообщество" : "Закрытое сообщество"}</div>
           </div>
           {tabs}
@@ -122,7 +125,9 @@ export function GroupView({ group }: { group: Group }) {
             <Icon.Back size={22} />
           </button>
           <div className="conv__header-body">
-            <div className="conv__title">{group.name}</div>
+            <div className="conv__title">
+              <VerifiedName name={group.name} verified={!!group.verifiedAt} subject="group" />
+            </div>
             <div className="conv__status">{shown === "board" ? "Доска задач" : "Календарь"}</div>
           </div>
           {tabs}
@@ -140,6 +145,8 @@ export function GroupView({ group }: { group: Group }) {
           chatType: "group",
           chatId: group.id,
           title: group.name,
+          verified: !!group.verifiedAt,
+          verifiedSubject: "group",
           avatarName: group.name,
           avatarUrl: group.avatarUrl,
           offlineLabel: levelLabel,

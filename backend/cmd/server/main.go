@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"errors"
+	"kisy-backend/internal/admin"
 	"log/slog"
 	"net/http"
 	"os"
@@ -312,11 +313,8 @@ func newRouter(d routerDeps) http.Handler {
 				m.pushHandler.Routes(r)
 			})
 
-			r.Route("/admin", func(r chi.Router) {
-				r.Use(m.authMW.RequireInvited)
-				r.Use(m.authMW.RequireClearance(1)) // CEO only
-				m.adminHandler.Routes(r)
-			})
+			// CEO only; the gates travel with the routes (admin.Mount).
+			admin.Mount(r, m.authMW, m.adminHandler)
 
 			r.Route("/groups", func(r chi.Router) {
 				// Reads are visibility-filtered; creation is open to any
