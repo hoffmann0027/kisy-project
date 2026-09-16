@@ -50,6 +50,8 @@ public class CallAudioSessionTest {
         }
 
         @Override public boolean isProximityLockHeld() { return lockHeld; }
+        int silenced;
+        @Override public void silenceRinger() { silenced++; }
         @Override public void publish(CallAudioSession.Route route, boolean speaker) { published.add(route.wire + ":" + speaker); }
     }
 
@@ -60,6 +62,46 @@ public class CallAudioSessionTest {
     public void setUp() {
         phone = new FakePhone();
         session = new CallAudioSession(phone);
+    }
+
+    @org.junit.After
+    public void tearDown() {
+        session.end(); // the in-call flag is process-wide; leave it clear
+    }
+
+    // --- the ringer during a call ------------------------------------------
+    //
+    // The server sends the call push even when the app is open, and it can
+    // land after the call was answered in the app. A ringtone started then
+    // plays through the whole conversation — and in MODE_IN_COMMUNICATION
+    // Android turns it into its in-call notification tone: a short double
+    // beep, over and over.
+
+    @Test
+    public void afterConnectedTheRingerIsStopped() {
+        session.start(false);
+        assertTrue("the ringer must be silenced when the call has media", phone.silenced >= 1);
+    }
+
+    @Test
+    public void everyRouteChangeSilencesTheRingerAgain() {
+        session.start(false);
+        int afterStart = phone.silenced;
+        session.setSpeaker(true);
+        assertTrue(phone.silenced > afterStart);
+        int afterSpeaker = phone.silenced;
+        phone.wired = true;
+        session.devicesChanged();
+        assertTrue("a ringer restarted mid-call is stopped on the next route change", phone.silenced > afterSpeaker);
+    }
+
+    @Test
+    public void aCallPushDoesNotRingWhileACallIsInProgress() {
+        assertFalse(CallAudioSession.callInProgress());
+        session.start(false);
+        assertTrue("a late call push must not start the ringer during a call", CallAudioSession.callInProgress());
+        session.end();
+        assertFalse("the next call must ring again", CallAudioSession.callInProgress());
     }
 
     @Test

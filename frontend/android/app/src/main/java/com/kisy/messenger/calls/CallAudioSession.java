@@ -56,6 +56,25 @@ public final class CallAudioSession {
 
         /** Reports the route now in effect to the web layer. */
         void publish(Route route, boolean speakerRequested);
+
+        /** Stops the incoming-call ringer and takes its notification away. Idempotent. */
+        void silenceRinger();
+    }
+
+    /**
+     * Whether this device is on a call right now, for code that has no session
+     * at hand — the push service. Process-wide because there is one call at a
+     * time and one plugin instance holding it.
+     */
+    private static volatile boolean inCall;
+
+    /**
+     * True while a call has media. A call push arriving now is for the call
+     * already being talked on — the server sends it even to an open app, and
+     * Firebase can deliver it seconds after the answer — so it must not ring.
+     */
+    public static boolean callInProgress() {
+        return inCall;
     }
 
     private final Platform platform;
@@ -72,6 +91,7 @@ public final class CallAudioSession {
     public synchronized void start(boolean isVideo) {
         if (!active) platform.enterCallMode();
         active = true;
+        inCall = true;
         video = isVideo;
         speakerRequested = isVideo;
         apply();
@@ -96,6 +116,7 @@ public final class CallAudioSession {
      */
     public synchronized void end() {
         if (platform.isProximityLockHeld()) platform.releaseProximityLock();
+        inCall = false;
         if (!active) return;
         active = false;
         video = false;
@@ -113,6 +134,11 @@ public final class CallAudioSession {
     }
 
     private void apply() {
+        // Every time the route is applied, not only once: a ringer that
+        // started after the call connected (a late call push) is stopped at the
+        // next route change rather than beeping through the rest of the call.
+        platform.silenceRinger();
+
         Route next;
         if (platform.hasWiredHeadset()) next = Route.WIRED;
         else if (platform.hasBluetoothHeadset()) next = Route.BLUETOOTH;

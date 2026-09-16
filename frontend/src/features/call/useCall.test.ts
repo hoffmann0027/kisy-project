@@ -276,3 +276,73 @@ describe("call audio", () => {
     expect(result.current.view.audioRoute).toBeNull();
   });
 });
+
+describe("ringing after the call connects", () => {
+  // Answering first and hearing the ring afterwards is the regression this
+  // guards: whatever rang — the in-app tone or the native ringer woken by a
+  // late call push — has to be silenced by the call connecting, and again on
+  // every route change, not only at the moment of answering.
+  async function connectedCall() {
+    api.pending.mockResolvedValue({ call: ringingCall });
+    const hook = renderHook(() => useCall());
+    await waitFor(() => expect(hook.result.current.view.phase).toBe("incoming"));
+    const created: FakePeerConnection[] = [];
+    const Tracking = class extends FakePeerConnection {
+      constructor() {
+        super();
+        created.push(this);
+      }
+    };
+    Object.defineProperty(globalThis, "RTCPeerConnection", { value: Tracking, configurable: true });
+    await hook.result.current.accept();
+    await waitFor(() => expect(created).toHaveLength(1));
+    return { ...hook, pc: created[0] };
+  }
+
+  it("stops both ringers when the connection reaches connected", async () => {
+    const { result, pc } = await connectedCall();
+    const { ringtone } = await import("./ringtone");
+    const { stopNativeRinging } = await import("@shared/lib/nativeCall");
+    vi.mocked(ringtone.stop).mockClear();
+    vi.mocked(stopNativeRinging).mockClear();
+
+    pc.connectionState = "connected";
+    (pc.onconnectionstatechange as () => void)();
+
+    await waitFor(() => expect(result.current.view.phase).toBe("active"));
+    expect(ringtone.stop).toHaveBeenCalled();
+    expect(stopNativeRinging).toHaveBeenCalled();
+  });
+
+  it("leaves the ringback alone while still dialing out", async () => {
+    const Dialing = class extends FakePeerConnection {
+      createOffer = vi.fn(async () => ({ type: "offer", sdp: "offer-sdp" }));
+    };
+    Object.defineProperty(globalThis, "RTCPeerConnection", { value: Dialing, configurable: true });
+    const { result } = renderHook(() => useCall());
+    await result.current.startCall({ id: "user-2", displayName: "Пётр", avatarUrl: null }, "chat-1");
+    await waitFor(() => expect(result.current.view.phase).toBe("outgoing"));
+    const { ringtone } = await import("./ringtone");
+    vi.mocked(ringtone.stop).mockClear();
+    for (const fn of audio.listeners) fn({ route: "speaker", speaker: true });
+    await waitFor(() => expect(result.current.view.audioRoute).toBe("speaker"));
+    expect(ringtone.stop).not.toHaveBeenCalled();
+  });
+
+  it("silences them again on every route change during the call", async () => {
+    const { result, pc } = await connectedCall();
+    pc.connectionState = "connected";
+    (pc.onconnectionstatechange as () => void)();
+    await waitFor(() => expect(result.current.view.phase).toBe("active"));
+
+    const { ringtone } = await import("./ringtone");
+    const { stopNativeRinging } = await import("@shared/lib/nativeCall");
+    for (const round of [1, 2]) {
+      vi.mocked(ringtone.stop).mockClear();
+      vi.mocked(stopNativeRinging).mockClear();
+      for (const fn of audio.listeners) fn({ route: round === 1 ? "speaker" : "earpiece", speaker: round === 1 });
+      await waitFor(() => expect(stopNativeRinging).toHaveBeenCalled());
+      expect(ringtone.stop).toHaveBeenCalled();
+    }
+  });
+});

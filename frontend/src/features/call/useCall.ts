@@ -87,6 +87,8 @@ export function useCall() {
   // Mirrors view.speaker for callbacks that must not re-create on every toggle.
   const speakerRef = useRef(false);
   speakerRef.current = view.speaker;
+  const phaseRef = useRef<CallPhase>("idle");
+  phaseRef.current = view.phase;
 
   if (!remoteAudio.current && typeof window !== "undefined") {
     remoteAudio.current = new Audio();
@@ -166,7 +168,11 @@ export function useCall() {
       const st = pc.connectionState;
       setView((v) => (v.phase === "idle" || v.phase === "ended" ? v : { ...v, conn: st }));
       if (st === "connected") {
+        // Both ringers, not only the in-app tone: the native one can have been
+        // started after the answer by a late call push, and nothing else would
+        // stop it before its own 50-second timeout.
         ringtone.stop();
+        void stopNativeRinging();
         setView((v) =>
           v.phase === "idle" || v.phase === "ended"
             ? v
@@ -432,6 +438,14 @@ export function useCall() {
   useEffect(
     () =>
       onAudioRoute(({ route, speaker }) => {
+        // A route change is a moment the call is certainly live, so it is also
+        // where a ringer that outlived the answer gets stopped — again, every
+        // time; stopping twice costs nothing. Not while dialing out, where the
+        // ringback tone is the point.
+        if (phaseRef.current === "connecting" || phaseRef.current === "active") {
+          ringtone.stop();
+          void stopNativeRinging();
+        }
         setView((v) => (v.phase === "idle" || v.phase === "ended" ? v : { ...v, audioRoute: route, speaker }));
       }),
     [],

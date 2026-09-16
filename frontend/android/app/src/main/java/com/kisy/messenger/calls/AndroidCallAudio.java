@@ -42,6 +42,7 @@ final class AndroidCallAudio implements CallAudioSession.Platform {
         void onRoute(CallAudioSession.Route route, boolean speakerRequested);
     }
 
+    private final Context context;
     private final AudioManager audio;
     private final PowerManager.WakeLock proximity;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -63,6 +64,7 @@ final class AndroidCallAudio implements CallAudioSession.Platform {
     };
 
     AndroidCallAudio(Context context, Listener listener) {
+        this.context = context.getApplicationContext();
         this.audio = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         // Tablets and some phones have no proximity sensor; there the call
@@ -221,6 +223,15 @@ final class AndroidCallAudio implements CallAudioSession.Platform {
     @Override
     public boolean isProximityLockHeld() {
         return proximity != null && proximity.isHeld();
+    }
+
+    @Override
+    public void silenceRinger() {
+        // Only when something is actually ringing: dismiss() also closes the
+        // call screen, which is not ours to touch otherwise.
+        if (CallRinger.current() == null) return;
+        Log.i(TAG, "call audio: ringer still going during the call — stopped");
+        CallNotifications.dismiss(context);
     }
 
     @Override
