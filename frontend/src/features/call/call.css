@@ -103,14 +103,28 @@
 .call-btn--decline:hover {
   background: #e5352b;
 }
-.call-btn--mute {
+/* Microphone and loudspeaker: two-state switches. Off is a quiet key in the
+   theme's own colours, on is the accent — the state has to be readable at a
+   glance, with the phone just taken from the ear. */
+.call-btn--toggle {
   width: 52px;
   height: 52px;
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--key-bg);
+  box-shadow: var(--key-sh);
+  color: var(--key-ink);
 }
-.call-btn--mute.call-btn--on {
-  background: #fff;
-  color: #111;
+.call-btn--toggle.call-btn--on {
+  background: var(--acc);
+  color: var(--acc-on);
+}
+/* A headset has the sound: not a switch, an indicator in its place. */
+.call-btn--route {
+  cursor: default;
+  background: var(--acc-soft);
+  color: var(--acc);
+}
+.call-btn--route:active {
+  transform: none;
 }
 .call-btn__label {
   font-size: 12px;

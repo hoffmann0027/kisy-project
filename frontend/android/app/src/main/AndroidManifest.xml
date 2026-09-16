@@ -77,11 +77,21 @@
          requests it on first sign-in; denying it only costs push, not chat. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- 1:1 voice calls: the WebView needs the mic for getUserMedia, and
-         MODIFY_AUDIO_SETTINGS lets WebRTC switch to the call audio mode. -->
+    <!-- 1:1 voice calls: the WebView needs the mic for getUserMedia.
+         MODIFY_AUDIO_SETTINGS is what lets KisyCallPlugin put the call into
+         MODE_IN_COMMUNICATION and choose earpiece, loudspeaker or headset
+         (calls/AndroidCallAudio.java); without it the sound stays wherever
+         the WebView put it, which is the loudspeaker. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <!-- Keep the socket alive briefly while the screen is off during a call. -->
+    <!-- Before Android 12 a Bluetooth headset is reached through an SCO link,
+         which needs this install-time permission. From 12 on the headset is
+         picked as a communication device and no Bluetooth permission is
+         involved, so it is capped rather than turned into a runtime prompt. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <!-- The proximity lock that blanks the screen at the ear during a voice
+         call (PROXIMITY_SCREEN_OFF_WAKE_LOCK), and keeping the socket alive
+         briefly while the screen is off. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- An incoming call has to take over a locked screen, not queue up as a

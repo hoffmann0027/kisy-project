@@ -72,6 +72,13 @@ jobs:
       - name: Sync the bundle into the Android project
         run: npx cap sync android
 
+      # The native call rules (earpiece/loudspeaker/headset routing and the
+      # proximity lock being released when a call ends) are plain JUnit tests.
+      # They run before the APK is built, so a broken rule never ships.
+      - name: Native unit tests
+        run: ./gradlew --no-daemon testDebugUnitTest
+        working-directory: frontend/android
+
       - name: Assemble debug APK
         run: ./gradlew --no-daemon assembleDebug
         working-directory: frontend/android

@@ -122,6 +122,21 @@ export const Icon = {
       </>,
       size,
     ),
+  Speaker: ({ size }: IconProps) =>
+    svg(
+      <>
+        <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+        <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+        <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+      </>,
+      size,
+    ),
+  Headphones: ({ size }: IconProps) =>
+    svg(
+      <path d="M3 18v-6a9 9 0 0 1 18 0v6M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3ZM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3Z" />,
+      size,
+    ),
+  Bluetooth: ({ size }: IconProps) => svg(<path d="m7 7 10 10-5 5V2l5 5L7 17" />, size),
   Folder: ({ size }: IconProps) =>
     svg(
       <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />,

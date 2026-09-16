@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Avatar } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import type { CallView } from "./useCall";
+import { SpeakerControl } from "./SpeakerControl";
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -27,10 +28,13 @@ export function OngoingCall({
   view,
   onHangup,
   onToggleMute,
+  onToggleSpeaker,
 }: {
   view: CallView;
   onHangup: () => void;
   onToggleMute: () => void;
+  /** Absent where sound cannot be routed (a browser): then there is no button. */
+  onToggleSpeaker?: () => void;
 }) {
   const [elapsed, setElapsed] = useState(0);
 
@@ -64,7 +68,7 @@ export function OngoingCall({
         <div className="call-actions">
           <div className="call-btn-group">
             <button
-              className={"call-btn call-btn--mute" + (view.muted ? " call-btn--on" : "")}
+              className={"call-btn call-btn--toggle" + (view.muted ? " call-btn--on" : "")}
               onClick={onToggleMute}
               aria-label={view.muted ? "Включить микрофон" : "Выключить микрофон"}
             >
@@ -72,6 +76,7 @@ export function OngoingCall({
             </button>
             <span className="call-btn__label">{view.muted ? "Вкл. микр." : "Микрофон"}</span>
           </div>
+          {onToggleSpeaker && <SpeakerControl view={view} onToggle={onToggleSpeaker} />}
           <div className="call-btn-group">
             <button className="call-btn call-btn--decline" onClick={onHangup} aria-label="Завершить">
               <Icon.PhoneOff size={26} />

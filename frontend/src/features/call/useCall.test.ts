@@ -13,6 +13,13 @@ const native = vi.hoisted(() => ({
   listeners: new Set<(d: { action: "accept" | "reject"; callId: string }) => void>(),
 }));
 
+const audio = vi.hoisted(() => ({
+  start: vi.fn(async (_video: boolean) => {}),
+  setSpeaker: vi.fn(async (_on: boolean) => {}),
+  stop: vi.fn(async () => {}),
+  listeners: new Set<(s: { route: string; speaker: boolean }) => void>(),
+}));
+
 vi.mock("@shared/lib/nativeCall", () => ({
   takeNativeCallDecision: vi.fn(async () => native.decision),
   onNativeCallDecision: vi.fn((fn: (d: { action: "accept" | "reject"; callId: string }) => void) => {
@@ -21,6 +28,13 @@ vi.mock("@shared/lib/nativeCall", () => ({
   }),
   stopNativeRinging: vi.fn(async () => {}),
   reportFullScreenIntent: vi.fn(async () => true),
+  startCallAudio: audio.start,
+  setCallSpeaker: audio.setSpeaker,
+  stopCallAudio: audio.stop,
+  onAudioRoute: vi.fn((fn: (s: { route: string; speaker: boolean }) => void) => {
+    audio.listeners.add(fn);
+    return () => audio.listeners.delete(fn);
+  }),
 }));
 
 vi.mock("@shared/lib/nativePush", () => ({ CALL_PUSH_EVENT: "kisy:call-push" }));
@@ -69,6 +83,7 @@ beforeEach(() => {
   Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
   native.decision = null;
   native.listeners.clear();
+  audio.listeners.clear();
   api.pending.mockResolvedValue({ call: null });
   Object.defineProperty(globalThis, "RTCPeerConnection", { value: FakePeerConnection, configurable: true });
   Object.defineProperty(globalThis.navigator, "mediaDevices", {
@@ -202,5 +217,62 @@ describe("a call declined on the native screen", () => {
     for (const fn of native.listeners) fn({ action: "reject", callId: ringingCall.callId });
     await new Promise((r) => setTimeout(r, 20));
     expect(api.reject).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("call audio", () => {
+  it("routes a voice call to the earpiece while it has media, and releases it when it ends", async () => {
+    // Mounting with no call clears anything a reloaded WebView left behind.
+    api.pending.mockResolvedValue({ call: ringingCall });
+    const { result } = renderHook(() => useCall());
+    await waitFor(() => expect(audio.stop).toHaveBeenCalled());
+    expect(audio.start).not.toHaveBeenCalled();
+
+    // Ringing is not a call yet: the ringtone belongs on the loudspeaker.
+    await waitFor(() => expect(result.current.view.phase).toBe("incoming"));
+    expect(audio.start).not.toHaveBeenCalled();
+
+    await result.current.accept();
+    await waitFor(() => expect(audio.start).toHaveBeenCalledWith(false));
+    expect(result.current.view.speaker).toBe(false);
+
+    audio.stop.mockClear();
+    result.current.hangup();
+    await waitFor(() => expect(audio.stop).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps the loudspeaker choice in the call state and applies it through the plugin", async () => {
+    api.pending.mockResolvedValue({ call: ringingCall });
+    const { result } = renderHook(() => useCall());
+    await waitFor(() => expect(result.current.view.phase).toBe("incoming"));
+    await result.current.accept();
+    await waitFor(() => expect(result.current.view.phase).toBe("connecting"));
+
+    result.current.toggleSpeaker();
+    await waitFor(() => expect(result.current.view.speaker).toBe(true));
+    expect(audio.setSpeaker).toHaveBeenLastCalledWith(true);
+
+    result.current.toggleSpeaker();
+    await waitFor(() => expect(result.current.view.speaker).toBe(false));
+    expect(audio.setSpeaker).toHaveBeenLastCalledWith(false);
+  });
+
+  it("shows the route the phone reports, so a headset replaces the loudspeaker button", async () => {
+    api.pending.mockResolvedValue({ call: ringingCall });
+    const { result } = renderHook(() => useCall());
+    await waitFor(() => expect(result.current.view.phase).toBe("incoming"));
+    await result.current.accept();
+    await waitFor(() => expect(result.current.view.phase).toBe("connecting"));
+
+    for (const fn of audio.listeners) fn({ route: "bluetooth", speaker: false });
+    await waitFor(() => expect(result.current.view.audioRoute).toBe("bluetooth"));
+  });
+
+  it("ignores route reports when there is no call", async () => {
+    const { result } = renderHook(() => useCall());
+    await waitFor(() => expect(audio.stop).toHaveBeenCalled());
+    for (const fn of audio.listeners) fn({ route: "wired", speaker: false });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(result.current.view.audioRoute).toBeNull();
   });
 });

@@ -1,5 +1,6 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { useBackHandler } from "@shared/lib/backStack";
+import { isNative } from "@shared/lib/native";
 import "./call.css";
 import { useCall, type CallPeer } from "./useCall";
 import { IncomingCallCard } from "./IncomingCallCard";
@@ -27,7 +28,10 @@ export function useCallControls(): CallContextValue {
 // app. Mounted once inside the authenticated layout so calls survive route
 // changes and reach every page.
 export function CallProvider({ children }: { children: ReactNode }) {
-  const { view, startCall, accept, reject, hangup, toggleMute } = useCall();
+  const { view, startCall, accept, reject, hangup, toggleMute, toggleSpeaker } = useCall();
+  // Only the phone app can move sound between earpiece and loudspeaker; a
+  // browser tab plays wherever the system sends it, so it gets no button.
+  const speaker = isNative() ? toggleSpeaker : undefined;
   const busy = view.phase !== "idle" && view.phase !== "ended";
 
   // A call is not dismissed with back — hanging up is a decision, and the
@@ -42,9 +46,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
       {view.phase === "incoming" && view.peer && (
         <IncomingCallCard peer={view.peer} onAccept={() => void accept()} onReject={reject} />
       )}
-      {view.phase === "outgoing" && view.peer && <OutgoingCall peer={view.peer} onCancel={hangup} />}
+      {view.phase === "outgoing" && view.peer && <OutgoingCall peer={view.peer} view={view} onCancel={hangup} onToggleSpeaker={speaker} />}
       {(view.phase === "connecting" || view.phase === "active") && (
-        <OngoingCall view={view} onHangup={hangup} onToggleMute={toggleMute} />
+        <OngoingCall view={view} onHangup={hangup} onToggleMute={toggleMute} onToggleSpeaker={speaker} />
       )}
       {view.phase === "ended" && view.endedReason && <div className="call-ended">{view.endedReason}</div>}
     </CallContext.Provider>

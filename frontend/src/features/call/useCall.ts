@@ -3,10 +3,15 @@ import { wsClient } from "@shared/ws/client";
 import { CALL_PUSH_EVENT } from "@shared/lib/nativePush";
 import { callLog } from "@shared/lib/callLog";
 import {
+  onAudioRoute,
   onNativeCallDecision,
   reportFullScreenIntent,
+  setCallSpeaker,
+  startCallAudio,
+  stopCallAudio,
   stopNativeRinging,
   takeNativeCallDecision,
+  type AudioRoute,
   type NativeCallDecision,
 } from "@shared/lib/nativeCall";
 import type { CallIncomingData, ServerEvent } from "@shared/ws/events";
@@ -30,6 +35,13 @@ export interface CallView {
   error: string | null;
   endedReason: string | null;
   startedAt: number | null;
+  /** The loudspeaker button's state. A voice call starts with it off: at the ear. */
+  speaker: boolean;
+  /**
+   * Where the sound actually goes, as the phone reports it — null until the
+   * native layer answers, and always null in a browser, which cannot route.
+   */
+  audioRoute: AudioRoute | null;
 }
 
 const idleView: CallView = {
@@ -41,6 +53,8 @@ const idleView: CallView = {
   error: null,
   endedReason: null,
   startedAt: null,
+  speaker: false,
+  audioRoute: null,
 };
 
 interface Session {
@@ -70,6 +84,9 @@ export function useCall() {
   // before the microphone is asked for.
   const deferredAnswer = useRef<string | null>(null);
   const endTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Mirrors view.speaker for callbacks that must not re-create on every toggle.
+  const speakerRef = useRef(false);
+  speakerRef.current = view.speaker;
 
   if (!remoteAudio.current && typeof window !== "undefined") {
     remoteAudio.current = new Audio();
@@ -278,6 +295,16 @@ export function useCall() {
     teardown();
   }, [teardown, view.phase]);
 
+  // The state lives here and the phone follows it: the button reads view.speaker,
+  // and the native layer reports back where the sound really went (a headset
+  // overrides the button without changing what the button asked for).
+  const toggleSpeaker = useCallback(() => {
+    const next = !speakerRef.current;
+    speakerRef.current = next;
+    setView((v) => ({ ...v, speaker: next }));
+    void setCallSpeaker(next);
+  }, []);
+
   const toggleMute = useCallback(() => {
     const track = session.current?.localStream?.getAudioTracks()[0];
     if (!track) return;
@@ -386,6 +413,30 @@ export function useCall() {
     [accept, resumePending, teardown],
   );
 
+  // Call audio follows the call: on while there is (or is about to be) media,
+  // off otherwise. The first run, with no call, also clears whatever a
+  // WebView reloaded mid-call left behind — a proximity lock that nobody
+  // releases is a screen that stays dark.
+  const inCallAudio = view.phase === "outgoing" || view.phase === "connecting" || view.phase === "active";
+  useEffect(() => {
+    if (inCallAudio) void startCallAudio(false);
+    else void stopCallAudio();
+  }, [inCallAudio]);
+
+  // The WebView chooses its own route — the loudspeaker — once the remote audio
+  // starts playing, which is after we set ours. Re-assert it on connect.
+  useEffect(() => {
+    if (view.phase === "active") void setCallSpeaker(speakerRef.current);
+  }, [view.phase]);
+
+  useEffect(
+    () =>
+      onAudioRoute(({ route, speaker }) => {
+        setView((v) => (v.phase === "idle" || v.phase === "ended" ? v : { ...v, audioRoute: route, speaker }));
+      }),
+    [],
+  );
+
   useEffect(() => {
     void reportFullScreenIntent();
 
@@ -484,9 +535,10 @@ export function useCall() {
     return () => {
       unsub();
       cleanupMedia();
+      void stopCallAudio();
       if (endTimer.current) clearTimeout(endTimer.current);
     };
   }, [cleanupMedia, finishWith, flushIce, onIncoming]);
 
-  return { view, startCall, accept, reject, hangup, toggleMute };
+  return { view, startCall, accept, reject, hangup, toggleMute, toggleSpeaker };
 }
