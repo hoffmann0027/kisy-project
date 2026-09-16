@@ -19,7 +19,7 @@ interface AuthState {
   /** Fetches the current session on app start (cookie-based). */
   bootstrap: () => Promise<void>;
   login: (username: string, password: string) => Promise<void>;
-  register: (inviteToken: string, username: string, password: string) => Promise<void>;
+  register: (inviteToken: string, username: string, displayName: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: User) => void;
 }
@@ -65,8 +65,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user, status: "authenticated" });
   },
 
-  register: async (inviteToken, username, password) => {
-    const { user } = await authApi.register(inviteToken, username, password);
+  register: async (inviteToken, username, displayName, password) => {
+    const { user } = await authApi.register(inviteToken, username, displayName, password);
     set({ user, status: "authenticated" });
   },
 

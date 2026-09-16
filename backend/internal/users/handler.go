@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -128,12 +127,11 @@ func (h *Handler) patchMe(w http.ResponseWriter, r *http.Request) {
 	var u *User
 
 	if req.DisplayName != nil {
-		name := strings.TrimSpace(*req.DisplayName)
-		if n := len([]rune(name)); n < 1 || n > 64 {
-			httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "display name must be 1-64 characters")
+		updated, err := h.svc.ChangeDisplayName(r.Context(), id.UserID, *req.DisplayName, h.meta(r))
+		if IsDisplayNameError(err) {
+			FailDisplayName(w, r, err)
 			return
 		}
-		updated, err := h.svc.ChangeDisplayName(r.Context(), id.UserID, name, h.meta(r))
 		if err != nil {
 			httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
 			return
@@ -189,4 +187,17 @@ func (h *Handler) uploadAvatar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpresponse.OK(w, r, http.StatusOK, map[string]any{"user": u.ToDTO()})
+}
+
+// FailDisplayName writes the response for a display-name rule error. Shared
+// with registration so the client gets the same codes from both.
+func FailDisplayName(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, ErrDisplayNameTaken):
+		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrDisplayNameTaken, "Имя занято")
+	case errors.Is(err, ErrDisplayNameCharacters):
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrDisplayNameInvalid, "Только буквы и одиночные пробелы между словами")
+	default:
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrDisplayNameInvalid, "Имя: от 2 до 40 символов")
+	}
 }

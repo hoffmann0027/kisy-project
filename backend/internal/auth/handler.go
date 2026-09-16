@@ -100,6 +100,7 @@ func clientIP(r *http.Request) string { return clientip.From(r) }
 type registerRequest struct {
 	InviteToken string `json:"inviteToken"`
 	Username    string `json:"username"`
+	DisplayName string `json:"displayName"`
 	Password    string `json:"password"`
 }
 
@@ -128,7 +129,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := h.svc.Register(r.Context(), req.InviteToken, req.Username, req.Password, h.ClientMeta(r))
+	res, err := h.svc.Register(r.Context(), req.InviteToken, req.Username, req.DisplayName, req.Password, h.ClientMeta(r))
 	if err != nil {
 		h.writeAuthError(w, r, err)
 		return
@@ -254,6 +255,8 @@ func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
 // leaking internals.
 func (h *Handler) writeAuthError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case users.IsDisplayNameError(err):
+		users.FailDisplayName(w, r, err)
 	case errors.Is(err, ErrInvalidCredentials):
 		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidCredentials, "invalid username or password")
 	case errors.Is(err, ErrAccountLocked):

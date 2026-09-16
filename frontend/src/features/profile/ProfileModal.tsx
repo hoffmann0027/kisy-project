@@ -9,6 +9,7 @@ import { useNotificationSettings, useUpdateNotificationSettings } from "@entitie
 import type { GroupNotifyMode } from "@shared/api/endpoints";
 import { PermissionsModal } from "@features/permissions/PermissionsModal";
 import { AvatarCropper } from "./AvatarCropper";
+import { displayNameErrorMessage, displayNameProblem, normalizeDisplayName } from "@shared/lib/displayName";
 
 interface Props {
   open: boolean;
@@ -56,10 +57,11 @@ export function ProfileModal({ open, onClose }: Props) {
 
   const saveProfile = async () => {
     const fields: { displayName?: string; username?: string } = {};
-    const trimmedName = displayName.trim();
+    const trimmedName = normalizeDisplayName(displayName);
     if (trimmedName !== user.displayName) {
-      if (trimmedName.length < 1 || trimmedName.length > 64) {
-        toast.error("Отображаемое имя: 1–64 символа");
+      const problem = displayNameProblem(trimmedName);
+      if (problem) {
+        toast.error(problem);
         return;
       }
       fields.displayName = trimmedName;
@@ -80,8 +82,8 @@ export function ProfileModal({ open, onClose }: Props) {
       const { user: updated } = await usersApi.updateProfile(fields);
       setUser(updated);
       toast.success("Профиль обновлён");
-    } catch {
-      toast.error("Не удалось обновить профиль (возможно, логин занят)");
+    } catch (e) {
+      toast.error(displayNameErrorMessage(e) ?? "Не удалось обновить профиль (возможно, логин занят)");
     } finally {
       setBusy(false);
     }

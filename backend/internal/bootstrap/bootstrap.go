@@ -41,12 +41,22 @@ func EnsureCEO(ctx context.Context, pool *pgxpool.Pool, repo users.Repository, r
 		return err
 	}
 
+	// The login is the first display name the CEO gets. When it does not pass
+	// the display-name rule (digits, an underscore), the account is created
+	// flagged, and the first sign-in asks for a real name — the same screen
+	// migration 46 sends everyone else with an invalid name to.
+	displayName, nameErr := users.NormalizeDisplayName(username)
+	if nameErr != nil {
+		displayName = username
+	}
+
 	u := &users.User{
-		Username:     username,
-		DisplayName:  username,
-		PasswordHash: hash,
-		RoleID:       1, // CEO
-		AccountKind:  users.KindInvited,
+		Username:               username,
+		DisplayName:            displayName,
+		DisplayNameNeedsChange: nameErr != nil,
+		PasswordHash:           hash,
+		RoleID:                 1, // CEO
+		AccountKind:            users.KindInvited,
 		// The seed password comes from configuration and may have been shared
 		// out-of-band, so force a change at first login (§2 of the July 2026
 		// security update). The frontend blocks the app until it is changed.

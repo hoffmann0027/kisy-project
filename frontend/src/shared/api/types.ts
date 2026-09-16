@@ -28,6 +28,12 @@ export interface User {
   /** When true the account must set a new password before using the app
    * (seeded bootstrap CEO). Absent/false otherwise. */
   mustChangePassword?: boolean;
+  /**
+   * The account's name broke the display-name rule or collided with an
+   * earlier account's when the rule arrived (migration 46): the app stays
+   * behind a rename screen until a new one is chosen. Present only when true.
+   */
+  displayNameNeedsChange?: boolean;
 }
 
 export interface Chat {

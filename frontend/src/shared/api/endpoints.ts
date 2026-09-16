@@ -61,9 +61,9 @@ export const authApi = {
     apiClient
       .post<WithTokens<{ user: User }>>("/auth/login", { username, password })
       .then(keepTokens),
-  register: (inviteToken: string, username: string, password: string) =>
+  register: (inviteToken: string, username: string, displayName: string, password: string) =>
     apiClient
-      .post<WithTokens<{ user: User }>>("/auth/register", { inviteToken, username, password })
+      .post<WithTokens<{ user: User }>>("/auth/register", { inviteToken, username, displayName, password })
       .then(keepTokens),
   logout: () =>
     apiClient.post<{ loggedOut: boolean }>("/auth/logout").finally(() => saveTokens(null)),

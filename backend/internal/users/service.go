@@ -135,9 +135,16 @@ func (s *Service) ChangeUsername(ctx context.Context, userID uuid.UUID, newUsern
 
 // ChangeDisplayName updates the human-facing name shown across the UI and
 // propagates it to the actor's audience so cached names refresh live.
-func (s *Service) ChangeDisplayName(ctx context.Context, userID uuid.UUID, displayName string, meta ActorMeta) (*User, error) {
-	if err := s.repo.UpdateDisplayName(ctx, s.pool, userID, displayName); err != nil {
+//
+// The name is normalized and checked here (NormalizeDisplayName), so every way
+// into this — the profile, the blocking rename screen — applies the same rule.
+func (s *Service) ChangeDisplayName(ctx context.Context, userID uuid.UUID, raw string, meta ActorMeta) (*User, error) {
+	displayName, err := NormalizeDisplayName(raw)
+	if err != nil {
 		return nil, err
+	}
+	if err := s.repo.UpdateDisplayName(ctx, s.pool, userID, displayName); err != nil {
+		return nil, err // ErrDisplayNameTaken passes through
 	}
 	_ = s.audit.Record(ctx, s.pool, audit.Event{
 		ActorID:    &userID,

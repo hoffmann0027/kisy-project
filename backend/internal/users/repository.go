@@ -17,6 +17,23 @@ import (
 
 const pgUniqueViolation = "23505"
 
+// The unique index on the display-name key (migration 46). Named so a
+// collision on the name is not reported as a taken username.
+const displayNameKeyIndex = "uq_users_display_name_key"
+
+// uniqueViolation turns a unique-index failure into the domain error for the
+// column that collided, or returns nil for any other error (or none).
+func uniqueViolation(err error) error {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != pgUniqueViolation {
+		return nil
+	}
+	if strings.HasPrefix(pgErr.ConstraintName, displayNameKeyIndex) {
+		return ErrDisplayNameTaken
+	}
+	return ErrUsernameTaken
+}
+
 // Repository is the persistence port for users. Methods take a db.DBTX so
 // they compose into transactions owned by application services.
 type Repository interface {
@@ -63,14 +80,14 @@ func NewPostgresRepository() *PostgresRepository { return &PostgresRepository{} 
 const userColumns = `
 	id, username::text, display_name, password_hash, COALESCE(role_id, 0), account_kind,
 	avatar_url, status, last_seen_at, is_active, failed_login_attempts, locked_until,
-	must_change_password, created_at, updated_at`
+	must_change_password, display_name_needs_change, created_at, updated_at`
 
 func scanUser(row pgx.Row) (*User, error) {
 	var u User
 	err := row.Scan(
 		&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &u.RoleID, &u.AccountKind,
 		&u.AvatarURL, &u.Status, &u.LastSeenAt, &u.IsActive, &u.FailedLoginAttempts,
-		&u.LockedUntil, &u.MustChangePassword, &u.CreatedAt, &u.UpdatedAt,
+		&u.LockedUntil, &u.MustChangePassword, &u.DisplayNameNeedsChange, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
@@ -94,15 +111,14 @@ func (r *PostgresRepository) Create(ctx context.Context, q db.DBTX, u *User) err
 	}
 
 	err := q.QueryRow(ctx, `
-		INSERT INTO users (username, display_name, password_hash, role_id, account_kind, must_change_password)
-		VALUES ($1, $2, $3, NULLIF($4, 0), $5, $6)
+		INSERT INTO users (username, display_name, password_hash, role_id, account_kind, must_change_password, display_name_needs_change)
+		VALUES ($1, $2, $3, NULLIF($4, 0), $5, $6, $7)
 		RETURNING id, status, is_active, failed_login_attempts, must_change_password, created_at, updated_at`,
-		u.Username, u.DisplayName, u.PasswordHash, u.RoleID, u.AccountKind, u.MustChangePassword,
+		u.Username, u.DisplayName, u.PasswordHash, u.RoleID, u.AccountKind, u.MustChangePassword, u.DisplayNameNeedsChange,
 	).Scan(&u.ID, &u.Status, &u.IsActive, &u.FailedLoginAttempts, &u.MustChangePassword, &u.CreatedAt, &u.UpdatedAt)
 
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation {
-		return ErrUsernameTaken
+	if err := uniqueViolation(err); err != nil {
+		return err
 	}
 	if err != nil {
 		return fmt.Errorf("users: create: %w", err)
@@ -142,8 +158,16 @@ func (r *PostgresRepository) UpdateUsername(ctx context.Context, q db.DBTX, id u
 	return nil
 }
 
+// UpdateDisplayName sets a name that has already passed NormalizeDisplayName.
+// Choosing a name is also what resolves the migration-46 flag, so both happen
+// in one statement — and the unique index sees the new name as unflagged, which
+// is what makes a collision fail right here as ErrDisplayNameTaken.
 func (r *PostgresRepository) UpdateDisplayName(ctx context.Context, q db.DBTX, id uuid.UUID, displayName string) error {
-	tag, err := q.Exec(ctx, `UPDATE users SET display_name = $2 WHERE id = $1`, id, displayName)
+	tag, err := q.Exec(ctx,
+		`UPDATE users SET display_name = $2, display_name_needs_change = false WHERE id = $1`, id, displayName)
+	if uerr := uniqueViolation(err); uerr != nil {
+		return uerr
+	}
 	if err != nil {
 		return fmt.Errorf("users: update display name: %w", err)
 	}
@@ -257,7 +281,7 @@ func (r *PostgresRepository) List(ctx context.Context, q db.DBTX, limit, offset 
 		if err := rows.Scan(
 			&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &u.RoleID, &u.AccountKind,
 			&u.AvatarURL, &u.Status, &u.LastSeenAt, &u.IsActive, &u.FailedLoginAttempts,
-			&u.LockedUntil, &u.MustChangePassword, &u.CreatedAt, &u.UpdatedAt,
+			&u.LockedUntil, &u.MustChangePassword, &u.DisplayNameNeedsChange, &u.CreatedAt, &u.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("users: scan list row: %w", err)
 		}
@@ -301,7 +325,7 @@ func (r *PostgresRepository) Search(ctx context.Context, q db.DBTX, actorID uuid
 		if err := rows.Scan(
 			&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &u.RoleID, &u.AccountKind,
 			&u.AvatarURL, &u.Status, &u.LastSeenAt, &u.IsActive, &u.FailedLoginAttempts,
-			&u.LockedUntil, &u.MustChangePassword, &u.CreatedAt, &u.UpdatedAt,
+			&u.LockedUntil, &u.MustChangePassword, &u.DisplayNameNeedsChange, &u.CreatedAt, &u.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("users: scan search row: %w", err)
 		}
@@ -324,7 +348,7 @@ func (r *PostgresRepository) searchByFullName(
 	rows, err := q.Query(ctx, `SELECT`+userColumns+`
 		FROM users
 		WHERE is_active = true AND id <> $1
-		  AND (username = $2 OR lower(display_name) = lower($2))
+		  AND (username = $2 OR display_name_key = kisy_display_name_key($2))
 		ORDER BY username ASC
 		LIMIT $3`, actorID, needle, limit)
 	if err != nil {
@@ -338,7 +362,7 @@ func (r *PostgresRepository) searchByFullName(
 		if err := rows.Scan(
 			&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &u.RoleID, &u.AccountKind,
 			&u.AvatarURL, &u.Status, &u.LastSeenAt, &u.IsActive, &u.FailedLoginAttempts,
-			&u.LockedUntil, &u.MustChangePassword, &u.CreatedAt, &u.UpdatedAt,
+			&u.LockedUntil, &u.MustChangePassword, &u.DisplayNameNeedsChange, &u.CreatedAt, &u.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("users: scan name lookup row: %w", err)
 		}

@@ -38,6 +38,10 @@ const (
 	ErrRateLimited            = "RATE_LIMITED"
 	ErrValidationFailed       = "VALIDATION_FAILED"
 	ErrInternal               = "INTERNAL_ERROR"
+	// Display names (migration 46) get their own codes: the sign-up and rename
+	// forms have to tell "taken" from "not allowed" without parsing a message.
+	ErrDisplayNameTaken   = "DISPLAY_NAME_TAKEN"
+	ErrDisplayNameInvalid = "DISPLAY_NAME_INVALID"
 )
 
 func requestID(r *http.Request) string {

@@ -45,8 +45,12 @@ type User struct {
 	FailedLoginAttempts int
 	LockedUntil         *time.Time
 	MustChangePassword  bool
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
+	// DisplayNameNeedsChange is set by migration 46 on accounts whose existing
+	// name broke the display-name rule or collided with an earlier account's.
+	// Cleared by choosing a new name.
+	DisplayNameNeedsChange bool
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
 }
 
 // DTO is the public representation from docs/spec/09-api-contracts.md
@@ -69,6 +73,9 @@ type DTO struct {
 	// client can force a password change before granting access. Relevant on
 	// the self ("/me", login) response; harmless elsewhere.
 	MustChangePassword bool `json:"mustChangePassword,omitempty"`
+	// DisplayNameNeedsChange (omitempty → only when true) makes the client
+	// stop at a blocking "choose a new name" screen, like MustChangePassword.
+	DisplayNameNeedsChange bool `json:"displayNameNeedsChange,omitempty"`
 }
 
 func (u *User) ToDTO() DTO {
@@ -78,16 +85,17 @@ func (u *User) ToDTO() DTO {
 		level = &l
 	}
 	return DTO{
-		ID:                 u.ID,
-		Username:           u.Username,
-		DisplayName:        u.DisplayName,
-		RoleLevel:          level,
-		AccountKind:        u.AccountKind,
-		AvatarURL:          u.AvatarURL,
-		Status:             u.Status,
-		IsActive:           u.IsActive,
-		LastSeen:           u.LastSeenAt,
-		CreatedAt:          u.CreatedAt,
-		MustChangePassword: u.MustChangePassword,
+		ID:                     u.ID,
+		Username:               u.Username,
+		DisplayName:            u.DisplayName,
+		RoleLevel:              level,
+		AccountKind:            u.AccountKind,
+		AvatarURL:              u.AvatarURL,
+		Status:                 u.Status,
+		IsActive:               u.IsActive,
+		LastSeen:               u.LastSeenAt,
+		CreatedAt:              u.CreatedAt,
+		MustChangePassword:     u.MustChangePassword,
+		DisplayNameNeedsChange: u.DisplayNameNeedsChange,
 	}
 }

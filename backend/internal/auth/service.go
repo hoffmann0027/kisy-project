@@ -214,7 +214,14 @@ func (s *Service) openSession(ctx context.Context, u *users.User, meta ClientMet
 // Register redeems an invitation token and creates the account, marking
 // the invitation used in the same transaction (single-use guarantee), then
 // opens the first session.
-func (s *Service) Register(ctx context.Context, inviteToken, username, plainPassword string, meta ClientMeta) (*LoginResult, error) {
+func (s *Service) Register(ctx context.Context, inviteToken, username, rawDisplayName, plainPassword string, meta ClientMeta) (*LoginResult, error) {
+	// Checked before anything is spent: an invitation is single-use, and it
+	// must not be consumed by a sign-up that then fails on the name.
+	displayName, err := users.NormalizeDisplayName(rawDisplayName)
+	if err != nil {
+		return nil, err
+	}
+
 	// No token offered: an ordinary account, outside the role hierarchy.
 	//
 	// A token that was offered and turned out to be bad is a different story
@@ -222,7 +229,7 @@ func (s *Service) Register(ctx context.Context, inviteToken, username, plainPass
 	// someone a working account while telling them nothing about the
 	// invitation they thought they were using.
 	if strings.TrimSpace(inviteToken) == "" {
-		return s.registerWithoutInvite(ctx, username, plainPassword, meta)
+		return s.registerWithoutInvite(ctx, username, displayName, plainPassword, meta)
 	}
 
 	now := time.Now().UTC()
@@ -252,13 +259,13 @@ func (s *Service) Register(ctx context.Context, inviteToken, username, plainPass
 
 	u := &users.User{
 		Username:     username,
-		DisplayName:  username,
+		DisplayName:  displayName,
 		PasswordHash: hash,
 		RoleID:       DefaultRegisteredRoleLevel,
 		AccountKind:  users.KindInvited,
 	}
 	if err := s.users.Create(ctx, tx, u); err != nil {
-		return nil, err // users.ErrUsernameTaken passes through
+		return nil, err // users.ErrUsernameTaken and ErrDisplayNameTaken pass through
 	}
 
 	if err := s.invites.MarkUsed(ctx, tx, inv.ID, u.ID, now); err != nil {
@@ -306,7 +313,7 @@ func (s *Service) Register(ctx context.Context, inviteToken, username, plainPass
 // but everything built on levels (the rating board, promotions, level votes,
 // administration) is not merely hidden from it, it does not apply.
 func (s *Service) registerWithoutInvite(
-	ctx context.Context, username, plainPassword string, meta ClientMeta,
+	ctx context.Context, username, displayName, plainPassword string, meta ClientMeta,
 ) (*LoginResult, error) {
 	if !s.registrationOpen {
 		return nil, ErrRegistrationClosed
@@ -326,13 +333,13 @@ func (s *Service) registerWithoutInvite(
 
 	u := &users.User{
 		Username:     username,
-		DisplayName:  username,
+		DisplayName:  displayName,
 		PasswordHash: hash,
 		RoleID:       access.NoLevel,
 		AccountKind:  users.KindBasic,
 	}
 	if err := s.users.Create(ctx, tx, u); err != nil {
-		return nil, err // users.ErrUsernameTaken passes through
+		return nil, err // users.ErrUsernameTaken and ErrDisplayNameTaken pass through
 	}
 
 	if err := s.audit.Record(ctx, tx, audit.Event{

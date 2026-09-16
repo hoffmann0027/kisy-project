@@ -30,6 +30,7 @@ function fillAndSubmit(inviteCode?: string) {
     fireEvent.change(screen.getByLabelText(label), { target: { value } });
   if (inviteCode) type("Код приглашения", inviteCode);
   type("Имя пользователя", "new_person");
+  type("Имя", "Новый Человек");
   type("Пароль", "long-enough-1");
   type("Повторите пароль", "long-enough-1");
   fireEvent.click(screen.getByRole("button", { name: "Создать аккаунт" }));
@@ -55,7 +56,7 @@ describe("registering without an invitation", () => {
 
     fillAndSubmit();
 
-    await waitFor(() => expect(store.register).toHaveBeenCalledWith("", "new_person", "long-enough-1"));
+    await waitFor(() => expect(store.register).toHaveBeenCalledWith("", "new_person", "Новый Человек", "long-enough-1"));
   });
 
   it("says the code is optional", async () => {
@@ -71,7 +72,7 @@ describe("registering without an invitation", () => {
     fillAndSubmit("invitation-token");
 
     await waitFor(() =>
-      expect(store.register).toHaveBeenCalledWith("invitation-token", "new_person", "long-enough-1"),
+      expect(store.register).toHaveBeenCalledWith("invitation-token", "new_person", "Новый Человек", "long-enough-1"),
     );
   });
 });
@@ -98,7 +99,33 @@ describe("a deployment that stayed invitation-only", () => {
     fillAndSubmit("invitation-token");
 
     await waitFor(() =>
-      expect(store.register).toHaveBeenCalledWith("invitation-token", "new_person", "long-enough-1"),
+      expect(store.register).toHaveBeenCalledWith("invitation-token", "new_person", "Новый Человек", "long-enough-1"),
     );
+  });
+});
+
+describe("the display name", () => {
+  it("is required to be letters only, before anything is sent", async () => {
+    renderPage();
+    await waitFor(() => expect(api.registrationPolicy).toHaveBeenCalled());
+    fireEvent.change(screen.getByLabelText("Имя пользователя"), { target: { value: "new_person" } });
+    fireEvent.change(screen.getByLabelText("Имя"), { target: { value: "new_person" } });
+    fireEvent.change(screen.getByLabelText("Пароль"), { target: { value: "long-enough-1" } });
+    fireEvent.change(screen.getByLabelText("Повторите пароль"), { target: { value: "long-enough-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Создать аккаунт" }));
+
+    expect(await screen.findByText("Только буквы и одиночные пробелы между словами")).toBeTruthy();
+    expect(store.register).not.toHaveBeenCalled();
+  });
+
+  it("shows «Имя занято» under the field when the server says so", async () => {
+    const { ApiError } = await import("@shared/api/envelope");
+    store.register.mockRejectedValueOnce(new ApiError("DISPLAY_NAME_TAKEN", "Имя занято", "r", 409));
+    renderPage();
+    await waitFor(() => expect(api.registrationPolicy).toHaveBeenCalled());
+    fillAndSubmit();
+
+    expect(await screen.findByText("Имя занято")).toBeTruthy();
+    expect(toasts.error).not.toHaveBeenCalled();
   });
 });

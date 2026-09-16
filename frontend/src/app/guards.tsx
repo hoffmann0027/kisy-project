@@ -4,6 +4,7 @@ import { useAuthStore } from "@shared/store/auth";
 import { capabilitiesOf } from "@shared/lib/useCapabilities";
 import { Spinner } from "@shared/ui";
 import { ForcePasswordChange } from "@features/auth/ForcePasswordChange";
+import { ForceDisplayNameChange } from "@features/auth/ForceDisplayNameChange";
 import { OfflineNotice } from "./OfflineNotice";
 
 function FullScreenLoader() {
@@ -17,6 +18,7 @@ function FullScreenLoader() {
 export function RequireAuth({ children }: { children: ReactNode }) {
   const status = useAuthStore((s) => s.status);
   const mustChange = useAuthStore((s) => s.user?.mustChangePassword ?? false);
+  const mustRename = useAuthStore((s) => s.user?.displayNameNeedsChange ?? false);
   if (status === "loading") return <FullScreenLoader />;
   // Unreachable is not signed out: never answer a missing network with a
   // password form.
@@ -24,6 +26,9 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   if (status === "anonymous") return <Navigate to="/login" replace />;
   // A seeded/reset password must be replaced before anything else loads.
   if (mustChange) return <ForcePasswordChange />;
+  // Then a name that stopped being allowed (migration 46): a password first,
+  // because it guards the account the name belongs to.
+  if (mustRename) return <ForceDisplayNameChange />;
   return <>{children}</>;
 }
 

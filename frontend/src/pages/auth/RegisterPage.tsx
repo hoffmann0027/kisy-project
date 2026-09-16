@@ -8,6 +8,7 @@ import { Button, Input, toast } from "@shared/ui";
 import { useAuthStore } from "@shared/store/auth";
 import { authApi } from "@shared/api/endpoints";
 import { ApiError } from "@shared/api/envelope";
+import { displayNameErrorMessage, displayNameSchema, normalizeDisplayName } from "@shared/lib/displayName";
 
 const schema = z
   .object({
@@ -18,6 +19,9 @@ const schema = z
     username: z
       .string()
       .regex(/^[A-Za-z0-9_]{3,32}$/, "3–32 символа: буквы, цифры, подчёркивание"),
+    // What people see and search for — unlike the login, letters only, and
+    // unique ignoring case.
+    displayName: displayNameSchema,
     password: z
       .string()
       .min(12, "Минимум 12 символов")
@@ -56,6 +60,7 @@ export function RegisterPage() {
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<Form>({
     resolver: zodResolver(schema),
@@ -69,10 +74,16 @@ export function RegisterPage() {
       return;
     }
     try {
-      await registerUser(token, data.username, data.password);
+      await registerUser(token, data.username, normalizeDisplayName(data.displayName), data.password);
       toast.success("Аккаунт создан");
       navigate("/", { replace: true });
     } catch (e) {
+      // A name problem belongs under the name field, not in a toast.
+      const nameProblem = displayNameErrorMessage(e);
+      if (nameProblem) {
+        setError("displayName", { message: nameProblem });
+        return;
+      }
       const msg =
         e instanceof ApiError && e.code === "AUTH_INVALID_TOKEN"
           ? "Код приглашения недействителен или истёк"
@@ -100,6 +111,13 @@ export function RegisterPage() {
           autoComplete="username"
           error={errors.username?.message}
           {...register("username")}
+        />
+        <Input
+          label="Имя"
+          placeholder="Анна Смирнова"
+          autoComplete="name"
+          error={errors.displayName?.message}
+          {...register("displayName")}
         />
         <Input
           label="Пароль"
