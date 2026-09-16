@@ -3305,6 +3305,114 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /admin/communities:
+    get:
+      tags: [admin, moderation]
+      summary: Groups and communities with their live sanctions (CEO only)
+      description: Not deleted ones; search by part of the name.
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string } }
+      responses:
+        '200': { description: List, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Envelope' }, { properties: { data: { type: object, properties: { groups: { type: array, items: { $ref: '#/components/schemas/ModeratedGroup' } } } } } } ] } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/communities/deleted:
+    get:
+      tags: [admin, moderation]
+      summary: Groups deleted by moderation and still restorable (CEO only)
+      responses:
+        '200': { description: List, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Envelope' }, { properties: { data: { type: object, properties: { groups: { type: array, items: { $ref: '#/components/schemas/DeletedGroup' } } } } } } ] } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/communities/{groupID}/sanctions:
+    get:
+      tags: [admin, moderation]
+      summary: Every sanction a group ever had, newest first (CEO only)
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: History, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Envelope' }, { properties: { data: { type: object, properties: { sanctions: { type: array, items: { $ref: '#/components/schemas/Sanction' } } } } } } ] } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [admin, moderation]
+      summary: Warn, mute or delete a group (CEO only, audited, notified)
+      description: >
+        warn — the third active (not revoked) warning deletes the group,
+        exactly as delete does. mute — duration 1d, 7d, 30d or forever; while
+        live, the community's posts are left out of GET /feed (filtered in
+        SQL), its wall and posting stay open. delete — soft; restorable for 30
+        days, then purged daily. The reason is required and is shown to the
+        founder and every owner/editor/moderator in the notification
+        (type group_sanction, with push). Issuing on a deleted group is 409.
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, reason]
+              properties:
+                kind: { type: string, enum: [warn, mute, delete] }
+                reason: { type: string, minLength: 1, maxLength: 1000 }
+                duration: { type: string, enum: ['1d', '7d', '30d', forever], description: Mutes only. }
+      responses:
+        '201': { description: Issued, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Envelope' }, { properties: { data: { $ref: '#/components/schemas/SanctionOutcome' } } } ] } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /admin/communities/{groupID}/restore:
+    post:
+      tags: [admin, moderation]
+      summary: Restore a deleted group within 30 days (CEO only, audited)
+      description: >
+        Brings the group back with its posts, members and messages. Active
+        warnings are cut to two, so the next warning deletes it again (fewer
+        are left as they are). The founder is notified. 409 if not deleted,
+        410 once the window has passed.
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Restored, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '410': { description: Restore window has passed }
+
+  /admin/sanctions/{sanctionID}/revoke:
+    post:
+      tags: [admin, moderation]
+      summary: Revoke a live warning or mute (CEO only, audited)
+      description: A revoked warning stops counting; a revoked mute returns the community to the feed. Deletion is undone by restore instead (409).
+      parameters:
+        - { name: sanctionID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, properties: { note: { type: string } } }
+      responses:
+        '200': { description: Revoked, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Envelope' }, { properties: { data: { type: object, properties: { sanction: { $ref: '#/components/schemas/Sanction' } } } } } ] } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /groups/{groupID}/sanctions:
+    get:
+      tags: [groups, moderation]
+      summary: Live sanctions on a group, for its founder and editors (and the CEO)
+      description: The banner shown inside the group. Plain members get 403; a group the caller cannot see is 404.
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Live sanctions, content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Envelope' }, { properties: { data: { $ref: '#/components/schemas/ActiveSanctions' } } } ] } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /admin/audit:
     get:
       tags: [admin]
@@ -3750,6 +3858,55 @@ components:
           type: integer
           description: How many DIFFERENT people chose this emoji.
         mine: { type: boolean }
+    Sanction:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        groupId: { type: string, format: uuid }
+        kind: { type: string, enum: [warn, mute, delete] }
+        reason: { type: string }
+        issuedBy: { type: string, format: uuid }
+        issuedAt: { type: string, format: date-time }
+        expiresAt: { type: [string, 'null'], format: date-time, description: Mutes only; null is indefinite. }
+        revokedAt: { type: [string, 'null'], format: date-time }
+        revokedBy: { type: [string, 'null'], format: uuid }
+        revokeNote: { type: [string, 'null'] }
+    SanctionOutcome:
+      type: object
+      properties:
+        sanction: { $ref: '#/components/schemas/Sanction' }
+        activeWarns: { type: integer }
+        deleted: { type: boolean, description: This action deleted the group (a deletion, or the warning that reached the limit). }
+    ActiveSanctions:
+      type: object
+      properties:
+        warns: { type: array, items: { $ref: '#/components/schemas/Sanction' } }
+        warnLimit: { type: integer, example: 3 }
+        mute: { oneOf: [ { $ref: '#/components/schemas/Sanction' }, { type: 'null' } ] }
+    ModeratedGroup:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { type: string, enum: [group, community] }
+        avatarUrl: { type: [string, 'null'] }
+        isPublic: { type: boolean }
+        verifiedAt: { type: [string, 'null'], format: date-time }
+        memberCount: { type: integer }
+        activeWarns: { type: integer }
+        warnLimit: { type: integer }
+        muted: { type: boolean }
+        mutedUntil: { type: [string, 'null'], format: date-time, description: Null while muted means indefinitely. }
+    DeletedGroup:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { type: string, enum: [group, community] }
+        avatarUrl: { type: [string, 'null'] }
+        deletedAt: { type: string, format: date-time }
+        purgeAt: { type: string, format: date-time, description: deletedAt + 30 days; the daily purge removes it after. }
+        deleteReason: { type: string }
     PostCommunity:
       description: >
         Where the post came from, carried on every post. A post in the shared

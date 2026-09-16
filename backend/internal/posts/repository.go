@@ -67,12 +67,29 @@ const postColumns = `id, community_id, author_id, text, created_at, updated_at`
 // independent axes (migration 43), so a community can be public to read and
 // still sit above someone's clearance. Leaving the threshold out here would
 // leak exactly the posts the hierarchy exists to hide.
+//
+// Moderation (migration 48) takes a community out of every feed in two ways:
+// deleted (restorable for 30 days, but gone meanwhile) and muted (its posts
+// stay on its own wall, where its editors may keep publishing, and only the
+// shared feed leaves them out). Both are decided here, in SQL, so no reader's
+// client ever receives a muted post to hide.
 const visibleCommunity = `
 	g.kind = 'community' AND g.is_public = true AND g.is_archived = false
+	AND g.deleted_at IS NULL
+	AND NOT ` + mutedNow + `
 	AND (g.min_role_level IS NULL OR ($2 BETWEEN 1 AND 10 AND g.min_role_level >= $2))
 	AND NOT EXISTS (
 		SELECT 1 FROM feed_hidden_communities h
 		WHERE h.user_id = $1 AND h.group_id = g.id
+	)`
+
+// mutedNow is true while the community g has a live mute: not revoked, and
+// either indefinite or not yet expired. Shared by the feed pages and the
+// ranking, so a muted community is neither shown nor ranked.
+const mutedNow = `EXISTS (
+		SELECT 1 FROM group_sanctions s
+		WHERE s.group_id = g.id AND s.kind = 'mute' AND s.revoked_at IS NULL
+		  AND (s.expires_at IS NULL OR s.expires_at > now())
 	)`
 
 func (r *PostgresRepository) Create(ctx context.Context, q db.DBTX, p *Post) error {
@@ -216,6 +233,7 @@ func (r *PostgresRepository) ScoreInputs(ctx context.Context, q db.DBTX, since t
 		LEFT JOIN reactions rx ON rx.post_id = p.id
 		WHERE p.deleted_at IS NULL
 		  AND g.kind = 'community' AND g.is_public = true AND g.is_archived = false
+		  AND g.deleted_at IS NULL AND NOT `+mutedNow+`
 		  AND p.created_at >= $1
 		GROUP BY p.id, p.created_at`, since)
 	if err != nil {

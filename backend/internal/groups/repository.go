@@ -76,11 +76,11 @@ func NewPostgresRepository() *PostgresRepository { return &PostgresRepository{} 
 // the same convention users.role_id uses. Zero is never a valid level, and
 // every rule that looks at one goes through internal/access.
 const groupColumns = `id, name, description, avatar_url, COALESCE(min_role_level, 0), kind, is_public,
-	join_policy, post_policy, created_by, is_archived, verified_at, created_at, updated_at`
+	join_policy, post_policy, created_by, is_archived, verified_at, deleted_at, created_at, updated_at`
 
 func scanGroupInto(row pgx.Row, g *Group) error {
 	return row.Scan(&g.ID, &g.Name, &g.Description, &g.AvatarURL, &g.MinRoleLevel, &g.Kind, &g.IsPublic,
-		&g.JoinPolicy, &g.PostPolicy, &g.CreatedBy, &g.IsArchived, &g.VerifiedAt, &g.CreatedAt, &g.UpdatedAt)
+		&g.JoinPolicy, &g.PostPolicy, &g.CreatedBy, &g.IsArchived, &g.VerifiedAt, &g.DeletedAt, &g.CreatedAt, &g.UpdatedAt)
 }
 
 func scanGroup(row pgx.Row) (*Group, error) {
@@ -120,7 +120,7 @@ func (r *PostgresRepository) ListVisible(ctx context.Context, q db.DBTX, actorLe
 		-- outside the hierarchy; one with a threshold still needs a level that
 		-- clears it, and $1 = 0 ("no level") clears none — hence the range
 		-- guard, without which zero would sit below every threshold.
-		WHERE is_archived = false
+		WHERE is_archived = false AND deleted_at IS NULL
 		  AND (min_role_level IS NULL OR ($1 BETWEEN 1 AND 10 AND min_role_level >= $1))
 		ORDER BY created_at DESC, id DESC`, actorLevel)
 	if err != nil {
@@ -204,7 +204,7 @@ func (r *PostgresRepository) ListDirectory(ctx context.Context, q db.DBTX, actor
 		FROM groups g
 		LEFT JOIN group_join_requests jr
 		       ON jr.group_id = g.id AND jr.user_id = $1 AND jr.status = 'pending'
-		WHERE g.is_archived = false
+		WHERE g.is_archived = false AND g.deleted_at IS NULL
 		  AND (g.min_role_level IS NULL OR ($2 BETWEEN 1 AND 10 AND g.min_role_level >= $2))
 		  AND NOT EXISTS (SELECT 1 FROM group_members m WHERE m.group_id = g.id AND m.user_id = $1)
 		ORDER BY g.created_at DESC, g.id DESC`, actorID, actorLevel)
@@ -217,7 +217,7 @@ func (r *PostgresRepository) ListDirectory(ctx context.Context, q db.DBTX, actor
 	for rows.Next() {
 		var e DirectoryEntry
 		if err := rows.Scan(&e.ID, &e.Name, &e.Description, &e.AvatarURL, &e.MinRoleLevel, &e.Kind, &e.IsPublic,
-			&e.JoinPolicy, &e.PostPolicy, &e.CreatedBy, &e.IsArchived, &e.VerifiedAt, &e.CreatedAt, &e.UpdatedAt,
+			&e.JoinPolicy, &e.PostPolicy, &e.CreatedBy, &e.IsArchived, &e.VerifiedAt, &e.DeletedAt, &e.CreatedAt, &e.UpdatedAt,
 			&e.RequestStatus); err != nil {
 			return nil, fmt.Errorf("groups: scan directory row: %w", err)
 		}
@@ -308,7 +308,7 @@ func prefixedGroupColumns(alias string) string {
 	a := alias + "."
 	return a + "id, " + a + "name, " + a + "description, " + a + "avatar_url, COALESCE(" + a + "min_role_level, 0), " +
 		a + "kind, " + a + "is_public, " + a + "join_policy, " + a + "post_policy, " +
-		a + "created_by, " + a + "is_archived, " + a + "verified_at, " + a + "created_at, " + a + "updated_at"
+		a + "created_by, " + a + "is_archived, " + a + "verified_at, " + a + "deleted_at, " + a + "created_at, " + a + "updated_at"
 }
 
 func (r *PostgresRepository) AddMember(ctx context.Context, q db.DBTX, m *Member) error {

@@ -88,8 +88,12 @@ type Group struct {
 	IsArchived   bool
 	// VerifiedAt is when the CEO verified the group; nil when unverified.
 	VerifiedAt *time.Time
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	// DeletedAt is set while the group is deleted by moderation and still
+	// restorable (migration 48). Such a group does not exist for anyone but
+	// the CEO's moderation screens.
+	DeletedAt *time.Time
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type Member struct {
@@ -110,6 +114,10 @@ type JoinRequest struct {
 	DecidedBy   *uuid.UUID
 	DecidedAt   *time.Time
 }
+
+// hidden reports whether the group is gone for its users: archived, or
+// deleted by moderation and waiting out its restore window.
+func (g *Group) hidden() bool { return g.IsArchived || g.DeletedAt != nil }
 
 // DTO is the API representation of a group.
 type DTO struct {

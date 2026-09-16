@@ -172,3 +172,127 @@
   font-size: 12px;
   color: var(--dim2);
 }
+
+/* Moderation tabs ("Сообщества", "Удалённые") */
+.moderation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.moderation__empty {
+  margin: 0;
+  font-size: 14px;
+  color: var(--dim2);
+}
+.moderation__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.moderation__item {
+  border-radius: var(--radius-md);
+  background: var(--chip-bg);
+  border: 1px solid var(--divider);
+}
+.moderation__row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.moderation__row--static {
+  cursor: default;
+}
+.moderation__who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.moderation__name {
+  font-weight: 600;
+}
+.moderation__sub {
+  font-size: 12px;
+  color: var(--dim2);
+}
+.moderation__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+}
+.moderation__badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: var(--radius-round);
+  white-space: nowrap;
+}
+.moderation__badge--warn {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+.moderation__badge--mute {
+  background: var(--acc-soft);
+  color: var(--acc);
+}
+.moderation__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0 12px 12px;
+}
+.moderation__reason {
+  resize: vertical;
+  min-height: 56px;
+  font: inherit;
+}
+.moderation__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.moderation__duration {
+  width: auto;
+  min-width: 120px;
+}
+.moderation__sanctions {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.moderation__sanction {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--hover);
+}
+.moderation__sanction--past {
+  opacity: 0.6;
+}
+.moderation__sanction-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.moderation__sanction-reason {
+  font-size: 13px;
+  margin-top: 2px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

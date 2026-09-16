@@ -189,6 +189,8 @@ export function useRealtime() {
           qc.invalidateQueries({ queryKey: groupKeys.directory });
           qc.invalidateQueries({ queryKey: ["group-requests"] });
           qc.invalidateQueries({ queryKey: ["group-viewer"] });
+          // A warning, mute, deletion or restore by the CEO.
+          qc.invalidateQueries({ queryKey: ["group-sanctions"] });
           break;
         case "rating.changed":
           qc.invalidateQueries({ queryKey: ["rating"] });

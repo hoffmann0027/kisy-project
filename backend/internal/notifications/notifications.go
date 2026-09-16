@@ -17,7 +17,12 @@ import (
 )
 
 // Notification types.
-const TypeMention = "mention"
+const (
+	TypeMention = "mention"
+	// TypeGroupSanction: the CEO warned, muted, deleted or restored a group
+	// the recipient runs (internal/moderation).
+	TypeGroupSanction = "group_sanction"
+)
 
 // Notification mirrors a notifications row.
 type Notification struct {
@@ -171,6 +176,46 @@ func (s *Service) SetPreferences(p Preferences) { s.prefs = p }
 
 func NewService(pool *pgxpool.Pool, repo Repository, recipients RecipientResolver, usernames UsernameResolver, mentions MentionSink, wsPub WSPublisher) *Service {
 	return &Service{pool: pool, repo: repo, recipients: recipients, usernames: usernames, mentions: mentions, ws: wsPub}
+}
+
+// Announcement is one notification for several people: stored for each,
+// pushed live over the socket, and sent as a push to their devices.
+type Announcement struct {
+	Type    string
+	Payload map[string]any
+	// PushTitle / PushBody are the device notification; URL is where tapping it
+	// leads, an in-app path.
+	PushTitle string
+	PushBody  string
+	URL       string
+}
+
+// Announce delivers a to every recipient. Storing is the part that must not be
+// lost, so a failure there is returned; the live event and the push are best
+// effort, as for mentions.
+func (s *Service) Announce(ctx context.Context, recipients []uuid.UUID, a Announcement) error {
+	payload, err := json.Marshal(a.Payload)
+	if err != nil {
+		return fmt.Errorf("notifications: encode payload: %w", err)
+	}
+	for _, id := range recipients {
+		if err := s.repo.Create(ctx, s.pool, id, a.Type, payload); err != nil {
+			return err
+		}
+		if s.ws != nil {
+			live := map[string]any{"type": a.Type}
+			for k, v := range a.Payload {
+				live[k] = v
+			}
+			s.ws.PublishNotification(id, live)
+		}
+		if s.pusher != nil && a.PushBody != "" {
+			// #nosec G118 -- deliberate: the push must outlive the request that
+			// raised it; the pusher applies its own timeout.
+			go s.pusher.Notify(context.Background(), id, a.PushTitle, a.PushBody, a.URL)
+		}
+	}
+	return nil
 }
 
 // List returns the actor's most recent notifications and the unread count.

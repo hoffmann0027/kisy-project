@@ -7,8 +7,10 @@ import { UsersTab } from "./UsersTab";
 import { InvitesTab } from "./InvitesTab";
 import { AuditTab } from "./AuditTab";
 import { VerificationTab } from "./VerificationTab";
+import { CommunitiesTab } from "./CommunitiesTab";
+import { DeletedTab } from "./DeletedTab";
 
-type Tab = "users" | "invites" | "verification" | "audit";
+type Tab = "users" | "invites" | "verification" | "communities" | "deleted" | "audit";
 
 export function AdminPage() {
   const [tab, setTab] = useState<Tab>("users");
@@ -33,6 +35,12 @@ export function AdminPage() {
         <button className={tabCn(tab === "verification")} onClick={() => setTab("verification")}>
           Верификация
         </button>
+        <button className={tabCn(tab === "communities")} onClick={() => setTab("communities")}>
+          Сообщества
+        </button>
+        <button className={tabCn(tab === "deleted")} onClick={() => setTab("deleted")}>
+          Удалённые
+        </button>
         <button className={tabCn(tab === "audit")} onClick={() => setTab("audit")}>
           Аудит
         </button>
@@ -42,6 +50,8 @@ export function AdminPage() {
         {tab === "users" && <UsersTab />}
         {tab === "invites" && <InvitesTab />}
         {tab === "verification" && <VerificationTab />}
+        {tab === "communities" && <CommunitiesTab />}
+        {tab === "deleted" && <DeletedTab />}
         {tab === "audit" && <AuditTab />}
       </div>
     </div>

@@ -12,9 +12,11 @@ import (
 	"kisy-backend/internal/admin"
 	"kisy-backend/internal/auth"
 	"kisy-backend/internal/auth/token"
+	"kisy-backend/internal/moderation"
 )
 
-// Every route under /admin is the CEO's alone. Rather than listing the routes
+// Every route under /admin is the CEO's alone — including every sanction
+// endpoint (warn, mute, delete, revoke, restore, the lists). Rather than listing the routes
 // here — a list that silently stops covering the next endpoint someone adds —
 // the test walks the router admin.Mount actually builds, so a new route is
 // checked the moment it exists.
@@ -28,9 +30,12 @@ func routerAs(claims *token.AccessClaims) http.Handler {
 	})
 	// No service behind the handler: a request that got past the gates would
 	// panic on it, which fails the test just as loudly as a 200 would.
+	moderationRoutes := moderation.NewHandler(nil, func(*http.Request) (moderation.ActorMeta, bool) {
+		return moderation.ActorMeta{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
+	}).AdminRoutes
 	admin.Mount(r, auth.NewMiddleware(nil, nil, nil), admin.NewHandler(nil, nil, func(*http.Request) (admin.ActorMeta, bool) {
 		return admin.ActorMeta{UserID: claims.UserID}, true
-	}))
+	}), moderationRoutes)
 	return r
 }
 
@@ -56,7 +61,9 @@ func adminRoutes(t *testing.T) []route {
 		t.Fatal(err)
 	}
 	// Guard against passing because nothing was walked.
-	if len(out) < 8 {
+	// 9 admin routes + 6 moderation routes (warn/mute/delete, revoke, restore,
+	// lists): the sanction endpoints are part of what this proves.
+	if len(out) < 15 {
 		t.Fatalf("walked only %d admin routes", len(out))
 	}
 	return out

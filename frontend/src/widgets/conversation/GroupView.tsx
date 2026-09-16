@@ -12,6 +12,8 @@ import { CalendarView } from "@widgets/calendar/CalendarView";
 import { GroupMembersModal } from "@features/profile/GroupMembersModal";
 import { CommunityWall } from "@widgets/feed/CommunityWall";
 import { VerifiedName } from "@shared/ui/VerifiedBadge";
+import { useCapabilities } from "@shared/lib/useCapabilities";
+import { SanctionsBanner } from "./SanctionsBanner";
 
 type Tab = "chat" | "board" | "calendar" | "posts";
 
@@ -39,6 +41,11 @@ export function GroupView({ group }: { group: Group }) {
   // People are added directly only to a group. A community is joined by the
   // reader's own choice — "Вступить" or a request its editors approve.
   const canAdd = isFounder && !isCommunity;
+  // Who runs this group — and so is shown the CEO's sanctions on it.
+  const caps = useCapabilities();
+  const runsGroup =
+    isFounder || caps.canAdmin || viewer?.role === "owner" || viewer?.role === "editor" || viewer?.role === "moderator";
+  const banner = <SanctionsBanner groupId={group.id} runsGroup={runsGroup} />;
   // Editors-only group where the viewer is a plain member → composer hidden.
   const readOnly = viewer && !viewer.canPost ? "Писать могут только редакторы" : undefined;
   // Group's clearance, shown in the header so the level is visible in-chat.
@@ -111,6 +118,7 @@ export function GroupView({ group }: { group: Group }) {
           </div>
           {tabs}
         </header>
+        {banner}
         <CommunityWall group={group} canPost={viewer?.canPost ?? false} />
         {members}
       </section>
@@ -132,6 +140,7 @@ export function GroupView({ group }: { group: Group }) {
           </div>
           {tabs}
         </header>
+        {banner}
         {shown === "board" ? <BoardView group={group} /> : <CalendarView group={group} onOpenCard={() => setTab("board")} />}
         {members}
       </section>
@@ -153,6 +162,7 @@ export function GroupView({ group }: { group: Group }) {
         }}
         headerActions={tabs}
         readOnly={readOnly}
+        banner={banner}
       />
       {members}
     </>

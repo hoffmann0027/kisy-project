@@ -314,13 +314,15 @@ func newRouter(d routerDeps) http.Handler {
 			})
 
 			// CEO only; the gates travel with the routes (admin.Mount).
-			admin.Mount(r, m.authMW, m.adminHandler)
+			admin.Mount(r, m.authMW, m.adminHandler, m.moderationHandler.AdminRoutes)
 
 			r.Route("/groups", func(r chi.Router) {
 				// Reads are visibility-filtered; creation is open to any
 				// user (the service caps the group's clearance at the
 				// creator's own level); deletion is CEO-or-founder.
 				m.groupsHandler.Routes(r)
+				// The live sanctions banner for a group's own editors.
+				m.moderationHandler.GroupRoutes(r)
 				// Task board endpoints under a group.
 				m.boardsHandler.GroupRoutes(r)
 				// Calendar list/create under a group.

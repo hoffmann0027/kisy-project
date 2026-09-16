@@ -7,8 +7,11 @@ interface Props {
   onClose: () => void;
 }
 
-function describe(type: string): string {
+function describe(type: string, payload: Record<string, unknown>): string {
   if (type === "mention") return "Вас упомянули в сообщении";
+  // Moderation notices carry their full sentence, reason included, as the
+  // server wrote it — the same text the push showed.
+  if (type === "group_sanction" && typeof payload.text === "string") return payload.text;
   return type;
 }
 
@@ -44,7 +47,7 @@ export function NotificationsModal({ open, onClose }: Props) {
               border: "1px solid var(--color-border)",
             }}
           >
-            <div style={{ fontSize: 14 }}>{describe(n.type)}</div>
+            <div style={{ fontSize: 14 }}>{describe(n.type, n.payload)}</div>
             <div style={{ fontSize: 12, color: "var(--color-text-tertiary)", marginTop: 2 }}>
               {formatRelative(n.createdAt)}
             </div>

@@ -41,11 +41,17 @@ func (h *Handler) Routes(r chi.Router) {
 // Mount attaches /admin to r with its gates. The gates live here, next to the
 // routes, rather than at the call site: a route added to Routes is gated by
 // construction, and admin_access_test.go walks every route to prove it.
-func Mount(r chi.Router, gates Gates, h *Handler) {
+//
+// extra registers routes other packages own under /admin (moderation), so
+// they sit behind the same gates without repeating them.
+func Mount(r chi.Router, gates Gates, h *Handler, extra ...func(chi.Router)) {
 	r.Route("/admin", func(r chi.Router) {
 		r.Use(gates.RequireInvited)
 		r.Use(gates.RequireClearance(access.CEOLevel))
 		h.Routes(r)
+		for _, register := range extra {
+			register(r)
+		}
 	})
 }
 

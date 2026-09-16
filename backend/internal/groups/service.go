@@ -108,7 +108,7 @@ func (s *Service) SetMinRoleLevel(ctx context.Context, groupID uuid.UUID, newLev
 		return nil, err // ErrNotFound propagates
 	}
 	if !access.IsCEO(actor.RoleLevel) {
-		if g.IsArchived || !access.CanAccessGroup(actor.RoleLevel, g.MinRoleLevel) {
+		if g.hidden() || !access.CanAccessGroup(actor.RoleLevel, g.MinRoleLevel) {
 			return nil, ErrNotFound
 		}
 		return nil, ErrForbidden
@@ -329,11 +329,16 @@ func (s *Service) Delete(ctx context.Context, groupID uuid.UUID, actor ActorMeta
 	if err != nil {
 		return err // ErrNotFound propagates
 	}
+	// A group deleted by moderation is the CEO's to restore or let expire;
+	// nobody — its founder included — may make that deletion final early.
+	if g.DeletedAt != nil {
+		return ErrNotFound
+	}
 	// The CEO may delete any group; the founder may delete their own.
 	if !access.IsCEO(actor.RoleLevel) && g.CreatedBy != actor.UserID {
 		// For anyone else, only reveal a "forbidden" if they can actually
 		// see the group; otherwise mask its existence as not-found.
-		if g.IsArchived || !access.CanAccessGroup(actor.RoleLevel, g.MinRoleLevel) {
+		if g.hidden() || !access.CanAccessGroup(actor.RoleLevel, g.MinRoleLevel) {
 			return ErrNotFound
 		}
 		return ErrForbidden
@@ -384,7 +389,7 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID, actor ActorMeta) (*Grou
 	if err != nil {
 		return nil, err
 	}
-	if g.IsArchived || !access.CanAccessGroup(actor.RoleLevel, g.MinRoleLevel) {
+	if g.hidden() || !access.CanAccessGroup(actor.RoleLevel, g.MinRoleLevel) {
 		return nil, ErrNotFound
 	}
 	return g, nil

@@ -610,3 +610,64 @@ export function groupSubtitle(group: Pick<Group, "kind" | "minRoleLevel" | "isPu
   if (group.minRoleLevel === null) return noun;
   return `${noun} · от ${roleLabel(group.minRoleLevel)} и выше`;
 }
+
+// --- CEO moderation of groups and communities (migration 48) ---
+
+export type SanctionKind = "warn" | "mute" | "delete";
+/** How long a mute lasts; "forever" is indefinite. */
+export type MuteDuration = "1d" | "7d" | "30d" | "forever";
+
+export interface Sanction {
+  id: string;
+  groupId: string;
+  kind: SanctionKind;
+  /** The CEO's comment — always present, shown to the group's founder and editors. */
+  reason: string;
+  issuedBy: string;
+  issuedAt: string;
+  /** Mutes only; null is indefinite. */
+  expiresAt: string | null;
+  revokedAt: string | null;
+  revokedBy: string | null;
+  revokeNote: string | null;
+}
+
+/** A row of the CEO's communities list. */
+export interface ModeratedGroup {
+  id: string;
+  name: string;
+  kind: GroupKind;
+  avatarUrl: string | null;
+  isPublic: boolean;
+  verifiedAt: string | null;
+  memberCount: number;
+  activeWarns: number;
+  warnLimit: number;
+  muted: boolean;
+  /** Null while muted means indefinitely. */
+  mutedUntil: string | null;
+}
+
+/** A group deleted by moderation, still restorable until purgeAt. */
+export interface DeletedGroup {
+  id: string;
+  name: string;
+  kind: GroupKind;
+  avatarUrl: string | null;
+  deletedAt: string;
+  purgeAt: string;
+  deleteReason: string;
+}
+
+/** What a group's own editors see in the banner. */
+export interface ActiveSanctions {
+  warns: Sanction[];
+  warnLimit: number;
+  mute: Sanction | null;
+}
+
+export interface SanctionOutcome {
+  sanction: Sanction;
+  activeWarns: number;
+  deleted: boolean;
+}

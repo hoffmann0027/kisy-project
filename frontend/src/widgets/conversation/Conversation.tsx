@@ -63,9 +63,11 @@ interface Props {
   /** When set, the composer is replaced by this read-only notice (e.g. an
    *  editors-only group where the viewer is a plain member). */
   readOnly?: string;
+  /** Shown under the header (a group's live moderation sanctions). */
+  banner?: ReactNode;
 }
 
-export function Conversation({ target, headerActions, readOnly }: Props) {
+export function Conversation({ target, headerActions, readOnly, banner }: Props) {
   const { chatType, chatId } = target;
   const navigate = useNavigate();
   const { startCall, busy: callBusy } = useCallControls();
@@ -434,6 +436,7 @@ export function Conversation({ target, headerActions, readOnly }: Props) {
         </button>
         {headerActions}
       </header>
+      {banner}
 
       {pinned && pinned.length > 0 && (
         <div className="conv__pinned">

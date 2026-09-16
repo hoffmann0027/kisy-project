@@ -36,6 +36,7 @@ import (
 	"kisy-backend/internal/invitations"
 	"kisy-backend/internal/linkpreview"
 	"kisy-backend/internal/messages"
+	"kisy-backend/internal/moderation"
 	"kisy-backend/internal/notes"
 	"kisy-backend/internal/notifications"
 	"kisy-backend/internal/notifprefs"
@@ -90,6 +91,7 @@ type modules struct {
 	callsHandler         *calls.Handler
 	e2eeHandler          *e2ee.Handler
 	adminHandler         *admin.Handler
+	moderationHandler    *moderation.Handler
 	wsHandler            *ws.Handler
 	hub                  *ws.Hub
 	limiter              *ratelimit.Limiter
@@ -843,6 +845,29 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	adminSvc.SetGroupsRepository(groupsRepo)
 	adminSvc.SetUserChanged(usersSvc.ProfileChanged)
 	adminSvc.SetGroupChanged(wsPublisher.PublishGroupChanged)
+
+	// --- moderation of groups and communities (CEO) ---
+	moderationSvc := moderation.NewService(pool, moderation.NewRepository(), auditRec, log)
+	moderationSvc.SetNotifier(moderationNotifier{notifications: notificationsSvc})
+	moderationSvc.SetRoleReader(moderation.GroupRoles{Groups: groupsSvc})
+	moderationSvc.SetGroupChanged(wsPublisher.PublishGroupChanged)
+	// A mute, its lifting, a deletion or a restore changes which posts the
+	// popular feed may hold; recompute now rather than at the next 5-minute
+	// pass. The page SQL already filters, so this only keeps offsets honest.
+	moderationSvc.SetFeedChanged(func(ctx context.Context) {
+		if _, err := postsSvc.RecomputeRanking(ctx); err != nil {
+			log.Warn("moderation: ranking recompute", "error", err)
+		}
+	})
+	moderationSvc.StartPurgeWorker(ctx, moderation.PurgeInterval)
+	moderationHandler := moderation.NewHandler(moderationSvc, func(r *http.Request) (moderation.ActorMeta, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return moderation.ActorMeta{}, false
+		}
+		m := authHandler.ClientMeta(r)
+		return moderation.ActorMeta{UserID: claims.UserID, SessionID: claims.SessionID, RoleLevel: claims.RoleLevel, IPHash: m.IPHash, RequestID: m.RequestID}, true
+	})
 	adminHandler := admin.NewHandler(adminSvc, audit.NewReader(pool), func(r *http.Request) (admin.ActorMeta, bool) {
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {
@@ -893,6 +918,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		callsHandler:         callsHandler,
 		e2eeHandler:          e2eeHandler,
 		adminHandler:         adminHandler,
+		moderationHandler:    moderationHandler,
 		wsHandler:            wsHandler,
 		hub:                  hub,
 		limiter:              limiter,

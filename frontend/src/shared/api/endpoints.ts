@@ -1,6 +1,13 @@
 import { isNative, loadTokens, saveTokens, type NativeTokens } from "@shared/lib/native";
 import { apiClient } from "./client";
 import type {
+  ActiveSanctions,
+  DeletedGroup,
+  ModeratedGroup,
+  MuteDuration,
+  Sanction,
+  SanctionKind,
+  SanctionOutcome,
   Attachment,
   AttachmentMeta,
   AuditEntry,
@@ -599,4 +606,18 @@ export const feedApi = {
   },
   hide: (communityId: string) => apiClient.post<{ hidden: boolean }>(`/feed/hidden/${communityId}`),
   show: (communityId: string) => apiClient.del<{ hidden: boolean }>(`/feed/hidden/${communityId}`),
+};
+
+/** CEO moderation of groups and communities. Every call is under /admin. */
+export const moderationApi = {
+  groups: (q: string) => apiClient.get<{ groups: ModeratedGroup[] }>(`/admin/communities?q=${encodeURIComponent(q)}`),
+  deleted: () => apiClient.get<{ groups: DeletedGroup[] }>("/admin/communities/deleted"),
+  history: (groupId: string) => apiClient.get<{ sanctions: Sanction[] }>(`/admin/communities/${groupId}/sanctions`),
+  issue: (groupId: string, body: { kind: SanctionKind; reason: string; duration?: MuteDuration }) =>
+    apiClient.post<SanctionOutcome>(`/admin/communities/${groupId}/sanctions`, body),
+  revoke: (sanctionId: string, note = "") =>
+    apiClient.post<{ sanction: Sanction }>(`/admin/sanctions/${sanctionId}/revoke`, { note }),
+  restore: (groupId: string) => apiClient.post<{ restored: boolean }>(`/admin/communities/${groupId}/restore`),
+  /** The live sanctions banner, for the group's own founder and editors. */
+  active: (groupId: string) => apiClient.get<ActiveSanctions>(`/groups/${groupId}/sanctions`),
 };
