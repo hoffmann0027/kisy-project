@@ -7,6 +7,7 @@ import { useAuthStore } from "@shared/store/auth";
 import { disablePush, enablePush, pushEnabled, pushSupported } from "@shared/lib/push";
 import { useNotificationSettings, useUpdateNotificationSettings } from "@entities/notif-prefs/queries";
 import type { GroupNotifyMode } from "@shared/api/endpoints";
+import { PermissionsModal } from "@features/permissions/PermissionsModal";
 import { AvatarCropper } from "./AvatarCropper";
 
 interface Props {
@@ -26,6 +27,7 @@ export function ProfileModal({ open, onClose }: Props) {
   const [busy, setBusy] = useState(false);
   const [pushOn, setPushOn] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
+  const [permissionsOpen, setPermissionsOpen] = useState(false);
 
   useEffect(() => {
     if (open && pushSupported()) void pushEnabled().then(setPushOn);
@@ -159,6 +161,19 @@ export function ProfileModal({ open, onClose }: Props) {
           </Button>
         </div>
       )}
+
+      <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div>
+          <div style={{ fontWeight: 600, fontSize: 15 }}>Разрешения</div>
+          <div style={{ color: "var(--color-text-secondary)", fontSize: 13 }}>
+            Уведомления, микрофон и экран звонка — что разрешено и как исправить
+          </div>
+        </div>
+        <Button variant="secondary" onClick={() => setPermissionsOpen(true)}>
+          Открыть
+        </Button>
+      </div>
+      {permissionsOpen && <PermissionsModal open onClose={() => setPermissionsOpen(false)} />}
 
       <NotificationSettingsSection />
 

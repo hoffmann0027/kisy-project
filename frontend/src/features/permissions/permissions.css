@@ -1,0 +1,163 @@
+/* Permission onboarding and the "Разрешения" list. Theme tokens only: these
+   screens are the first thing a new user sees, in whichever theme is on. */
+
+.perm-onboarding {
+  position: fixed;
+  inset: 0;
+  /* Above modals (100), below a call (200): a ringing phone outranks it. */
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--app-underlay);
+  padding: calc(var(--space-4) + var(--safe-top)) calc(var(--space-4) + var(--safe-right))
+    calc(var(--space-4) + var(--safe-bottom)) calc(var(--space-4) + var(--safe-left));
+  overflow-y: auto;
+}
+
+.perm-card {
+  width: min(400px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+  padding: var(--space-6) var(--space-5) var(--space-5);
+  background: var(--overlay-bg);
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  backdrop-filter: blur(var(--blur-glass));
+  border: 1px solid var(--panel-brd);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--elev-shadow);
+  color: var(--ink);
+  font-family: var(--font, var(--font-family));
+}
+
+.perm-progress {
+  display: flex;
+  gap: 6px;
+  margin-bottom: var(--space-2);
+}
+
+.perm-progress__dot {
+  width: 22px;
+  height: 4px;
+  border-radius: var(--radius-round);
+  background: var(--divider);
+}
+
+.perm-progress__dot--on {
+  background: var(--acc);
+}
+
+.perm-card__icon {
+  width: 84px;
+  height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-round);
+  background: var(--acc-soft);
+  color: var(--acc);
+}
+
+.perm-card__title {
+  margin: var(--space-2) 0 0;
+  font-size: 22px;
+  font-weight: 650;
+}
+
+.perm-card__text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--dim);
+}
+
+.perm-card__actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.perm-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.perm-row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.perm-row__icon {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-round);
+  background: var(--acc-soft);
+  color: var(--acc);
+}
+
+.perm-row__icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.perm-row__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.perm-row__head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.perm-row__title {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.perm-row__text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--dim);
+}
+
+.perm-badge {
+  flex: none;
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: var(--radius-round);
+  background: var(--hover);
+  color: var(--dim);
+}
+
+.perm-badge--ok {
+  background: var(--acc-soft);
+  color: var(--acc);
+}
+
+.perm-badge--no {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}

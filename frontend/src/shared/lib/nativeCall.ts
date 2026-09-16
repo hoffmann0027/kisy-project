@@ -18,8 +18,28 @@ export interface NativeCallDecision {
   callId: string;
 }
 
+/** Where a call's sound goes. "wired" and "bluetooth" are headsets. */
+export type AudioRoute = "earpiece" | "speaker" | "wired" | "bluetooth";
+
+export interface AudioRouteState {
+  route: AudioRoute;
+  /** What the loudspeaker button asked for; a headset can override it. */
+  speaker: boolean;
+}
+
+/** Capacitor's permission vocabulary; "denied" means only Settings can change it. */
+export type NativePermissionState = "granted" | "prompt" | "prompt-with-rationale" | "denied";
+export type NativePermission = "notifications" | "microphone" | "fullScreenIntent";
+
 interface KisyCallPlugin {
   getPendingAction(): Promise<{ action: string | null; callId: string | null }>;
+  startCallAudio(opts: { video: boolean }): Promise<{ route: AudioRoute | null }>;
+  setSpeaker(opts: { on: boolean }): Promise<{ route: AudioRoute | null }>;
+  stopCallAudio(): Promise<void>;
+  checkAppPermissions(): Promise<Record<NativePermission, NativePermissionState>>;
+  requestAppPermission(opts: { name: NativePermission }): Promise<{ state: NativePermissionState }>;
+  openPermissionSettings(opts: { name: NativePermission }): Promise<void>;
+  addListener(event: "audioRoute", fn: (data: AudioRouteState) => void): Promise<PluginListenerHandle>;
   stopRinging(): Promise<void>;
   canUseFullScreenIntent(): Promise<{ granted: boolean }>;
   openFullScreenIntentSettings(): Promise<void>;
@@ -105,4 +125,69 @@ export async function reportFullScreenIntent(): Promise<boolean> {
 export async function openFullScreenIntentSettings(): Promise<void> {
   if (!isNative()) return;
   await KisyCall.openFullScreenIntentSettings().catch(() => {});
+}
+
+// --- call audio ---------------------------------------------------------------
+
+function isRoute(v: unknown): v is AudioRoute {
+  return v === "earpiece" || v === "speaker" || v === "wired" || v === "bluetooth";
+}
+
+/**
+ * Routes the call's sound for a voice call (earpiece, screen blanks at the ear)
+ * or a video call (loudspeaker). Safe to call again: it re-asserts the route,
+ * which the WebView overrides when remote audio starts playing.
+ */
+export async function startCallAudio(video: boolean): Promise<void> {
+  if (!isNative()) return;
+  await KisyCall.startCallAudio({ video }).catch((err) => callLog("call audio unavailable", err));
+}
+
+export async function setCallSpeaker(on: boolean): Promise<void> {
+  if (!isNative()) return;
+  await KisyCall.setSpeaker({ on }).catch((err) => callLog("speaker switch failed", err));
+}
+
+/**
+ * Normal audio, proximity lock released. Harmless without a call, which is
+ * why it also runs when the call layer mounts: a WebView reloaded mid-call
+ * must not leave the screen blanking at the ear.
+ */
+export async function stopCallAudio(): Promise<void> {
+  if (!isNative()) return;
+  await KisyCall.stopCallAudio().catch(() => {});
+}
+
+/** Subscribes to route changes (headset in or out, loudspeaker). Returns an unsubscribe. */
+export function onAudioRoute(fn: (state: AudioRouteState) => void): () => void {
+  if (!isNative()) return () => {};
+  let handle: PluginListenerHandle | null = null;
+  let dropped = false;
+  void KisyCall.addListener("audioRoute", (raw) => {
+    if (!isRoute(raw.route)) return;
+    fn({ route: raw.route, speaker: raw.speaker === true });
+  })
+    .then((h) => {
+      if (dropped) void h.remove();
+      else handle = h;
+    })
+    .catch(() => {});
+  return () => {
+    dropped = true;
+    void handle?.remove();
+  };
+}
+
+// --- permissions ---------------------------------------------------------------
+
+export async function checkNativePermissions(): Promise<Record<NativePermission, NativePermissionState>> {
+  return KisyCall.checkAppPermissions();
+}
+
+export async function requestNativePermission(name: NativePermission): Promise<NativePermissionState> {
+  return (await KisyCall.requestAppPermission({ name })).state;
+}
+
+export async function openNativePermissionSettings(name: NativePermission): Promise<void> {
+  await KisyCall.openPermissionSettings({ name });
 }

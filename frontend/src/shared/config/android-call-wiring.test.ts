@@ -55,7 +55,8 @@ describe.runIf(existsSync(ANDROID))("android call wiring", () => {
   it("agrees with the web bridge on the plugin name", () => {
     const plugin = read(CALLS, "KisyCallPlugin.java");
     const bridge = read(__dirname, "..", "lib", "nativeCall.ts");
-    const native = /@CapacitorPlugin\(name = "([^"]+)"\)/.exec(plugin)?.[1];
+    // The annotation may span lines once it declares permissions too.
+    const native = /@CapacitorPlugin\(\s*name = "([^"]+)"/.exec(plugin)?.[1];
     const web = /registerPlugin<[^>]+>\("([^"]+)"\)/.exec(bridge)?.[1];
     expect(native).toBeTruthy();
     // A mismatch throws only when a call arrives, on a device, in the dark.
@@ -70,5 +71,34 @@ describe.runIf(existsSync(ANDROID))("android call wiring", () => {
     // Guard against the loop below passing because it found nothing to check.
     expect(used.length).toBeGreaterThan(2);
     for (const method of new Set(used)) expect(declared).toContain(method);
+  });
+
+  it("may switch the call to the earpiece and blank the screen at the ear", () => {
+    const xml = manifest();
+    // Without MODIFY_AUDIO_SETTINGS the route calls are silently ignored and
+    // the call stays on the loudspeaker; without WAKE_LOCK acquiring the
+    // proximity lock throws.
+    expect(xml).toContain("android.permission.MODIFY_AUDIO_SETTINGS");
+    expect(xml).toContain("android.permission.WAKE_LOCK");
+  });
+
+  it("emits every event the web bridge listens for", () => {
+    const java = read(CALLS, "KisyCallPlugin.java");
+    const bridge = read(__dirname, "..", "lib", "nativeCall.ts");
+    const emitted = [...java.matchAll(/notifyListeners\("(\w+)"/g)].map((m) => m[1]);
+    const listened = [...bridge.matchAll(/KisyCall\.addListener\("(\w+)"/g)].map((m) => m[1]);
+    expect(listened).toEqual(expect.arrayContaining(["callAction", "audioRoute"]));
+    for (const event of listened) expect(emitted).toContain(event);
+  });
+
+  it("names the permissions the same on both sides", () => {
+    const java = read(CALLS, "KisyCallPlugin.java");
+    const bridge = read(__dirname, "..", "lib", "nativeCall.ts");
+    const union = /export type NativePermission = ([^;]+);/.exec(bridge)?.[1] ?? "";
+    const web = [...union.matchAll(/"(\w+)"/g)].map((m) => m[1]).sort();
+    const native = [...java.matchAll(/static final String \w+ = "(\w+)";/g)].map((m) => m[1]).sort();
+    expect(web).toEqual(["fullScreenIntent", "microphone", "notifications"]);
+    // A name the plugin does not know resolves as a request for nothing.
+    expect(native).toEqual(web);
   });
 });

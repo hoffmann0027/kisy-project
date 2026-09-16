@@ -5,6 +5,7 @@ import { MessengerPage } from "@pages/messenger/MessengerPage";
 import { RequireAuth, RequireCEO, RequireRatingAccess, RedirectIfAuth } from "./guards";
 import { useRealtime } from "./useRealtime";
 import { CallProvider } from "@features/call/CallProvider";
+import { PermissionsOnboarding } from "@features/permissions/PermissionsOnboarding";
 import { TabBar } from "@widgets/tabbar/TabBar";
 import { RouteFallback } from "./RouteFallback";
 import { lazy, Suspense, useState } from "react";
@@ -40,6 +41,9 @@ function AuthedLayout() {
         <Outlet />
       </Suspense>
       <TabBar onProfile={() => setProfileOpen(true)} />
+      {/* After the first sign-in, once per device: inside RequireAuth, so a
+          forced password change comes first. */}
+      <PermissionsOnboarding />
       {/* Mounted only once opened: an unopened dialog should cost nothing. */}
       {profileOpen && (
         <Suspense fallback={null}>
