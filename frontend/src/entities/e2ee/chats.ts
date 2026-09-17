@@ -2,6 +2,7 @@
 // encrypt/decrypt and the local plaintext cache (docs/e2ee-design.md §5.2 —
 // MLS keys are one-time, so server history is undecryptable later; decrypted
 // text must be cached locally, encrypted at rest by the keystore).
+import { UserFacingError } from "@shared/lib/errors";
 import {
   addMembers,
   createChat,
@@ -344,7 +345,7 @@ export async function processChatHandshake(s: E2EESession, chatType: ChatType, c
 
 // --- chat creation (first E2EE message in a private chat) ---
 
-async function initiateChat(s: E2EESession, chatId: string, peerUserId: string): Promise<ChatState | null> {
+async function initiateChat(s: E2EESession, chatId: string, peerUserId: string): Promise<ChatState> {
   const sodium = await getSodium();
   const fromB64 = (t: string) => sodium.from_base64(t, sodium.base64_variants.ORIGINAL);
   const toB64 = (u: Uint8Array) => sodium.to_base64(u, sodium.base64_variants.ORIGINAL);
@@ -355,9 +356,11 @@ async function initiateChat(s: E2EESession, chatId: string, peerUserId: string):
     e2eeApi.claimKeyPackages(s.userId, s.identity.deviceId),
   ]);
   if (peer.keyPackages.length === 0) {
-    // Peer has no E2EE devices yet (never logged in since the rollout) —
-    // fall back to plaintext for now; retried on the next send.
-    return null;
+    // Nothing to encrypt for — and never a reason to send in the clear
+    // (audit A-10). Tell the sender which of the two it is: the peer has no
+    // E2EE device at all, or their one-time key packages ran out.
+    const { devices } = await e2eeApi.listDevices(peerUserId).catch(() => ({ devices: [] }));
+    throw new UserFacingError(devices.length > 0 ? PEER_KEYS_EXHAUSTED : PEER_NO_DEVICES);
   }
 
   const recipients: Record<string, string> = {};
@@ -404,21 +407,26 @@ export interface EncryptedBody {
   epoch: number;
 }
 
+export const PEER_NO_DEVICES =
+  "Собеседник ещё не входил в KISY с поддержкой шифрования — сообщение не отправлено.";
+export const PEER_KEYS_EXHAUSTED =
+  "У собеседника закончились ключи шифрования — сообщение не отправлено. Попросите его открыть KISY и повторите.";
+
 /**
  * Encrypt a message for a private chat, creating the chat's MLS group on
- * first use. Returns null when E2EE is not possible yet (peer has no devices)
- * — the caller falls back to plaintext.
+ * first use. Throws when it cannot — a UserFacingError when the peer has
+ * nothing to encrypt for — and never returns without ciphertext: a private
+ * chat has no plaintext fallback (audit A-10).
  */
 export async function encryptForChat(
   s: E2EESession,
   chatId: string,
   peerUserId: string,
   text: string,
-): Promise<EncryptedBody | null> {
+): Promise<EncryptedBody> {
   return withChatLock(chatId, async () => {
     let state = await loadState(s, chatId);
     if (!state) state = await initiateChat(s, chatId, peerUserId);
-    if (!state) return null;
 
     const sodium = await getSodium();
     const result = await encryptMessage(state, utf8(text));

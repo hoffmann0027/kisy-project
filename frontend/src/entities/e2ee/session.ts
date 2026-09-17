@@ -36,13 +36,14 @@ export function e2eeSession(): E2EESession | null {
  * Initialize E2EE for the logged-in user: open the encrypted keystore,
  * create/load the device identity, announce it to the directory and top up
  * the one-time key package pool. Failure disables E2EE for the session
- * (messages fall back to plaintext) rather than breaking messaging.
+ * rather than breaking messaging: groups keep working, and a private-chat send
+ * retries the start and, if it still fails, refuses to send (audit A-10).
  */
 export function initE2EE(userId: string): Promise<E2EESession | null> {
   if (session && session.userId === userId) return Promise.resolve(session);
   if (!initPromise) {
     initPromise = bootstrap(userId).catch((err) => {
-      console.warn("E2EE init failed; falling back to plaintext", err);
+      console.warn("E2EE init failed; private chats cannot send until it starts", err);
       initPromise = null;
       return null;
     });

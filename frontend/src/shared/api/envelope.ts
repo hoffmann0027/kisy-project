@@ -1,5 +1,7 @@
 // Mirrors the response envelope defined in docs/spec/09-api-contracts.md
 // and produced by backend/pkg/httpresponse.
+import { UserFacingError } from "@shared/lib/errors";
+
 export interface ApiErrorBody {
   code: string;
   message: string;
@@ -45,6 +47,11 @@ export class ApiError extends Error {
  * the fallback, so internal messages never reach the screen.
  */
 export function userFacingError(err: unknown, fallback: string): string {
-  if (err instanceof ApiError && err.code === "QUOTA_EXCEEDED" && err.message) return err.message;
+  if (err instanceof UserFacingError && err.message) return err.message;
+  if (err instanceof ApiError && USER_FACING_CODES.has(err.code) && err.message) return err.message;
   return fallback;
 }
+
+// Server refusals whose message is written for the user: a limit they can act
+// on (A-07) and a private chat that takes only encrypted text (A-10).
+const USER_FACING_CODES = new Set(["QUOTA_EXCEEDED", "E2EE_REQUIRED"]);

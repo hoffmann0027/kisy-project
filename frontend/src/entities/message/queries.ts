@@ -6,9 +6,10 @@ import {
   cacheOutgoingPlaintext,
   cachePlaintext,
   e2eeSession,
-  encryptForChat,
   hydrateMessages,
+  type EncryptedBody,
 } from "@entities/e2ee";
+import { encryptPrivateText } from "./encryption";
 
 export const messageKeys = {
   list: (chatType: ChatType, chatId: string) => ["messages", chatType, chatId] as const,
@@ -79,47 +80,47 @@ export function flattenMessages(pages: MessagePage[] | undefined): Message[] {
 }
 
 /**
- * Send a message. In private chats with an active E2EE session the text is
- * encrypted client-side (the server stores only MLS ciphertext); the returned
- * message is re-hydrated with the plaintext so the UI never regresses to a
- * lock placeholder. Falls back to plaintext while the peer has no E2EE
- * devices or the session failed to initialize.
+ * Send a message. In a private chat the text is encrypted client-side and the
+ * server receives only MLS ciphertext; the returned message is re-hydrated with
+ * the plaintext so the UI never regresses to a lock placeholder. If the text
+ * cannot be encrypted the message is NOT sent — a UserFacingError says why
+ * (fail-closed, audit A-10). Attachment-only messages carry no text to encrypt.
  */
+export interface SendArgs {
+  text: string;
+  replyTo?: string;
+  attachmentIds?: string[];
+  threadRootId?: string;
+}
+
+export async function sendMessage(chatType: ChatType, chatId: string, peerUserId: string | undefined, args: SendArgs) {
+  if (chatType !== "private" || !args.text) {
+    const body: SendMessageBody = {
+      text: args.text,
+      replyTo: args.replyTo,
+      attachmentIds: args.attachmentIds,
+      threadRootId: args.threadRootId,
+    };
+    return messagesApi.send(chatType, chatId, body);
+  }
+
+  const { session: s, body: enc } = await encryptPrivateText(chatId, peerUserId, args.text);
+  const body: SendMessageBody = { ...enc, replyTo: args.replyTo, attachmentIds: args.attachmentIds, contentKind: 1 };
+  const ciphertext = enc.ciphertext;
+  // Before the request, not after: a sender cannot decrypt its own MLS
+  // message, so until this write lands the text exists nowhere but in memory.
+  // Keyed by the ciphertext digest because the server has not assigned an id.
+  await cacheOutgoingPlaintext(s, ciphertext, args.text, null);
+  const { message } = await messagesApi.send(chatType, chatId, body);
+  // Re-key onto the real id and stamp it with the disappearing timer (stage J)
+  // so it self-evicts even if this device misses the deletion event.
+  await adoptOutgoingPlaintext(s, ciphertext, message.id, message.expiresAt);
+  return { message: { ...message, text: args.text, encrypted: true } };
+}
+
 export function useSendMessage(chatType: ChatType, chatId: string, peerUserId?: string) {
   return useMutation({
-    mutationFn: async (args: { text: string; replyTo?: string; attachmentIds?: string[]; threadRootId?: string }) => {
-      const s = e2eeSession();
-      let body: SendMessageBody = {
-        text: args.text,
-        replyTo: args.replyTo,
-        attachmentIds: args.attachmentIds,
-        threadRootId: args.threadRootId,
-      };
-      let sentEncrypted = false;
-      let ciphertext: string | null = null;
-      if (s && chatType === "private" && peerUserId && args.text) {
-        const enc = await encryptForChat(s, chatId, peerUserId, args.text).catch(() => null);
-        if (enc) {
-          body = { ...enc, replyTo: args.replyTo, attachmentIds: args.attachmentIds, contentKind: 1 };
-          sentEncrypted = true;
-          ciphertext = enc.ciphertext;
-          // Before the request, not after: a sender cannot decrypt its own
-          // MLS message, so until this write lands the text exists nowhere
-          // but in memory. Keyed by the ciphertext digest because the server
-          // has not assigned an id yet.
-          await cacheOutgoingPlaintext(s, enc.ciphertext, args.text, null);
-        }
-      }
-      const { message } = await messagesApi.send(chatType, chatId, body);
-      if (sentEncrypted && s && ciphertext) {
-        // Re-key onto the real id and stamp it with the disappearing timer
-        // (stage J) so it self-evicts even if this device misses the
-        // deletion event.
-        await adoptOutgoingPlaintext(s, ciphertext, message.id, message.expiresAt);
-        return { message: { ...message, text: args.text, encrypted: true } };
-      }
-      return { message };
-    },
+    mutationFn: (args: SendArgs) => sendMessage(chatType, chatId, peerUserId, args),
     // Optimistic insertion is handled by the caller via the cache writer so
     // the pending bubble can be reconciled with the server ack / WS echo.
   });
@@ -138,67 +139,87 @@ export interface ForwardTargetRef {
 
 /**
  * Forward messages into a target chat. Plaintext messages go server-side in
- * one batch (the server enforces the clearance hierarchy and stamps the
- * attribution). Encrypted messages are re-sent client-side: re-encrypted for
- * an E2EE private target, or — when forwarded out to a non-E2EE target — sent
- * as the locally decrypted text (an explicit user choice). Attribution is
- * preserved: an already-forwarded message keeps its original author.
+ * one batch (the server enforces the clearance hierarchy, stamps the
+ * attribution and copies attachments) — into a private target with their text
+ * encrypted by this client, since a private chat stores only ciphertext.
+ * Encrypted messages are re-sent client-side: re-encrypted for a private
+ * target, or — forwarded out to a group — sent as the locally decrypted text
+ * (an explicit user choice). If any text cannot be encrypted, nothing is
+ * forwarded (fail-closed, audit A-10). Attribution is preserved: an
+ * already-forwarded message keeps its original author.
  */
-export function useForwardMessages() {
-  return useMutation({
-    mutationFn: async (args: {
-      target: ForwardTargetRef;
-      messages: Message[];
-      resolveName: (senderId: string) => string;
-    }) => {
-      const { target, messages, resolveName } = args;
+export interface ForwardArgs {
+  target: ForwardTargetRef;
+  messages: Message[];
+  resolveName: (senderId: string) => string;
+}
+
+export async function forwardMessages(args: ForwardArgs): Promise<void> {
+  const { target, messages, resolveName } = args;
+  const intoPrivate = target.chatType === "private";
+
+  const plaintext: Message[] = [];
+  const encrypted: Message[] = [];
+  for (const m of messages) {
+    // An undecryptable message (no local plaintext) cannot be forwarded.
+    if (m.undecryptable || (m.encrypted && !m.text)) continue;
+    if (m.encrypted) encrypted.push(m);
+    else plaintext.push(m);
+  }
+  if (plaintext.length === 0 && encrypted.length === 0) {
+    throw new Error("Нет сообщений, доступных для пересылки");
+  }
+
+  // Into a private chat every text is encrypted FIRST, all of it, before
+  // anything is sent: one failure forwards nothing, and nothing is ever sent
+  // in the clear (fail-closed, audit A-10).
+  const serverEncrypted: Record<string, EncryptedBody> = {};
+  const clientSends: { m: Message; body: EncryptedBody | null }[] = [];
+  if (intoPrivate) {
+    for (const m of plaintext) {
+      if (m.text) serverEncrypted[m.id] = (await encryptPrivateText(target.chatId, target.peerUserId, m.text)).body;
+    }
+  }
+  for (const m of encrypted) {
+    const body = intoPrivate ? (await encryptPrivateText(target.chatId, target.peerUserId, m.text ?? "")).body : null;
+    clientSends.push({ m, body });
+  }
+
+  for (const { m, body } of clientSends) {
+    const senderId = m.forwardedFrom?.senderId ?? m.senderId;
+    const senderName = m.forwardedFrom?.senderName ?? resolveName(senderId);
+    if (body) {
+      const { message } = await messagesApi.send(target.chatType, target.chatId, {
+        ...body,
+        contentKind: 1,
+        forwardedFromSenderId: senderId,
+        forwardedFromSenderName: senderName,
+      });
       const s = e2eeSession();
+      if (s) await cachePlaintext(s, message.id, m.text ?? "", message.expiresAt);
+    } else {
+      // Out of an E2EE chat into a group: forwarding necessarily reveals the
+      // text there — the user chose the target.
+      await messagesApi.send(target.chatType, target.chatId, {
+        text: m.text ?? "",
+        forwardedFromSenderId: senderId,
+        forwardedFromSenderName: senderName,
+      });
+    }
+  }
 
-      const plaintextIds: string[] = [];
-      const encrypted: Message[] = [];
-      for (const m of messages) {
-        // An undecryptable message (no local plaintext) cannot be forwarded.
-        if (m.undecryptable || (m.encrypted && !m.text)) continue;
-        if (m.encrypted) encrypted.push(m);
-        else plaintextIds.push(m.id);
-      }
-      if (plaintextIds.length === 0 && encrypted.length === 0) {
-        throw new Error("Нет сообщений, доступных для пересылки");
-      }
+  if (plaintext.length > 0) {
+    await messagesApi.forward(
+      plaintext.map((m) => m.id),
+      target.chatType,
+      target.chatId,
+      intoPrivate ? serverEncrypted : undefined,
+    );
+  }
+}
 
-      for (const m of encrypted) {
-        const senderId = m.forwardedFrom?.senderId ?? m.senderId;
-        const senderName = m.forwardedFrom?.senderName ?? resolveName(senderId);
-        const text = m.text ?? "";
-        let sent = false;
-        if (s && target.chatType === "private" && target.peerUserId && text) {
-          const enc = await encryptForChat(s, target.chatId, target.peerUserId, text).catch(() => null);
-          if (enc) {
-            const { message } = await messagesApi.send(target.chatType, target.chatId, {
-              ...enc,
-              contentKind: 1,
-              forwardedFromSenderId: senderId,
-              forwardedFromSenderName: senderName,
-            });
-            await cachePlaintext(s, message.id, text, message.expiresAt);
-            sent = true;
-          }
-        }
-        if (!sent) {
-          // Non-E2EE target: forwarding necessarily reveals the text there.
-          await messagesApi.send(target.chatType, target.chatId, {
-            text,
-            forwardedFromSenderId: senderId,
-            forwardedFromSenderName: senderName,
-          });
-        }
-      }
-
-      if (plaintextIds.length > 0) {
-        await messagesApi.forward(plaintextIds, target.chatType, target.chatId);
-      }
-    },
-  });
+export function useForwardMessages() {
+  return useMutation({ mutationFn: forwardMessages });
 }
 
 export function useEditMessage() {

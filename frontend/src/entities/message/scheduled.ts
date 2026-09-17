@@ -10,8 +10,8 @@ import {
   cachedScheduledPlaintext,
   dropScheduledPlaintext,
   e2eeSession,
-  encryptForChat,
 } from "@entities/e2ee";
+import { encryptPrivateText } from "./encryption";
 
 export const scheduledKey = ["scheduled-messages"] as const;
 
@@ -41,41 +41,51 @@ export async function scheduledDisplayText(m: ScheduledMessage): Promise<string 
   return cachedScheduledPlaintext(s, m.id);
 }
 
+export interface ScheduleArgs {
+  text: string;
+  sendAt: Date;
+  replyTo?: string;
+  attachmentIds?: string[];
+}
+
+export async function scheduleMessage(
+  chatType: ChatType,
+  chatId: string,
+  peerUserId: string | undefined,
+  args: ScheduleArgs,
+): Promise<ScheduledMessage> {
+  const sendAt = args.sendAt.toISOString();
+  if (chatType !== "private" || !args.text) {
+    const body: ScheduleMessageBody = {
+      chatType,
+      chatId,
+      text: args.text,
+      replyTo: args.replyTo,
+      attachmentIds: args.attachmentIds,
+      sendAt,
+    };
+    return (await scheduledApi.schedule(body)).scheduled;
+  }
+  // Encrypted now, at scheduling time ("path A"); if that fails nothing is
+  // scheduled — never a plaintext copy waiting on the server (audit A-10).
+  const { session, body: enc } = await encryptPrivateText(chatId, peerUserId, args.text);
+  const { scheduled } = await scheduledApi.schedule({
+    chatType,
+    chatId,
+    ...enc,
+    contentKind: 1,
+    replyTo: args.replyTo,
+    attachmentIds: args.attachmentIds,
+    sendAt,
+  });
+  await cacheScheduledPlaintext(session, scheduled.id, args.text);
+  return scheduled;
+}
+
 export function useScheduleMessage(chatType: ChatType, chatId: string, peerUserId?: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (args: { text: string; sendAt: Date; replyTo?: string; attachmentIds?: string[] }) => {
-      const s = e2eeSession();
-      let body: ScheduleMessageBody = {
-        chatType,
-        chatId,
-        text: args.text,
-        replyTo: args.replyTo,
-        attachmentIds: args.attachmentIds,
-        sendAt: args.sendAt.toISOString(),
-      };
-      let encrypted = false;
-      if (s && chatType === "private" && peerUserId && args.text) {
-        const enc = await encryptForChat(s, chatId, peerUserId, args.text).catch(() => null);
-        if (enc) {
-          body = {
-            chatType,
-            chatId,
-            ...enc,
-            contentKind: 1,
-            replyTo: args.replyTo,
-            attachmentIds: args.attachmentIds,
-            sendAt: args.sendAt.toISOString(),
-          };
-          encrypted = true;
-        }
-      }
-      const { scheduled } = await scheduledApi.schedule(body);
-      if (encrypted && s) {
-        await cacheScheduledPlaintext(s, scheduled.id, args.text);
-      }
-      return scheduled;
-    },
+    mutationFn: (args: ScheduleArgs) => scheduleMessage(chatType, chatId, peerUserId, args),
     onSuccess: () => qc.invalidateQueries({ queryKey: scheduledKey }),
   });
 }
@@ -99,12 +109,10 @@ export function useEditScheduledMessage() {
   return useMutation({
     mutationFn: async (args: { scheduled: ScheduledMessage; text: string; peerUserId?: string }) => {
       const { scheduled, text, peerUserId } = args;
-      const s = e2eeSession();
-      if (scheduled.ciphertext && s && scheduled.chatType === "private" && peerUserId) {
-        const enc = await encryptForChat(s, scheduled.chatId, peerUserId, text);
-        if (!enc) throw new Error("encryption failed");
+      if (scheduled.chatType === "private") {
+        const { session, body: enc } = await encryptPrivateText(scheduled.chatId, peerUserId, text);
         const res = await scheduledApi.update(scheduled.id, { ...enc, contentKind: 1 });
-        await cacheScheduledPlaintext(s, scheduled.id, text);
+        await cacheScheduledPlaintext(session, scheduled.id, text);
         return res.scheduled;
       }
       return (await scheduledApi.update(scheduled.id, { text })).scheduled;

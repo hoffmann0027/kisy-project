@@ -398,11 +398,22 @@ export const messagesApi = {
     apiClient.post<{ message: Message }>("/messages", { chatType, chatId, ...body }),
   // Server-side forward of plaintext messages into a target chat. E2EE
   // messages are forwarded client-side via send() with forwardedFrom* set.
-  forward: (sourceMessageIds: string[], targetChatType: ChatType, targetChatId: string) =>
+  /**
+   * Server-side forward of plaintext messages. Into a private chat the server
+   * takes text only as ciphertext, so `encrypted` must carry the client's
+   * ciphertext for each source message that has text (audit A-10).
+   */
+  forward: (
+    sourceMessageIds: string[],
+    targetChatType: ChatType,
+    targetChatId: string,
+    encrypted?: Record<string, { ciphertext: string; alg: number; epoch: number }>,
+  ) =>
     apiClient.post<{ messages: Message[] }>("/messages/forward", {
       sourceMessageIds,
       targetChatType,
       targetChatId,
+      ...(encrypted ? { encrypted } : {}),
     }),
   edit: (messageId: string, text: string) =>
     apiClient.patch<{ message: Message }>(`/messages/${messageId}`, { text }),

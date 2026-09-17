@@ -103,6 +103,12 @@ vi.mock("@shared/api/endpoints", () => ({
       if (w) w.acked = true;
       return { acked: true };
     },
+    async listDevices(userId: string) {
+      const devices = [...server.deviceOwners.entries()]
+        .filter(([, owner]) => owner === userId)
+        .map(([id]) => ({ id, userId, name: "device", createdAt: new Date().toISOString() }));
+      return { devices };
+    },
     async listHandshake(chatType: ChatType, chatId: string, afterId?: string) {
       let items = server.handshake.filter((h) => h.chatType === chatType && h.chatId === chatId);
       if (afterId) {
@@ -116,6 +122,7 @@ vi.mock("@shared/api/endpoints", () => ({
 
 // Imports below the mock so they see the fake endpoints.
 import { MemoryKeyStore, loadOrCreateIdentity } from "@shared/crypto";
+import { UserFacingError } from "@shared/lib/errors";
 import type { E2EESession } from "./session";
 import { topUpKeyPackages } from "./session";
 import {
@@ -222,10 +229,19 @@ describe("E2EE private chat orchestration", () => {
     expect(await processWelcomes(bob)).toEqual([]);
   });
 
-  it("falls back to plaintext when the peer has no E2EE devices", async () => {
+  // Audit A-10: no key packages is not a reason to send in the clear. The
+  // caller gets a UserFacingError naming the actual problem.
+  it("refuses, with a reason, when the peer has never set up encryption", async () => {
     const alice = await makeSession("user-alice");
-    const enc = await encryptForChat(alice, "chat-2", "user-no-devices", "привет");
-    expect(enc).toBeNull();
+    const refusal = encryptForChat(alice, "chat-2", "user-no-devices", "привет");
+    await expect(refusal).rejects.toBeInstanceOf(UserFacingError);
+    await expect(encryptForChat(alice, "chat-2b", "user-no-devices", "привет")).rejects.toThrow(/не входил/);
+  });
+
+  it("refuses, with a reason, when the peer's key packages ran out", async () => {
+    const alice = await makeSession("user-alice");
+    server.deviceOwners.set("dev-of-bob-without-packages", "user-bob-drained");
+    await expect(encryptForChat(alice, "chat-3", "user-bob-drained", "привет")).rejects.toThrow(/закончились ключи/);
   });
 
   it("handshake feed skips own commits and stays consistent", async () => {

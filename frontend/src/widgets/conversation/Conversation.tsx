@@ -199,9 +199,10 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
       { text, replyTo: replyToId, attachmentIds: attachments?.map((a) => a.id) },
       {
         onSuccess: ({ message }) => cache.resolvePending(chatType, chatId, tempId, message),
-        onError: () => {
+        onError: (e) => {
           cache.patch(chatType, chatId, tempId, (m) => ({ ...m, pending: false, failed: true }));
-          toast.error("Не удалось отправить сообщение");
+          // A private chat that could not be encrypted says why (audit A-10).
+          toast.error(userFacingError(e, "Не удалось отправить сообщение"));
         },
       },
     );
@@ -215,7 +216,7 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
           toast.success(
             `Сообщение будет отправлено ${sendAt.toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}`,
           ),
-        onError: () => toast.error("Не удалось запланировать сообщение"),
+        onError: (e) => toast.error(userFacingError(e, "Не удалось запланировать сообщение")),
       },
     );
   };
