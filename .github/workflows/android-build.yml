@@ -93,9 +93,6 @@ jobs:
       - name: Sync the bundle into the Android project
         run: npx cap sync android
 
-      # The native call rules (earpiece/loudspeaker/headset routing and the
-      # proximity lock being released when a call ends) are plain JUnit tests.
-      # They run before the APK is built, so a broken rule never ships.
       - name: Unpack the signing keystore
         env:
           ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
@@ -105,6 +102,9 @@ jobs:
           # so a newer APK always installs over an older one.
           echo "KISY_VERSION_CODE=$(( $(date +%s) / 60 ))" >> "$GITHUB_ENV"
 
+      # The native call rules (earpiece/loudspeaker/headset routing and the
+      # proximity lock being released when a call ends) are plain JUnit tests.
+      # They run before the APK is built, so a broken rule never ships.
       - name: Native unit tests
         run: ./gradlew --no-daemon testDebugUnitTest
         working-directory: frontend/android
@@ -135,7 +135,7 @@ jobs:
             # and without it a mismatch cannot be diagnosed.
             report=$("$apksigner" verify --verbose --print-certs "$apk")
             echo "$report"
-            got=$(echo "$report" | sed -n 's/^Signer.*certificate SHA-256 digest: *//p' | tr -d ': ' | tr 'A-F' 'a-f' | sort -u)
+            got=$(echo "$report" | grep -E 'certificate SHA-256 digest:' | sed 's/.*certificate SHA-256 digest: *//' | tr -d ': \r' | tr 'A-F' 'a-f' | sort -u || true)
             if [ -z "$got" ]; then
               echo "::error::no signer certificate digest found in the apksigner report for $apk" >&2
               exit 1
