@@ -136,6 +136,8 @@ type UploadConfig struct {
 	MaxBytesBasic int64
 	ChunkBytes    int
 	SessionTTL    time.Duration
+	// UnlinkedMaxAge: uploads never attached to a message are reaped after it.
+	UnlinkedMaxAge time.Duration
 }
 
 // QuotaConfig bounds storage and posting per account and per community
@@ -389,6 +391,9 @@ func Load() (*Config, error) {
 		NoteFileMaxBytes:    int64(quotaMB["NOTE_FILE_MAX_MB"]) << 20,
 	}
 	if cfg.Upload.SessionTTL, err = getEnvDuration("UPLOAD_SESSION_TTL", 24*time.Hour); err != nil {
+		return nil, err
+	}
+	if cfg.Upload.UnlinkedMaxAge, err = getEnvDuration("UPLOAD_UNLINKED_MAX_AGE", 24*time.Hour); err != nil {
 		return nil, err
 	}
 

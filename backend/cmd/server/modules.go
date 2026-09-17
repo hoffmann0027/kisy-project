@@ -331,8 +331,9 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	if blobs != nil {
 		attachmentsSvc.SetBlobStore(blobs)
 	}
-	// Reap abandoned chunked-upload sessions hourly (chunks cascade).
-	attachmentsSvc.StartSessionCleanup(ctx, time.Hour, log)
+	// Reap abandoned chunked-upload sessions (chunks cascade) and uploads never
+	// attached to a message, hourly.
+	attachmentsSvc.StartSessionCleanup(ctx, time.Hour, cfg.Upload.UnlinkedMaxAge, log)
 	attachmentsSvc.SetMessageAccess(func(ctx context.Context, messageID, actorID uuid.UUID, actorLevel int) bool {
 		_, _, err := messagesSvc.ResolveAccessible(ctx, messageID, messages.ActorMeta{UserID: actorID, RoleLevel: actorLevel})
 		return err == nil

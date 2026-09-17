@@ -218,9 +218,56 @@ func (s *Service) CompleteUpload(ctx context.Context, uploader, id uuid.UUID) (D
 	return toDTO(attID, name, mime, int64(len(raw)), meta), nil
 }
 
+// ReapUnlinked deletes uploads that were never attached to a message and are
+// older than maxAge — a file picked and then never sent. Without this they
+// stayed in storage forever and, with quotas, kept counting against their
+// uploader forever (audit A-07). An upload a pending scheduled message is still
+// waiting to send is kept however old it is.
+//
+// An unlinked upload's object key is its own (copies are only ever made from
+// linked attachments), so its object is deleted without a reference check.
+func (s *Service) ReapUnlinked(ctx context.Context, maxAge time.Duration) (int, error) {
+	rows, err := s.pool.Query(ctx, `
+		DELETE FROM attachments a
+		WHERE a.message_id IS NULL
+		  AND a.created_at < now() - make_interval(secs => $1)
+		  AND NOT EXISTS (
+		    SELECT 1 FROM scheduled_messages sm
+		    WHERE sm.status = 'pending' AND a.id = ANY(sm.attachment_ids))
+		RETURNING a.storage_path`, maxAge.Seconds())
+	if err != nil {
+		return 0, fmt.Errorf("attachments: reap unlinked: %w", err)
+	}
+	var paths []string
+	n := 0
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			rows.Close()
+			return n, fmt.Errorf("attachments: scan reaped: %w", err)
+		}
+		n++
+		if path != "" {
+			paths = append(paths, path)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return n, fmt.Errorf("attachments: reap unlinked: %w", err)
+	}
+	if s.blobs != nil {
+		for _, p := range paths {
+			if err := s.blobs.Delete(ctx, p); err != nil {
+				return n, fmt.Errorf("attachments: delete reaped object: %w", err)
+			}
+		}
+	}
+	return n, nil
+}
+
 // StartSessionCleanup reaps expired upload sessions (and their chunks, via
 // cascade) on a fixed interval until ctx is cancelled.
-func (s *Service) StartSessionCleanup(ctx context.Context, interval time.Duration, log *slog.Logger) {
+func (s *Service) StartSessionCleanup(ctx context.Context, interval, unlinkedMaxAge time.Duration, log *slog.Logger) {
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -237,6 +284,17 @@ func (s *Service) StartSessionCleanup(ctx context.Context, interval time.Duratio
 				} else if n > 0 {
 					metrics.WorkerItems("attachments_cleanup", int(n))
 					log.Info("attachments: reaped expired upload sessions", "count", n)
+				}
+				if unlinkedMaxAge <= 0 {
+					continue
+				}
+				reaped, err := s.ReapUnlinked(ctx, unlinkedMaxAge)
+				if err != nil && ctx.Err() == nil {
+					metrics.WorkerError("attachments_cleanup")
+					log.Warn("attachments: unlinked upload cleanup failed", "error", err)
+				} else if reaped > 0 {
+					metrics.WorkerItems("attachments_cleanup", reaped)
+					log.Info("attachments: reaped unlinked uploads", "count", reaped)
 				}
 			}
 		}
