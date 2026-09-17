@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -102,11 +101,7 @@ func run() error {
 		trustedProxyCIDRs: cfg.TrustedProxyCIDRs,
 	})
 
-	srv := &http.Server{
-		Addr:              ":" + strconv.Itoa(cfg.HTTPPort),
-		Handler:           router,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
+	srv := newHTTPServer(cfg.HTTPPort, router, defaultServerTimeouts)
 
 	serveErr := make(chan error, 1)
 	go func() {
@@ -163,6 +158,8 @@ func newRouter(d routerDeps) http.Handler {
 		r.Use(middleware.ClientIPFromXFF(d.trustedProxyCIDRs...))
 	}
 	r.Use(middleware.Recoverer)
+	// Before anything reads a body — authentication included.
+	r.Use(limitBody(maxJSONBody, isUploadRoute))
 	r.Use(security.Headers)
 	r.Use(metrics.Middleware)
 	r.Use(requestLogger(d.log))
