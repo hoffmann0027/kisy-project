@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/platform/ratelimit"
 	"kisy-backend/internal/quota"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
@@ -465,6 +466,9 @@ func (h *Handler) writeResult(w http.ResponseWriter, r *http.Request, m *Message
 // missing/hidden chats collapse to 404 so a caller cannot probe for the
 // existence of resources above their clearance.
 func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) {
+	if ratelimit.WriteIfLimited(w, r, err) {
+		return
+	}
 	switch {
 	case errors.Is(err, ErrEmptyContent):
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "message text must not be empty")

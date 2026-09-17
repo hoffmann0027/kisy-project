@@ -34,6 +34,8 @@ export class ApiError extends Error {
     message: string,
     public readonly requestId: string,
     public readonly status: number = 0,
+    // Seconds from Retry-After on a 429: how long until the limit resets.
+    public readonly retryAfter: number = 0,
   ) {
     super(message);
     this.name = "ApiError";
@@ -48,6 +50,9 @@ export class ApiError extends Error {
  */
 export function userFacingError(err: unknown, fallback: string): string {
   if (err instanceof UserFacingError && err.message) return err.message;
+  // A rate limit (429): the server wording is for developers, the wait is
+  // what the person needs.
+  if (err instanceof ApiError && err.code === "RATE_LIMITED") return rateLimitedMessage(err.retryAfter);
   if (err instanceof ApiError && USER_FACING_CODES.has(err.code) && err.message) return err.message;
   return fallback;
 }
@@ -55,3 +60,10 @@ export function userFacingError(err: unknown, fallback: string): string {
 // Server refusals whose message is written for the user: a limit they can act
 // on (A-07) and a private chat that takes only encrypted text (A-10).
 const USER_FACING_CODES = new Set(["QUOTA_EXCEEDED", "E2EE_REQUIRED"]);
+
+/** "Слишком часто" with the wait, when the server said how long it is. */
+export function rateLimitedMessage(retryAfterSeconds: number): string {
+  if (!(retryAfterSeconds > 0)) return "Слишком часто. Попробуйте чуть позже";
+  if (retryAfterSeconds < 60) return `Слишком часто. Попробуйте через ${retryAfterSeconds} с`;
+  return `Слишком часто. Попробуйте через ${Math.ceil(retryAfterSeconds / 60)} мин`;
+}

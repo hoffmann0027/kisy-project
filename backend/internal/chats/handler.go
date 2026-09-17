@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/platform/ratelimit"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
 )
@@ -65,6 +66,9 @@ func (h *Handler) open(w http.ResponseWriter, r *http.Request) {
 	}
 
 	chat, err := h.svc.OpenPrivateChat(r.Context(), targetID, actor)
+	if ratelimit.WriteIfLimited(w, r, err) {
+		return
+	}
 	switch {
 	case errors.Is(err, ErrSelfChat):
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "cannot open a chat with yourself")

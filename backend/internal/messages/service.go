@@ -123,7 +123,14 @@ type Service struct {
 	attachLink AttachmentLinker
 	attachLoad AttachmentLoader
 	ttl        DisappearTTL
+	// sendGate runs before a message is sent (REST or WebSocket) or forwarded;
+	// its error refuses the send. The per-account rate limit lives here, so
+	// both transports draw on one budget. Nil: no gate.
+	sendGate func(ctx context.Context, actor ActorMeta) error
 }
+
+// SetSendGate wires the check every Send and Forward passes first.
+func (s *Service) SetSendGate(g func(ctx context.Context, actor ActorMeta) error) { s.sendGate = g }
 
 func NewService(pool *pgxpool.Pool, repo Repository, rec audit.Recorder, authz Authorizer) *Service {
 	return &Service{pool: pool, repo: repo, audit: rec, authz: authz}
@@ -255,6 +262,11 @@ type SendInput struct {
 // Send validates access, persists the message and publishes it, returning the
 // enriched DTO (including any attachments).
 func (s *Service) Send(ctx context.Context, in SendInput, actor ActorMeta) (DTO, error) {
+	if s.sendGate != nil {
+		if err := s.sendGate(ctx, actor); err != nil {
+			return DTO{}, err
+		}
+	}
 	_, deliver, err := s.SendTx(ctx, s.pool, in, actor)
 	if err != nil {
 		return DTO{}, err
@@ -450,6 +462,11 @@ type EncryptedText struct {
 func (s *Service) Forward(ctx context.Context, in ForwardInput, actor ActorMeta) ([]DTO, error) {
 	if len(in.SourceMessageIDs) == 0 {
 		return nil, ErrEmptyContent
+	}
+	if s.sendGate != nil {
+		if err := s.sendGate(ctx, actor); err != nil {
+			return nil, err
+		}
 	}
 	// The actor must be able to post to the target, and we need its breadth.
 	if err := s.authorize(ctx, in.TargetChatType, in.TargetChatID, actor); err != nil {

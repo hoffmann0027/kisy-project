@@ -211,6 +211,9 @@ func newRouter(d routerDeps) http.Handler {
 		// Everything below requires a valid session.
 		r.Group(func(r chi.Router) {
 			r.Use(m.authMW.RequireAuth)
+			// Per-account budgets (search, link previews, new groups, uploads);
+			// messages and new private chats are limited in their services.
+			r.Use(m.accountLimits.Middleware(claimsIdentity, accountLimitedScope))
 
 			r.Route("/users", func(r chi.Router) {
 				m.usersHandler.Routes(r)

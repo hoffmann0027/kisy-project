@@ -397,6 +397,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '413': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 
   /avatars/{ownerType}/{ownerID}:
     get:
@@ -517,6 +518,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Envelope' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 
   /groups/{groupID}:
     get:
@@ -870,6 +872,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 
   /groups/{groupID}/posts:
     parameters:
@@ -984,6 +987,7 @@ paths:
                           post: { $ref: '#/components/schemas/Post' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '413': { description: File too large }
+        '429': { $ref: '#/components/responses/RateLimited' }
 
   /posts/{postID}/reactions:
     parameters:
@@ -1404,6 +1408,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 
   /chats/{chatID}:
     get:
@@ -1471,6 +1476,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
     get:
       tags: [messages]
       summary: List messages of a chat (cursor pagination, newest first)
@@ -1559,6 +1565,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 
   /messages/pinned:
     get:
@@ -1685,6 +1692,7 @@ paths:
                                 text: { type: string }
                                 createdAt: { type: string, format: date-time }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 
   /link-preview:
     post:
@@ -1833,6 +1841,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '413': { $ref: '#/components/responses/ValidationError' }
         '415': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /attachments/limit:
     get:
       tags: [messages]
@@ -1891,6 +1900,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '413': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /attachments/{id}/upload-status:
     get:
       tags: [messages]
@@ -2903,6 +2913,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '413': { description: File too large }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /notes/{id}:
     delete:
       tags: [notes]
@@ -4369,7 +4380,16 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Envelope' }
     RateLimited:
-      description: Too many requests
+      description: >
+        Too many requests (code RATE_LIMITED). Per client IP on the auth
+        endpoints; per account — with separate budgets for basic and invited
+        accounts (RATE_* settings) — on sending and forwarding messages (REST
+        and WebSocket share the budget), opening a conversation that did not
+        exist yet, creating a group, search, link previews and uploads.
+      headers:
+        Retry-After:
+          description: Whole seconds until the limit resets (at least 1).
+          schema: { type: integer, minimum: 1 }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Envelope' }

@@ -93,3 +93,22 @@ describe("api client session renewal", () => {
     expect(refreshCalls).toHaveLength(1);
   });
 });
+
+describe("api client rate limits", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("carries Retry-After into the error, so the screen can say how long to wait", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: false, error: { code: "RATE_LIMITED", message: "slow down" } }), {
+          status: 429,
+          headers: { "Retry-After": "17" },
+        }),
+      ),
+    );
+    await expect(apiClient.get("/search?q=a")).rejects.toMatchObject({ code: "RATE_LIMITED", status: 429, retryAfter: 17 });
+  });
+});

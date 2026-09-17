@@ -44,6 +44,14 @@ type Service struct {
 	unread    UnreadLoader
 	otherRead OtherReadLoader
 	profiles  ProfileLoader
+	// newChatGate runs before a conversation that does not exist yet is
+	// created — reopening an existing one is never refused. Nil: no gate.
+	newChatGate func(ctx context.Context, actor ActorMeta) error
+}
+
+// SetNewChatGate wires the check a new private conversation must pass.
+func (s *Service) SetNewChatGate(g func(ctx context.Context, actor ActorMeta) error) {
+	s.newChatGate = g
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository, lookup TargetLookup) *Service {
@@ -133,6 +141,11 @@ func (s *Service) OpenPrivateChat(ctx context.Context, targetID uuid.UUID, actor
 
 	if !access.CanInitiateChat(actor.RoleLevel, targetLevel) {
 		return nil, ErrCannotInitiate
+	}
+	if s.newChatGate != nil {
+		if err := s.newChatGate(ctx, actor); err != nil {
+			return nil, err
+		}
 	}
 
 	chat := &PrivateChat{

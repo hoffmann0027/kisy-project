@@ -102,6 +102,9 @@ type Config struct {
 	// always on (see loadTurnstile); elsewhere TURNSTILE_ENABLED decides.
 	Turnstile TurnstileConfig
 
+	// AccountRates are the per-account rate limits (RATE_*).
+	AccountRates AccountRateConfig
+
 	// RunMigrations forces schema migrations to run on boot. Defaults to
 	// true outside production; a managed single-service deploy sets it true.
 	RunMigrations bool
@@ -158,6 +161,23 @@ type QuotaConfig struct {
 	PostsPerHourInvited int
 	PostMediaMaxBytes   int64
 	NoteFileMaxBytes    int64
+}
+
+// AccountRateConfig is the per-account rate limits (audit A-23), each with a
+// budget for basic and for invited accounts. Counts per window; zero disables
+// a limit. Messages count REST and WebSocket sends together; new chats count
+// only conversations that did not exist yet, plus new groups/communities.
+type AccountRateConfig struct {
+	MessagesPerMinuteBasic       int
+	MessagesPerMinuteInvited     int
+	NewChatsPerHourBasic         int
+	NewChatsPerHourInvited       int
+	SearchesPerMinuteBasic       int
+	SearchesPerMinuteInvited     int
+	LinkPreviewsPerMinuteBasic   int
+	LinkPreviewsPerMinuteInvited int
+	UploadsPerHourBasic          int
+	UploadsPerHourInvited        int
 }
 
 // LeadershipMaxLevel is the strongest clearance band for upload limits:
@@ -394,6 +414,36 @@ func Load() (*Config, error) {
 		PostMediaMaxBytes:   int64(quotaMB["POST_MEDIA_MAX_MB"]) << 20,
 		NoteFileMaxBytes:    int64(quotaMB["NOTE_FILE_MAX_MB"]) << 20,
 	}
+	rates := map[string]int{
+		"RATE_MESSAGES_PER_MIN_BASIC": 20, "RATE_MESSAGES_PER_MIN_INVITED": 60,
+		"RATE_NEW_CHATS_PER_HOUR_BASIC": 10, "RATE_NEW_CHATS_PER_HOUR_INVITED": 60,
+		"RATE_SEARCH_PER_MIN_BASIC": 20, "RATE_SEARCH_PER_MIN_INVITED": 60,
+		"RATE_LINK_PREVIEWS_PER_MIN_BASIC": 10, "RATE_LINK_PREVIEWS_PER_MIN_INVITED": 30,
+		"RATE_UPLOADS_PER_HOUR_BASIC": 30, "RATE_UPLOADS_PER_HOUR_INVITED": 300,
+	}
+	for key, def := range rates {
+		v, err := getEnvInt(key, def)
+		if err != nil {
+			return nil, err
+		}
+		if v < 0 {
+			return nil, fmt.Errorf("config: %s must not be negative", key)
+		}
+		rates[key] = v
+	}
+	cfg.AccountRates = AccountRateConfig{
+		MessagesPerMinuteBasic:       rates["RATE_MESSAGES_PER_MIN_BASIC"],
+		MessagesPerMinuteInvited:     rates["RATE_MESSAGES_PER_MIN_INVITED"],
+		NewChatsPerHourBasic:         rates["RATE_NEW_CHATS_PER_HOUR_BASIC"],
+		NewChatsPerHourInvited:       rates["RATE_NEW_CHATS_PER_HOUR_INVITED"],
+		SearchesPerMinuteBasic:       rates["RATE_SEARCH_PER_MIN_BASIC"],
+		SearchesPerMinuteInvited:     rates["RATE_SEARCH_PER_MIN_INVITED"],
+		LinkPreviewsPerMinuteBasic:   rates["RATE_LINK_PREVIEWS_PER_MIN_BASIC"],
+		LinkPreviewsPerMinuteInvited: rates["RATE_LINK_PREVIEWS_PER_MIN_INVITED"],
+		UploadsPerHourBasic:          rates["RATE_UPLOADS_PER_HOUR_BASIC"],
+		UploadsPerHourInvited:        rates["RATE_UPLOADS_PER_HOUR_INVITED"],
+	}
+
 	if cfg.Upload.SessionTTL, err = getEnvDuration("UPLOAD_SESSION_TTL", 24*time.Hour); err != nil {
 		return nil, err
 	}

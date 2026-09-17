@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"kisy-backend/internal/messages"
+	"kisy-backend/internal/platform/ratelimit"
+	"kisy-backend/pkg/httpresponse"
 )
 
 // handleInbound dispatches a client frame. Unknown or malformed frames are
@@ -92,6 +94,15 @@ func (h *Hub) handleSend(ctx context.Context, c *Client, p sendPayload) {
 		RoleLevel: c.roleLevel,
 		SessionID: c.sessionID,
 	})
+	if le, limited := ratelimit.AsLimited(err); limited {
+		// Same budget as POST /messages; the client waits and retries.
+		c.enqueue(encode(EventError, map[string]any{
+			"message":    "rate limited",
+			"code":       httpresponse.ErrRateLimited,
+			"retryAfter": ratelimit.RetryAfterSeconds(le.RetryAfter),
+		}))
+		return
+	}
 	if err != nil {
 		c.enqueue(encode(EventError, map[string]string{"message": "message rejected"}))
 	}

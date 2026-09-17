@@ -100,6 +100,7 @@ async function request<T>(path: string, init?: RequestInit, allowRefresh = true)
       error?.message ?? "Unexpected error",
       envelope.requestId ?? "",
       response.status,
+      Number(response.headers.get("Retry-After")) || 0,
     );
   }
 

@@ -97,6 +97,7 @@ type modules struct {
 	wsHandler            *ws.Handler
 	hub                  *ws.Hub
 	limiter              *ratelimit.Limiter
+	accountLimits        *ratelimit.Accounts
 }
 
 func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, rdb *goredis.Client, log *slog.Logger) (*modules, error) {
@@ -442,6 +443,8 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	}, 0)
 	wsPublisher := ws.NewPublisher(hub)
 	limiter := ratelimit.NewLimiter(rdb, log)
+	accountLimits := ratelimit.NewAccounts(limiter, accountPolicy(cfg.AccountRates))
+	wireAccountLimits(accountLimits, messagesSvc, chatsSvc)
 	messagesSvc.SetPublisher(wsPublisher)
 	// Real-time profile/group propagation (Stage B: name/avatar changes).
 	usersSvc.SetBroadcaster(func(_ context.Context, audience []uuid.UUID, profile users.DTO) {
@@ -977,6 +980,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		wsHandler:            wsHandler,
 		hub:                  hub,
 		limiter:              limiter,
+		accountLimits:        accountLimits,
 	}, nil
 }
 
