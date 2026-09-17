@@ -43,6 +43,7 @@ import (
 	"kisy-backend/internal/platform/blobstore"
 	"kisy-backend/internal/platform/db"
 	"kisy-backend/internal/platform/ratelimit"
+	"kisy-backend/internal/platform/turnstile"
 	"kisy-backend/internal/posts"
 	"kisy-backend/internal/push"
 	"kisy-backend/internal/quota"
@@ -148,6 +149,10 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	authMW := auth.NewMiddleware(tokens, sessionsRepo, pool)
 	authHandler := auth.NewHandler(authSvc, authMW, cfg.IPHashSalt, cfg.Env == "production")
 	authHandler.SetNativeOrigins(cfg.NativeAppOrigins)
+	authHandler.SetCaptcha(turnstile.Select(cfg.Turnstile.Enabled, cfg.Turnstile.SiteKey, cfg.Turnstile.Secret, cfg.Turnstile.Hostnames))
+	if cfg.Turnstile.Enabled && !cfg.Turnstile.Configured() {
+		log.Error("TURNSTILE_SITE_KEY / TURNSTILE_SECRET are not set: sign-up is closed until they are")
+	}
 
 	// userLevel resolves an active user's clearance; inactive or missing
 	// users report ok=false so callers cannot enumerate accounts.

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -9,6 +9,7 @@ import { useAuthStore } from "@shared/store/auth";
 import { authApi } from "@shared/api/endpoints";
 import { ApiError } from "@shared/api/envelope";
 import { displayNameErrorMessage, displayNameSchema, normalizeDisplayName } from "@shared/lib/displayName";
+import { TurnstileWidget, type TurnstileHandle } from "@features/auth/TurnstileWidget";
 
 const schema = z
   .object({
@@ -44,12 +45,22 @@ export function RegisterPage() {
   // What closing changes is whether the code is optional — and saying so up
   // front beats letting someone fill in four fields for a refusal.
   const [openRegistration, setOpenRegistration] = useState<boolean | null>(null);
+  // Turnstile: the site key comes with the policy (empty — no check on this
+  // deployment). The token is single use, so every refused attempt resets it.
+  const [siteKey, setSiteKey] = useState("");
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaBroken, setCaptchaBroken] = useState(false);
+  const captcha = useRef<TurnstileHandle>(null);
 
   useEffect(() => {
     let dropped = false;
     void authApi
       .registrationPolicy()
-      .then((p) => !dropped && setOpenRegistration(p.open))
+      .then((p) => {
+        if (dropped) return;
+        setOpenRegistration(p.open);
+        setSiteKey(p.turnstileSiteKey ?? "");
+      })
       // Unreachable server: assume the stricter of the two, so the form never
       // promises something the deployment does not allow.
       .catch(() => !dropped && setOpenRegistration(false));
@@ -73,11 +84,30 @@ export function RegisterPage() {
       toast.error("На этом сервере регистрация только по приглашению");
       return;
     }
+    if (siteKey && !captchaToken) {
+      toast.error(
+        captchaBroken
+          ? "Проверка не загрузилась. Обновите страницу или проверьте соединение"
+          : "Секунду — идёт проверка, что вы не робот",
+      );
+      return;
+    }
     try {
-      await registerUser(token, data.username, normalizeDisplayName(data.displayName), data.password);
+      await registerUser(token, data.username, normalizeDisplayName(data.displayName), data.password, captchaToken ?? "");
       toast.success("Аккаунт создан");
       navigate("/", { replace: true });
     } catch (e) {
+      // The server has seen this token: whatever went wrong, it will not
+      // accept it twice.
+      captcha.current?.reset();
+      if (e instanceof ApiError && (e.code === "CAPTCHA_FAILED" || e.code === "CAPTCHA_UNAVAILABLE")) {
+        toast.error(
+          e.code === "CAPTCHA_FAILED"
+            ? "Не удалось подтвердить, что вы не робот. Попробуйте ещё раз"
+            : "Проверка временно недоступна, попробуйте через минуту",
+        );
+        return;
+      }
       // A name problem belongs under the name field, not in a toast.
       const nameProblem = displayNameErrorMessage(e);
       if (nameProblem) {
@@ -133,6 +163,17 @@ export function RegisterPage() {
           error={errors.confirm?.message}
           {...register("confirm")}
         />
+        {siteKey && (
+          <TurnstileWidget
+            ref={captcha}
+            siteKey={siteKey}
+            onToken={(t) => {
+              setCaptchaToken(t);
+              if (t) setCaptchaBroken(false);
+            }}
+            onError={() => setCaptchaBroken(true)}
+          />
+        )}
         <Button type="submit" block loading={isSubmitting}>
           Создать аккаунт
         </Button>

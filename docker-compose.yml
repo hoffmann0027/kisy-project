@@ -107,6 +107,11 @@ services:
       INVITATION_TOKEN_TTL: ${INVITATION_TOKEN_TTL}
       IP_HASH_SALT: ${IP_HASH_SALT:-}
       WS_ALLOWED_ORIGIN: ${WS_ALLOWED_ORIGIN:-}
+      # Sign-up bot check (see .env.example); always on when APP_ENV=production.
+      TURNSTILE_ENABLED: ${TURNSTILE_ENABLED:-}
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+      TURNSTILE_SECRET: ${TURNSTILE_SECRET:-}
+      TURNSTILE_HOSTNAMES: ${TURNSTILE_HOSTNAMES:-}
       # Our nginx is the only hop and it lives on the compose bridge network
       # (Docker allocates these from 172.16/12). Without this the backend sees
       # every request as coming from nginx and all clients share one

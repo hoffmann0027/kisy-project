@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	"kisy-backend/internal/platform/clientip"
+	"kisy-backend/internal/platform/turnstile"
 	"kisy-backend/internal/users"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
@@ -57,6 +59,19 @@ type Handler struct {
 	// nativeOrigins are the WebView origins of the packaged apps; only
 	// requests from them may receive tokens in a response body (audit A-06).
 	nativeOrigins []string
+	// captcha checks the Turnstile token on sign-up. Never nil: an
+	// unconfigured handler refuses every sign-up rather than accepting them.
+	captcha turnstile.Verifier
+	// captchaSiteKey is handed to the sign-up screen so it can render the
+	// widget; empty when the check is disabled (development only).
+	captchaSiteKey string
+}
+
+// SetCaptcha wires the Turnstile check for sign-up (and the site key the
+// screen needs to render the widget).
+func (h *Handler) SetCaptcha(v turnstile.Verifier, siteKey string) {
+	h.captcha = v
+	h.captchaSiteKey = siteKey
 }
 
 // SetNativeOrigins sets the app origins allowed to receive tokens in the
@@ -64,7 +79,7 @@ type Handler struct {
 func (h *Handler) SetNativeOrigins(origins []string) { h.nativeOrigins = origins }
 
 func NewHandler(svc *Service, mw *Middleware, ipHashSalt string, secureCookie bool) *Handler {
-	return &Handler{svc: svc, mw: mw, ipHashSalt: ipHashSalt, secureCookie: secureCookie}
+	return &Handler{svc: svc, mw: mw, ipHashSalt: ipHashSalt, secureCookie: secureCookie, captcha: turnstile.Unconfigured{}}
 }
 
 // Routes mounts the auth endpoints on r. Rate limiting is applied by the
@@ -105,23 +120,34 @@ func (h *Handler) HashIP(ip string) string {
 func clientIP(r *http.Request) string { return clientip.From(r) }
 
 type registerRequest struct {
-	InviteToken string `json:"inviteToken"`
-	Username    string `json:"username"`
-	DisplayName string `json:"displayName"`
-	Password    string `json:"password"`
+	// TurnstileToken is what the Cloudflare widget on the sign-up screen
+	// produced; checked against siteverify before anything else.
+	TurnstileToken string `json:"turnstileToken"`
+	InviteToken    string `json:"inviteToken"`
+	Username       string `json:"username"`
+	DisplayName    string `json:"displayName"`
+	Password       string `json:"password"`
 }
 
 // registrationPolicy tells the sign-up screen whether an account can be
 // created without an invitation here. Offering a form that will be refused is
 // worse than not offering it.
 func (h *Handler) registrationPolicy(w http.ResponseWriter, r *http.Request) {
-	httpresponse.OK(w, r, http.StatusOK, map[string]any{"open": h.svc.RegistrationOpen()})
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{
+		"open":             h.svc.RegistrationOpen(),
+		"turnstileSiteKey": h.captchaSiteKey,
+	})
 }
 
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 	if err := httpjson.Decode(w, r, &req); err != nil {
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "malformed JSON body")
+		return
+	}
+	// First, before any other check: a script skipping the widget learns
+	// nothing — not even whether its username is taken.
+	if !h.checkCaptcha(w, r, req.TurnstileToken) {
 		return
 	}
 	// An empty invitation token is now a request for an ordinary account, not
@@ -266,6 +292,25 @@ func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpresponse.OK(w, r, http.StatusOK, map[string]any{"passwordChanged": true})
+}
+
+// checkCaptcha verifies a Turnstile token and writes the refusal itself. A
+// missing or rejected token is 403; a check that could not be made is 503 —
+// fail closed either way, and the second is logged as ours to fix.
+func (h *Handler) checkCaptcha(w http.ResponseWriter, r *http.Request, token string) bool {
+	err := h.captcha.Verify(r.Context(), token, clientIP(r))
+	switch {
+	case err == nil:
+		return true
+	case errors.Is(err, turnstile.ErrUnavailable):
+		slog.ErrorContext(r.Context(), "turnstile: verification unavailable", "error", err)
+		httpresponse.Fail(w, r, http.StatusServiceUnavailable, httpresponse.ErrCaptchaUnavailable,
+			"Проверка недоступна, попробуйте через минуту")
+	default:
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrCaptchaFailed,
+			"Не удалось подтвердить, что вы не робот. Обновите страницу и попробуйте ещё раз")
+	}
+	return false
 }
 
 // writeAuthError maps service errors onto the API error contract without

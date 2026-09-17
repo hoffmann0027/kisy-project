@@ -10,8 +10,12 @@ import "net/http"
 // emits external bundles, no inline scripts). Inline styles are permitted
 // because React renders style attributes; everything else is locked to
 // 'self'. connect-src includes ws/wss for the WebSocket gateway.
+// challenges.cloudflare.com is the Turnstile widget on the sign-up screen: its
+// script, and the iframe the challenge runs in. deploy/nginx must match
+// (TestNginxCSPMatchesBackend).
 const contentSecurityPolicy = "default-src 'self'; " +
-	"script-src 'self'; " +
+	"script-src 'self' https://challenges.cloudflare.com; " +
+	"frame-src https://challenges.cloudflare.com; " +
 	"style-src 'self' 'unsafe-inline'; " +
 	"img-src 'self' data: blob:; " +
 	"font-src 'self'; " +

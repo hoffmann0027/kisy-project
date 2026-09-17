@@ -98,6 +98,10 @@ type Config struct {
 	// docs/spec/01-vision-and-access.md §3.
 	RegistrationOpen bool
 
+	// Turnstile is the Cloudflare bot check on sign-up. In production it is
+	// always on (see loadTurnstile); elsewhere TURNSTILE_ENABLED decides.
+	Turnstile TurnstileConfig
+
 	// RunMigrations forces schema migrations to run on boot. Defaults to
 	// true outside production; a managed single-service deploy sets it true.
 	RunMigrations bool
@@ -423,6 +427,8 @@ func Load() (*Config, error) {
 		cfg.RegistrationOpen = v == "true" || v == "1"
 	}
 
+	cfg.Turnstile = loadTurnstile(cfg.Env)
+
 	if err := cfg.validateProduction(); err != nil {
 		return nil, err
 	}
@@ -698,4 +704,39 @@ func splitList(v string) []string {
 		}
 	}
 	return out
+}
+
+// TurnstileConfig configures the Cloudflare Turnstile check on sign-up.
+type TurnstileConfig struct {
+	Enabled bool
+	SiteKey string
+	Secret  string
+	// Hostnames, when set, are the only hostnames a token may come from
+	// (TURNSTILE_HOSTNAMES, comma-separated) — e.g. the web domain and
+	// "localhost" for the Android app's WebView.
+	Hostnames []string
+}
+
+// Configured reports whether the keys needed to verify tokens are present.
+func (t TurnstileConfig) Configured() bool { return t.SiteKey != "" && t.Secret != "" }
+
+// loadTurnstile reads TURNSTILE_*. Production cannot switch the check off:
+// TURNSTILE_ENABLED=false there is ignored, and missing keys close sign-up
+// (the verifier refuses everything) instead of opening it to scripts —
+// without taking the rest of the server down with it.
+func loadTurnstile(env string) TurnstileConfig {
+	t := TurnstileConfig{
+		SiteKey: os.Getenv("TURNSTILE_SITE_KEY"),
+		Secret:  os.Getenv("TURNSTILE_SECRET"),
+		Enabled: env == "production",
+	}
+	if v := os.Getenv("TURNSTILE_ENABLED"); v != "" && env != "production" {
+		t.Enabled = v == "true" || v == "1"
+	}
+	for _, h := range strings.Split(os.Getenv("TURNSTILE_HOSTNAMES"), ",") {
+		if h = strings.TrimSpace(h); h != "" {
+			t.Hostnames = append(t.Hostnames, h)
+		}
+	}
+	return t
 }

@@ -65,6 +65,12 @@ paths:
         already used is an error, never a silent downgrade to a basic account.
 
         Either way the first session is opened (sets auth cookies).
+
+        Every sign-up carries a Cloudflare Turnstile token, verified
+        server-side before anything else (always in production; other
+        deployments may disable the check). Without a valid token: 403
+        CAPTCHA_FAILED and no account; when the check itself cannot be made:
+        503 CAPTCHA_UNAVAILABLE.
       security: []
       requestBody:
         required: true
@@ -74,6 +80,13 @@ paths:
               type: object
               required: [username, displayName, password]
               properties:
+                turnstileToken:
+                  type: string
+                  maxLength: 2048
+                  description: >
+                    Produced by the Turnstile widget rendered with
+                    turnstileSiteKey from GET /auth/registration. Single use,
+                    valid for 5 minutes. Required unless that site key is empty.
                 inviteToken:
                   type: string
                   description: Omit or leave empty to register without an invitation.
@@ -115,13 +128,22 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '403':
           description: >
-            Registration without an invitation is closed on this deployment
-            (REGISTRATION_OPEN=false).
+            CAPTCHA_FAILED — the Turnstile token is missing, forged, expired or
+            already used; or registration without an invitation is closed on
+            this deployment (REGISTRATION_OPEN=false).
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Envelope' }
         '409': { $ref: '#/components/responses/Conflict' }
         '429': { $ref: '#/components/responses/RateLimited' }
+        '503':
+          description: >
+            CAPTCHA_UNAVAILABLE — the Turnstile check could not be made
+            (Cloudflare unreachable, or the deployment has no keys configured).
+            Sign-up fails closed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
 
   /auth/registration:
     get:
@@ -145,6 +167,12 @@ paths:
                         type: object
                         properties:
                           open: { type: boolean }
+                          turnstileSiteKey:
+                            type: string
+                            description: >
+                              Site key for the Turnstile widget on the sign-up
+                              form. Empty when the check is disabled
+                              (non-production) or not configured.
 
   /auth/login:
     post:

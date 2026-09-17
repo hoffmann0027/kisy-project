@@ -46,6 +46,10 @@ const (
 	// forms have to tell "taken" from "not allowed" without parsing a message.
 	ErrDisplayNameTaken   = "DISPLAY_NAME_TAKEN"
 	ErrDisplayNameInvalid = "DISPLAY_NAME_INVALID"
+	// Cloudflare Turnstile on sign-up: the token was missing or rejected (403),
+	// or the check could not be made (503).
+	ErrCaptchaFailed      = "CAPTCHA_FAILED"
+	ErrCaptchaUnavailable = "CAPTCHA_UNAVAILABLE"
 )
 
 func requestID(r *http.Request) string {

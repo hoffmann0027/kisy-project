@@ -207,3 +207,35 @@ func TestDBPoolRejectsSizesThatWouldWrap(t *testing.T) {
 		}
 	}
 }
+
+// Production cannot switch the sign-up captcha off, whatever the env says;
+// other environments can, and default to off so local stacks need no keys.
+func TestTurnstileCannotBeDisabledInProduction(t *testing.T) {
+	setBaseEnv(t)
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("POSTGRES_SSLMODE", "require")
+	t.Setenv("TURNSTILE_ENABLED", "false")
+	t.Setenv("TURNSTILE_SITE_KEY", "site")
+	t.Setenv("TURNSTILE_SECRET", "secret")
+	t.Setenv("TURNSTILE_HOSTNAMES", " kisy.onrender.com , localhost,")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Turnstile.Enabled {
+		t.Fatal("TURNSTILE_ENABLED=false must be ignored in production")
+	}
+	if got := strings.Join(cfg.Turnstile.Hostnames, "|"); got != "kisy.onrender.com|localhost" {
+		t.Fatalf("hostnames = %q", got)
+	}
+
+	setBaseEnv(t)
+	t.Setenv("TURNSTILE_ENABLED", "")
+	if cfg, err = Load(); err != nil || cfg.Turnstile.Enabled {
+		t.Fatalf("development default: enabled=%v err=%v", cfg.Turnstile.Enabled, err)
+	}
+	t.Setenv("TURNSTILE_ENABLED", "true")
+	if cfg, err = Load(); err != nil || !cfg.Turnstile.Enabled {
+		t.Fatalf("development opt-in: enabled=%v err=%v", cfg.Turnstile.Enabled, err)
+	}
+}

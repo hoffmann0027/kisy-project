@@ -78,3 +78,13 @@
     padding: var(--space-5);
   }
 }
+
+/* Turnstile draws its own iframe; with appearance "interaction-only" it stays
+   empty (and takes no room) unless Cloudflare asks for a click. */
+.auth-captcha {
+  display: flex;
+  justify-content: center;
+}
+.auth-captcha:empty {
+  display: none;
+}

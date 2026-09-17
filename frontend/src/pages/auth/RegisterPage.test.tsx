@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // someone who believed they had an invitation is worse than an error.
 
 const api = vi.hoisted(() => ({
-  registrationPolicy: vi.fn(async () => ({ open: true })),
+  registrationPolicy: vi.fn(async (): Promise<{ open: boolean; turnstileSiteKey?: string }> => ({ open: true })),
 }));
 vi.mock("@shared/api/endpoints", () => ({ authApi: api }));
 
@@ -31,8 +31,8 @@ function fillAndSubmit(inviteCode?: string) {
   if (inviteCode) type("Код приглашения", inviteCode);
   type("Имя пользователя", "new_person");
   type("Имя", "Новый Человек");
-  type("Пароль", "long-enough-1");
-  type("Повторите пароль", "long-enough-1");
+  type("Пароль", "long-enough-1", "");
+  type("Повторите пароль", "long-enough-1", "");
   fireEvent.click(screen.getByRole("button", { name: "Создать аккаунт" }));
 }
 
@@ -56,7 +56,7 @@ describe("registering without an invitation", () => {
 
     fillAndSubmit();
 
-    await waitFor(() => expect(store.register).toHaveBeenCalledWith("", "new_person", "Новый Человек", "long-enough-1"));
+    await waitFor(() => expect(store.register).toHaveBeenCalledWith("", "new_person", "Новый Человек", "long-enough-1", ""));
   });
 
   it("says the code is optional", async () => {
@@ -72,7 +72,7 @@ describe("registering without an invitation", () => {
     fillAndSubmit("invitation-token");
 
     await waitFor(() =>
-      expect(store.register).toHaveBeenCalledWith("invitation-token", "new_person", "Новый Человек", "long-enough-1"),
+      expect(store.register).toHaveBeenCalledWith("invitation-token", "new_person", "Новый Человек", "long-enough-1", ""),
     );
   });
 });
@@ -99,7 +99,7 @@ describe("a deployment that stayed invitation-only", () => {
     fillAndSubmit("invitation-token");
 
     await waitFor(() =>
-      expect(store.register).toHaveBeenCalledWith("invitation-token", "new_person", "Новый Человек", "long-enough-1"),
+      expect(store.register).toHaveBeenCalledWith("invitation-token", "new_person", "Новый Человек", "long-enough-1", ""),
     );
   });
 });
@@ -127,5 +127,73 @@ describe("the display name", () => {
 
     expect(await screen.findByText("Имя занято")).toBeTruthy();
     expect(toasts.error).not.toHaveBeenCalled();
+  });
+});
+
+// A deployment with Turnstile: the form waits for the widget's token, sends
+// it, and asks for a fresh one after the server has seen it.
+describe("the Turnstile check", () => {
+  type Options = { sitekey: string; theme: string; callback: (t: string) => void };
+  let rendered: Options[] = [];
+  const turnstile = {
+    render: vi.fn((_el: HTMLElement, o: Options) => {
+      rendered.push(o);
+      return "widget-1";
+    }),
+    reset: vi.fn(),
+    remove: vi.fn(),
+  };
+
+  beforeEach(() => {
+    rendered = [];
+    window.turnstile = turnstile;
+    api.registrationPolicy.mockResolvedValue({ open: true, turnstileSiteKey: "site-key-123" });
+  });
+
+  it("renders the widget with the deployment's site key", async () => {
+    renderPage();
+    await waitFor(() => expect(rendered).toHaveLength(1));
+    expect(rendered[0].sitekey).toBe("site-key-123");
+    expect(["light", "dark"]).toContain(rendered[0].theme);
+  });
+
+  it("does not send the form before the widget has produced a token", async () => {
+    renderPage();
+    await waitFor(() => expect(rendered).toHaveLength(1));
+
+    fillAndSubmit();
+
+    await waitFor(() => expect(toasts.error).toHaveBeenCalled());
+    expect(store.register).not.toHaveBeenCalled();
+  });
+
+  it("sends the token, and resets the widget when the server refuses it", async () => {
+    const { ApiError } = await import("@shared/api/envelope");
+    store.register.mockRejectedValueOnce(new ApiError("CAPTCHA_FAILED", "no", "r", 403));
+    renderPage();
+    await waitFor(() => expect(rendered).toHaveLength(1));
+    act(() => rendered[0].callback("human-token"));
+
+    fillAndSubmit();
+
+    await waitFor(() =>
+      expect(store.register).toHaveBeenCalledWith("", "new_person", "Новый Человек", "long-enough-1", "human-token"),
+    );
+    await waitFor(() => expect(turnstile.reset).toHaveBeenCalledWith("widget-1"));
+    expect(toasts.error).toHaveBeenCalled();
+
+    // The used token is gone: a second press waits for a new one.
+    store.register.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Создать аккаунт" }));
+    await waitFor(() => expect(toasts.error).toHaveBeenCalledTimes(2));
+    expect(store.register).not.toHaveBeenCalled();
+  });
+
+  it("shows no widget where the deployment has no check", async () => {
+    api.registrationPolicy.mockResolvedValue({ open: true, turnstileSiteKey: "" });
+    renderPage();
+    await waitFor(() => expect(api.registrationPolicy).toHaveBeenCalled());
+    expect(screen.queryByTestId("turnstile")).toBeNull();
+    expect(turnstile.render).not.toHaveBeenCalled();
   });
 });

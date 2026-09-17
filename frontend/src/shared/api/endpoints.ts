@@ -68,9 +68,11 @@ export const authApi = {
     apiClient
       .post<WithTokens<{ user: User }>>("/auth/login", { username, password })
       .then(keepTokens),
-  register: (inviteToken: string, username: string, displayName: string, password: string) =>
+  // turnstileToken: what the Turnstile widget produced (empty when the
+  // deployment has no check — see registrationPolicy().turnstileSiteKey).
+  register: (inviteToken: string, username: string, displayName: string, password: string, turnstileToken = "") =>
     apiClient
-      .post<WithTokens<{ user: User }>>("/auth/register", { inviteToken, username, displayName, password })
+      .post<WithTokens<{ user: User }>>("/auth/register", { inviteToken, username, displayName, password, turnstileToken })
       .then(keepTokens),
   logout: () =>
     apiClient.post<{ loggedOut: boolean }>("/auth/logout").finally(() => saveTokens(null)),
@@ -87,7 +89,7 @@ export const authApi = {
       .then(keepTokens),
   // Whether this deployment lets anyone register without an invitation.
   // Unauthenticated: the sign-up screen asks before it decides what to show.
-  registrationPolicy: () => apiClient.get<{ open: boolean }>("/auth/registration"),
+  registrationPolicy: () => apiClient.get<{ open: boolean; turnstileSiteKey?: string }>("/auth/registration"),
   changePassword: (currentPassword: string, newPassword: string) =>
     apiClient.post<{ passwordChanged: boolean }>("/auth/password", { currentPassword, newPassword }),
 };
