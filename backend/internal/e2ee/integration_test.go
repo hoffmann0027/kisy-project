@@ -21,11 +21,13 @@ import (
 )
 
 type harness struct {
-	svc  *e2ee.Service
-	msgs *messages.Service
-	chat uuid.UUID
-	a, b uuid.UUID
-	ctx  context.Context
+	svc    *e2ee.Service
+	msgs   *messages.Service
+	chat   uuid.UUID
+	a, b   uuid.UUID
+	ctx    context.Context
+	claims map[[2]uuid.UUID]int
+	seed   func(name string, level int) uuid.UUID
 }
 
 func setup(t *testing.T) harness {
@@ -79,7 +81,16 @@ func setup(t *testing.T) harness {
 		Group: func(context.Context, uuid.UUID, uuid.UUID, int) error { return messages.ErrNotFound },
 	})
 
-	return harness{svc: svc, msgs: msgs, chat: chat.ID, a: a, b: b, ctx: ctx}
+	// Production policy shape: claim only from someone you share a private
+	// chat with, at most claimLimitPerPair times (audit A-09).
+	claims := map[[2]uuid.UUID]int{}
+	svc.SetClaimPolicy(chatsSvc.SharePrivateChat, func(_ context.Context, actor, target uuid.UUID) (bool, error) {
+		claims[[2]uuid.UUID{actor, target}]++
+		return claims[[2]uuid.UUID{actor, target}] <= claimLimitPerPair, nil
+	})
+
+	seed := func(name string, level int) uuid.UUID { return testdb.SeedUser(t, pool, name, level) }
+	return harness{svc: svc, msgs: msgs, chat: chat.ID, a: a, b: b, ctx: ctx, claims: claims, seed: seed}
 }
 
 func registerDevice(t *testing.T, h harness, user uuid.UUID) uuid.UUID {
@@ -112,7 +123,7 @@ func TestKeyPackageLifecycle(t *testing.T) {
 	}
 
 	// Bob claims one package per alice device; a second claim gets the next one.
-	claimed, err := h.svc.ClaimKeyPackages(h.ctx, h.a, uuid.Nil)
+	claimed, err := h.svc.ClaimKeyPackages(h.ctx, e2ee.Actor{UserID: h.b}, h.a, uuid.Nil)
 	if err != nil || len(claimed) != 1 {
 		t.Fatalf("claim: %v, %d packages", err, len(claimed))
 	}

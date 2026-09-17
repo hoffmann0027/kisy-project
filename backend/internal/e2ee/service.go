@@ -39,10 +39,23 @@ type Actor struct {
 }
 
 type Service struct {
-	pool  *pgxpool.Pool
-	repo  Repository
-	authz Authorizer
-	pub   Publisher
+	pool       *pgxpool.Pool
+	repo       Repository
+	authz      Authorizer
+	pub        Publisher
+	peers      PeerCheck
+	claimLimit ClaimLimit
+}
+
+// PeerCheck reports whether two users share a private chat.
+type PeerCheck func(ctx context.Context, a, b uuid.UUID) (bool, error)
+
+// ClaimLimit reports whether actor may claim another key package of target now.
+type ClaimLimit func(ctx context.Context, actor, target uuid.UUID) (bool, error)
+
+// SetClaimPolicy installs who may claim whose key packages (audit A-09).
+func (s *Service) SetClaimPolicy(peers PeerCheck, limit ClaimLimit) {
+	s.peers, s.claimLimit = peers, limit
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository, authz Authorizer) *Service {
@@ -167,7 +180,32 @@ func (s *Service) UploadKeyPackages(ctx context.Context, actor Actor, deviceID u
 // the caller is about to add that user to an MLS group. excludeDevice
 // (uuid.Nil = none) lets a user claim their OWN other devices without
 // burning the calling device's package.
-func (s *Service) ClaimKeyPackages(ctx context.Context, userID, excludeDevice uuid.UUID) ([]ClaimedKeyPackage, error) {
+func (s *Service) ClaimKeyPackages(ctx context.Context, actor Actor, userID, excludeDevice uuid.UUID) ([]ClaimedKeyPackage, error) {
+	// Claiming consumes the target's one-time packages, so it is not open to
+	// anyone (audit A-09): your own other devices, or someone you already share
+	// a private chat with — and a bounded number of times per pair. Without a
+	// policy installed nothing but your own devices is claimable (fail closed).
+	if userID != actor.UserID {
+		if s.peers == nil {
+			return nil, ErrNotFound
+		}
+		ok, err := s.peers(ctx, actor.UserID, userID)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, ErrNotFound
+		}
+		if s.claimLimit != nil {
+			allowed, err := s.claimLimit(ctx, actor.UserID, userID)
+			if err != nil {
+				return nil, err
+			}
+			if !allowed {
+				return nil, ErrRateLimited
+			}
+		}
+	}
 	claimed, err := s.repo.ClaimKeyPackages(ctx, s.pool, userID, excludeDevice)
 	if err != nil {
 		return nil, err

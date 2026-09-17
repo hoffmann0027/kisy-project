@@ -850,6 +850,11 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		},
 	})
 	e2eeSvc.SetPublisher(wsPublisher)
+	// Key packages are claimable only by a chat partner, 20 per pair per hour —
+	// room for several devices and retries, not for draining a pool (A-09).
+	e2eeSvc.SetClaimPolicy(chatsSvc.SharePrivateChat, func(ctx context.Context, actor, target uuid.UUID) (bool, error) {
+		return limiter.Allow(ctx, "e2ee.claim", actor.String()+":"+target.String(), 20, time.Hour), nil
+	})
 	e2eeHandler := e2ee.NewHandler(e2eeSvc, func(r *http.Request) (e2ee.Actor, bool) {
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {

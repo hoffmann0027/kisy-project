@@ -178,6 +178,15 @@ func (s *Service) ListForUser(ctx context.Context, actor ActorMeta) ([]PrivateCh
 // ParticipantIDs returns the two participants of a chat, for real-time
 // event fan-out. A missing chat yields an empty slice, not an error, so
 // the caller simply delivers to nobody.
+// SharePrivateChat reports whether two users already have a private chat.
+func (s *Service) SharePrivateChat(ctx context.Context, a, b uuid.UUID) (bool, error) {
+	_, err := s.repo.FindByPair(ctx, s.pool, a, b)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 func (s *Service) ParticipantIDs(ctx context.Context, chatID uuid.UUID) ([]uuid.UUID, error) {
 	chat, err := s.repo.GetByID(ctx, s.pool, chatID)
 	if errors.Is(err, ErrNotFound) {

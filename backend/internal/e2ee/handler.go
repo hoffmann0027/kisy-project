@@ -189,7 +189,8 @@ func (h *Handler) countKeyPackages(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) claimKeyPackages(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.actor(r); !ok {
+	actor, ok := h.actor(r)
+	if !ok {
 		unauth(w, r)
 		return
 	}
@@ -206,7 +207,7 @@ func (h *Handler) claimKeyPackages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	claimed, err := h.svc.ClaimKeyPackages(r.Context(), userID, excludeDevice)
+	claimed, err := h.svc.ClaimKeyPackages(r.Context(), actor, userID, excludeDevice)
 	if err != nil {
 		fail(w, r, err)
 		return
@@ -441,6 +442,8 @@ func fail(w http.ResponseWriter, r *http.Request, err error) {
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "not permitted")
 	case errors.Is(err, ErrValidation):
 		badRequest(w, r, "invalid request")
+	case errors.Is(err, ErrRateLimited):
+		httpresponse.Fail(w, r, http.StatusTooManyRequests, httpresponse.ErrRateLimited, "too many requests")
 	default:
 		// Chat authorizers surface their own not-found errors for hidden
 		// chats; keep masking (404) instead of leaking existence via 500.
