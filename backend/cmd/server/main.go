@@ -292,6 +292,7 @@ func newRouter(d routerDeps) http.Handler {
 			})
 
 			r.Route("/search", func(r chi.Router) {
+				r.Use(withDeadline(expensiveDeadline))
 				m.searchHandler.Routes(r)
 			})
 
@@ -299,6 +300,7 @@ func newRouter(d routerDeps) http.Handler {
 				// Server-side outbound fetch: rate-limit to blunt SSRF probing
 				// and abuse of the preview fetcher.
 				r.Use(m.limiter.Limit("link-preview", 30, time.Minute))
+				r.Use(withDeadline(expensiveDeadline))
 				m.linkPreviewHandler.Routes(r)
 			})
 
@@ -343,6 +345,7 @@ func newRouter(d routerDeps) http.Handler {
 			// account — it is the one screen a basic account has that an
 			// invited one reaches from the hub instead.
 			r.Route("/feed", func(r chi.Router) {
+				r.Use(withDeadline(expensiveDeadline))
 				m.postsHandler.FeedRoutes(r)
 			})
 
