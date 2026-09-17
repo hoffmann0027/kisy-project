@@ -427,6 +427,11 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		}
 	}
 	hub := ws.NewHub(log, rdb, recipientResolver)
+	hub.SetConnLimits(ws.ConnLimits{
+		MaxPerUser:         cfg.WSMaxConnsPerUser,
+		MaxPerIP:           cfg.WSMaxConnsPerIP,
+		MaxFramesPerSecond: cfg.WSMaxFramesPerSec,
+	})
 	// A socket lives on the session it authenticated with: revoking the session
 	// ends the socket at once (the kick), and a periodic re-check catches the
 	// revocations the kick never hears about (audit A-03).

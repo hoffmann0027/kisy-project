@@ -84,6 +84,9 @@ type Hub struct {
 	// re-check); recheck is how often each socket does so.
 	checkSession SessionChecker
 	recheck      time.Duration
+
+	// limits caps sockets per account and per address, and frames per socket.
+	limits ConnLimits
 }
 
 // kickEnvelope selects the sockets to end: one session of a user, or every
@@ -92,6 +95,9 @@ type kickEnvelope struct {
 	UserID    uuid.UUID `json:"u"`
 	SessionID uuid.UUID `json:"s"`
 	Keep      uuid.UUID `json:"k"`
+	// ConnID selects a single socket: one closed because a newer socket of
+	// the same account or address went over its cap.
+	ConnID uuid.UUID `json:"c,omitempty"`
 }
 
 type fanoutEnvelope struct {
@@ -183,6 +189,19 @@ func (h *Hub) onKick(payload []byte) {
 		return
 	}
 	h.mu.RLock()
+	if env.ConnID != uuid.Nil {
+		var replaced *Client
+		for c := range h.clients[env.UserID] {
+			if c.connID == env.ConnID {
+				replaced = c
+			}
+		}
+		h.mu.RUnlock()
+		if replaced != nil {
+			replaced.closeWith(CloseReplaced, "too many connections")
+		}
+		return
+	}
 	var ending []*Client
 	for c := range h.clients[env.UserID] {
 		switch {
@@ -255,6 +274,7 @@ func (h *Hub) addClient(c *Client) {
 
 	metrics.WSConnect()
 	h.markPresence(c.userID, true)
+	h.registerConn(c)
 }
 
 func (h *Hub) removeClient(c *Client) {
@@ -282,6 +302,7 @@ func (h *Hub) removeClient(c *Client) {
 
 	metrics.WSDisconnect()
 	h.markPresence(c.userID, false)
+	h.unregisterConn(c)
 }
 
 // subscribePresence records the client's interest in the given users and

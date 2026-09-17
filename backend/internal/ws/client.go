@@ -49,15 +49,25 @@ type Client struct {
 	endOnce sync.Once
 	// checkedAt is when the session was last confirmed live (unix nanos).
 	checkedAt atomic.Int64
+
+	// connID, connectedAt and ipBucket identify the socket to the connection
+	// caps (connlimit.go); ipBucket is the client address, IPv6 as its /64.
+	connID      uuid.UUID
+	connectedAt time.Time
+	ipBucket    string
 }
 
 // end closes the connection because its session is over. The close frame
 // tells the client why; closing the socket makes readPump return, which
 // deregisters the client. Safe from any goroutine, any number of times
 // (gorilla allows WriteControl and Close concurrently with the pumps).
-func (c *Client) end(reason string) {
+func (c *Client) end(reason string) { c.closeWith(CloseSessionEnded, reason) }
+
+// closeWith closes the connection with the given close code. Only the first
+// call has an effect.
+func (c *Client) closeWith(code int, reason string) {
 	c.endOnce.Do(func() {
-		msg := websocket.FormatCloseMessage(CloseSessionEnded, reason)
+		msg := websocket.FormatCloseMessage(code, reason)
 		_ = c.conn.WriteControl(websocket.CloseMessage, msg, time.Now().Add(writeWait))
 		_ = c.conn.Close()
 	})
@@ -96,10 +106,25 @@ func (c *Client) readPump() {
 		return c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	})
 
+	// Inbound frames per second, counted over whole-second windows. Past the
+	// cap the socket is closed: a client that floods frames is broken or
+	// hostile, and each frame costs a session check and often a database call.
+	maxFrames := c.hub.limits.MaxFramesPerSecond
+	windowStart, frames := time.Now(), 0
 	for {
 		_, raw, err := c.conn.ReadMessage()
 		if err != nil {
 			return
+		}
+		if maxFrames > 0 {
+			if now := time.Now(); now.Sub(windowStart) >= time.Second {
+				windowStart, frames = now, 0
+			}
+			frames++
+			if frames > maxFrames {
+				c.closeWith(CloseTooFast, "too many frames")
+				return
+			}
 		}
 		c.hub.handleInbound(c, raw)
 	}
@@ -129,6 +154,7 @@ func (c *Client) writePump() {
 			// Keep this user's presence key alive while the socket is up; it
 			// expires on its own if the process dies (see presenceTTL).
 			c.hub.touchPresence(c.userID)
+			c.hub.heartbeatConn(c)
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return

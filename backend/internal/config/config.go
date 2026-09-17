@@ -105,6 +105,13 @@ type Config struct {
 	// AccountRates are the per-account rate limits (RATE_*).
 	AccountRates AccountRateConfig
 
+	// WebSocket caps: sockets per account and per client address (IPv6: /64),
+	// the oldest closed when a new one goes over; inbound frames per second per
+	// socket. Zero disables a cap.
+	WSMaxConnsPerUser int
+	WSMaxConnsPerIP   int
+	WSMaxFramesPerSec int
+
 	// RunMigrations forces schema migrations to run on boot. Defaults to
 	// true outside production; a managed single-service deploy sets it true.
 	RunMigrations bool
@@ -442,6 +449,25 @@ func Load() (*Config, error) {
 		LinkPreviewsPerMinuteInvited: rates["RATE_LINK_PREVIEWS_PER_MIN_INVITED"],
 		UploadsPerHourBasic:          rates["RATE_UPLOADS_PER_HOUR_BASIC"],
 		UploadsPerHourInvited:        rates["RATE_UPLOADS_PER_HOUR_INVITED"],
+	}
+
+	for _, v := range []struct {
+		key string
+		def int
+		dst *int
+	}{
+		{"WS_MAX_CONNS_PER_USER", 3, &cfg.WSMaxConnsPerUser},
+		{"WS_MAX_CONNS_PER_IP", 10, &cfg.WSMaxConnsPerIP},
+		{"WS_MAX_FRAMES_PER_SEC", 30, &cfg.WSMaxFramesPerSec},
+	} {
+		n, err := getEnvInt(v.key, v.def)
+		if err != nil {
+			return nil, err
+		}
+		if n < 0 {
+			return nil, fmt.Errorf("config: %s must not be negative", v.key)
+		}
+		*v.dst = n
 	}
 
 	if cfg.Upload.SessionTTL, err = getEnvDuration("UPLOAD_SESSION_TTL", 24*time.Hour); err != nil {

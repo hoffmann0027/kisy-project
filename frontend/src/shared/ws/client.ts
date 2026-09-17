@@ -4,6 +4,14 @@ import type { ClientFrame, ServerEvent } from "./events";
 
 const WS_BASE = import.meta.env.VITE_WS_BASE_URL ?? "/ws";
 
+/**
+ * The server closed this socket because a newer one of the same account (or
+ * address) took its place — too many open at once. Reconnecting on our own
+ * would close that newer socket in turn, and two tabs would take turns forever;
+ * this one comes back only when the person returns to it (ensureConnected).
+ */
+export const CLOSE_REPLACED = 4002;
+
 type Handler = (e: ServerEvent) => void;
 
 // WsClient owns the single WebSocket connection for the app. It
@@ -72,9 +80,13 @@ class WsClient {
       }
     };
 
-    socket.onclose = () => {
+    socket.onclose = (ev) => {
       this.socket = null;
       if (!this.shouldRun) return;
+      if (ev.code === CLOSE_REPLACED) {
+        this.closedBeforeOpen = true;
+        return;
+      }
       // The native client authenticates the handshake with the access token in
       // the URL. Once that token expires the server refuses every reconnect,
       // and retrying the same dead credential just walks the backoff up to 15s

@@ -7,6 +7,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
+	"kisy-backend/internal/platform/clientip"
+	"kisy-backend/internal/platform/ratelimit"
 	"kisy-backend/internal/platform/security"
 )
 
@@ -64,6 +66,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		roleLevel: actor.RoleLevel,
 		subs:      make(map[uuid.UUID]struct{}),
 		done:      make(chan struct{}),
+
+		connID:      uuid.New(),
+		connectedAt: time.Now(),
+		ipBucket:    ratelimit.Bucket(clientip.From(r)),
 	}
 	client.checkedAt.Store(time.Now().UnixNano()) // just authenticated
 
