@@ -20,6 +20,11 @@ var (
 	// ErrForwardEncrypted marks an E2EE source the server cannot forward
 	// itself; the client must decrypt and re-send (docs/e2ee-design.md).
 	ErrForwardEncrypted = errors.New("messages: encrypted messages are forwarded client-side")
+
+	// ErrEncryptionRequired: a private chat accepts text only as end-to-end
+	// ciphertext. Refused rather than stored in the clear — whatever the client
+	// (audit A-10).
+	ErrEncryptionRequired = errors.New("messages: private chats accept only end-to-end encrypted text")
 )
 
 // Chat types.

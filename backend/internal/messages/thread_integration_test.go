@@ -126,8 +126,9 @@ func TestThreadValidation(t *testing.T) {
 	}
 
 	// Threads are group-only.
+	alg := int16(1)
 	if _, err := h.svc.Send(h.ctx, messages.SendInput{
-		ChatType: "private", ChatID: uuid.New(), Text: "в личке", ThreadRootID: &root.ID,
+		ChatType: "private", ChatID: uuid.New(), Ciphertext: []byte("в личке"), Alg: &alg, ThreadRootID: &root.ID,
 	}, h.alice); !errors.Is(err, messages.ErrForbidden) {
 		t.Fatalf("private thread: want ErrForbidden, got %v", err)
 	}

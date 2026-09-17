@@ -37,7 +37,9 @@ const (
 	ErrResourceNotFound       = "RESOURCE_NOT_FOUND"
 	ErrRateLimited            = "RATE_LIMITED"
 	// ErrQuotaExceeded: a storage quota or the posts-per-hour limit (audit A-07).
-	ErrQuotaExceeded    = "QUOTA_EXCEEDED"
+	ErrQuotaExceeded = "QUOTA_EXCEEDED"
+	// ErrE2EERequired: a private chat accepts text only end-to-end encrypted.
+	ErrE2EERequired     = "E2EE_REQUIRED"
 	ErrValidationFailed = "VALIDATION_FAILED"
 	ErrInternal         = "INTERNAL_ERROR"
 	// Display names (migration 46) get their own codes: the sign-up and rename

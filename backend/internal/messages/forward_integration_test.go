@@ -124,8 +124,9 @@ func fwdActor(id uuid.UUID, level int) messages.ActorMeta {
 func TestForwardHappyPathAndAttribution(t *testing.T) {
 	h := fwdSetup(t)
 
-	// bob writes in the private chat; alice forwards it to the narrow group.
-	src, err := h.msgs.Send(h.ctx, messages.SendInput{ChatType: "private", ChatID: h.privChat, Text: "секрет"}, fwdActor(h.b, 8))
+	// alice writes in the broad group and forwards it to the narrow one. (A
+	// private chat holds only ciphertext, which is forwarded client-side.)
+	src, err := h.msgs.Send(h.ctx, messages.SendInput{ChatType: "group", ChatID: h.wideGroup, Text: "секрет"}, fwdActor(h.a, 3))
 	if err != nil {
 		t.Fatalf("send source: %v", err)
 	}
@@ -144,7 +145,7 @@ func TestForwardHappyPathAndAttribution(t *testing.T) {
 	if fwd.Text == nil || *fwd.Text != "секрет" {
 		t.Fatalf("forwarded text mismatch: %+v", fwd.Text)
 	}
-	if fwd.ForwardedFrom == nil || fwd.ForwardedFrom.SenderID != h.b || fwd.ForwardedFrom.SenderName != "bob" {
+	if fwd.ForwardedFrom == nil || fwd.ForwardedFrom.SenderID != h.a || fwd.ForwardedFrom.SenderName != "alice" {
 		t.Fatalf("attribution snapshot wrong: %+v", fwd.ForwardedFrom)
 	}
 	// The forward is a fresh message authored by the forwarder.

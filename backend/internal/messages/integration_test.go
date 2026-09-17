@@ -83,15 +83,24 @@ func actor(id uuid.UUID, level int) messages.ActorMeta {
 	return messages.ActorMeta{UserID: id, RoleLevel: level}
 }
 
+// encrypted builds an E2EE body; the bytes stand in for MLS ciphertext, which
+// the server never reads.
+func encrypted(chatType string, chatID uuid.UUID, label string) messages.SendInput {
+	alg, epoch := int16(1), int64(1)
+	return messages.SendInput{ChatType: chatType, ChatID: chatID, Ciphertext: []byte("ciphertext:" + label), Alg: &alg, Epoch: &epoch}
+}
+
 func TestMessageLifecycle(t *testing.T) {
 	h := setup(t)
 	cid := h.chat.ID
 
-	m1, err := h.msgs.Send(h.ctx, messages.SendInput{ChatType: "private", ChatID: cid, Text: "hello"}, actor(h.a, 3))
+	// Private chats carry only ciphertext (audit A-10).
+	m1, err := h.msgs.Send(h.ctx, encrypted("private", cid, "hello"), actor(h.a, 3))
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
-	if _, err := h.msgs.Send(h.ctx, messages.SendInput{ChatType: "private", ChatID: cid, Text: "hi"}, actor(h.b, 8)); err != nil {
+	m2, err := h.msgs.Send(h.ctx, encrypted("private", cid, "hi"), actor(h.b, 8))
+	if err != nil {
 		t.Fatalf("send b: %v", err)
 	}
 
@@ -100,7 +109,7 @@ func TestMessageLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	if len(page.Items) != 2 || *page.Items[0].Text != "hi" {
+	if len(page.Items) != 2 || page.Items[0].ID != m2.ID {
 		t.Fatalf("expected 2 messages newest-first, got %+v", page.Items)
 	}
 
@@ -118,15 +127,15 @@ func TestMessageLifecycle(t *testing.T) {
 			tomb = &page.Items[i]
 		}
 	}
-	if tomb == nil || !tomb.IsDeleted || tomb.Text != nil {
-		t.Fatalf("deleted message should be a text-less tombstone: %+v", tomb)
+	if tomb == nil || !tomb.IsDeleted || tomb.Text != nil || len(tomb.Ciphertext) != 0 {
+		t.Fatalf("deleted message should be a content-less tombstone: %+v", tomb)
 	}
 }
 
 func TestReactionsPerViewer(t *testing.T) {
 	h := setup(t)
 	cid := h.chat.ID
-	m, _ := h.msgs.Send(h.ctx, messages.SendInput{ChatType: "private", ChatID: cid, Text: "react to me"}, actor(h.a, 3))
+	m, _ := h.msgs.Send(h.ctx, encrypted("private", cid, "react to me"), actor(h.a, 3))
 
 	if err := h.react.Add(h.ctx, m.ID, "👍", reactions.Actor{UserID: h.b, RoleLevel: 8}); err != nil {
 		t.Fatalf("add reaction: %v", err)
@@ -148,7 +157,7 @@ func TestReactionsPerViewer(t *testing.T) {
 func TestUnreadCounters(t *testing.T) {
 	h := setup(t)
 	cid := h.chat.ID
-	mb, _ := h.msgs.Send(h.ctx, messages.SendInput{ChatType: "private", ChatID: cid, Text: "for alice"}, actor(h.b, 8))
+	mb, _ := h.msgs.Send(h.ctx, encrypted("private", cid, "for alice"), actor(h.b, 8))
 
 	// Alice has one unread (bob's message).
 	counts, err := h.reads.UnreadForPrivateChats(h.ctx, h.a, []uuid.UUID{cid})

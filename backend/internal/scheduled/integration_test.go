@@ -108,9 +108,11 @@ func (h *harness) schedule(t *testing.T, in scheduled.Input) scheduled.DTO {
 	return dto
 }
 
+// textInput schedules plaintext into a GROUP: a private chat takes only
+// ciphertext (audit A-10, see TestWorkerE2EESnapshot for that path).
 func textInput(chat uuid.UUID, text string) scheduled.Input {
 	return scheduled.Input{
-		ChatType: "private", ChatID: chat, Text: text,
+		ChatType: "group", ChatID: chat, Text: text,
 		SendAt: time.Now().Add(time.Hour),
 	}
 }
@@ -329,5 +331,31 @@ func TestSchedulePendingCap(t *testing.T) {
 	}
 	if _, err := h.svc.Schedule(h.ctx, textInput(h.chat, "перебор"), h.alice); !errors.Is(err, scheduled.ErrValidation) {
 		t.Fatalf("cap: want ErrValidation, got %v", err)
+	}
+}
+
+// Audit A-10: plaintext rows scheduled into private chats before the rule
+// existed must not be sent in the clear — and must not stall the queue either.
+func TestWorkerCancelsLegacyPlaintextIntoPrivateChat(t *testing.T) {
+	h := setup(t)
+	var id uuid.UUID
+	if err := h.pool.QueryRow(h.ctx, `
+		INSERT INTO scheduled_messages (chat_type, chat_id, sender_id, text, send_at)
+		VALUES ('private', $1, $2, 'legacy clear text', now() - interval '1 second') RETURNING id`,
+		h.chat, h.alice.UserID).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.svc.ProcessDue(h.ctx, time.Now(), 50); err != nil {
+		t.Fatalf("a legacy plaintext row must not fail the batch: %v", err)
+	}
+	var status string
+	_ = h.pool.QueryRow(h.ctx, `SELECT status FROM scheduled_messages WHERE id = $1`, id).Scan(&status)
+	if status != scheduled.StatusCanceled {
+		t.Fatalf("status = %q, want canceled", status)
+	}
+	var count int
+	_ = h.pool.QueryRow(h.ctx, `SELECT COUNT(*) FROM messages WHERE chat_id = $1`, h.chat).Scan(&count)
+	if count != 0 {
+		t.Fatalf("legacy plaintext was sent into the private chat")
 	}
 }

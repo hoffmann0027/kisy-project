@@ -275,7 +275,20 @@ type forwardRequest struct {
 	SourceMessageIDs []string `json:"sourceMessageIds"`
 	TargetChatType   string   `json:"targetChatType"`
 	TargetChatID     string   `json:"targetChatId"`
+	// Encrypted: for a private target, the client-encrypted text of each
+	// source message that has text, keyed by source id (audit A-10).
+	Encrypted map[string]encryptedTextRequest `json:"encrypted"`
 }
+
+type encryptedTextRequest struct {
+	Ciphertext string `json:"ciphertext"`
+	Alg        *int16 `json:"alg"`
+	Epoch      *int64 `json:"epoch"`
+}
+
+// EncryptionRequiredMessage is what a client shows when it tried to put text
+// into a private chat without encrypting it.
+const EncryptionRequiredMessage = "Личные сообщения отправляются только зашифрованными. Обновите приложение."
 
 func (h *Handler) forward(w http.ResponseWriter, r *http.Request) {
 	actor, ok := h.actor(r)
@@ -311,10 +324,33 @@ func (h *Handler) forward(w http.ResponseWriter, r *http.Request) {
 		ids = append(ids, id)
 	}
 
+	var encrypted map[uuid.UUID]EncryptedText
+	if len(req.Encrypted) > 0 {
+		if len(req.Encrypted) > len(ids) {
+			httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "encrypted has more entries than sourceMessageIds")
+			return
+		}
+		encrypted = make(map[uuid.UUID]EncryptedText, len(req.Encrypted))
+		for rawID, body := range req.Encrypted {
+			id, err := uuid.Parse(rawID)
+			if err != nil {
+				httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "encrypted keys must be message ids")
+				return
+			}
+			ct, err := base64.StdEncoding.DecodeString(body.Ciphertext)
+			if err != nil {
+				httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "ciphertext must be base64")
+				return
+			}
+			encrypted[id] = EncryptedText{Ciphertext: ct, Alg: body.Alg, Epoch: body.Epoch}
+		}
+	}
+
 	dtos, err := h.svc.Forward(r.Context(), ForwardInput{
 		SourceMessageIDs: ids,
 		TargetChatType:   req.TargetChatType,
 		TargetChatID:     targetID,
+		Encrypted:        encrypted,
 	}, actor)
 	if err != nil {
 		h.writeError(w, r, err)
@@ -434,6 +470,8 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "message text must not be empty")
 	case errors.Is(err, ErrBadChatType):
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "unknown chat type")
+	case errors.Is(err, ErrEncryptionRequired):
+		httpresponse.Fail(w, r, http.StatusUnprocessableEntity, httpresponse.ErrE2EERequired, EncryptionRequiredMessage)
 	case quota.Is(err):
 		status, msg, _ := quota.Describe(err)
 		httpresponse.Fail(w, r, status, httpresponse.ErrQuotaExceeded, msg)

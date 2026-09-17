@@ -1,6 +1,7 @@
 package scheduled
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -20,7 +21,7 @@ func TestValidateContent(t *testing.T) {
 		attachments int
 		wantErr     bool
 	}{
-		{"text only", "hi", nil, nil, 0, false},
+		{"text only", "hi", nil, nil, 0, false}, // group chat below
 		{"ciphertext only", "", []byte{1}, &alg, 0, false},
 		{"attachments only", "", nil, nil, 2, false},
 		{"both bodies", "hi", []byte{1}, &alg, 0, true},
@@ -29,8 +30,15 @@ func TestValidateContent(t *testing.T) {
 		{"text too long", strings.Repeat("x", messages.MaxTextLength+1), nil, nil, 0, true},
 		{"ciphertext too large", "", make([]byte, messages.MaxCiphertextBytes+1), &alg, 0, true},
 	}
+	// A private chat takes the same bodies minus plaintext (audit A-10).
+	if err := validateContent(messages.ChatPrivate, "hi", nil, nil, 0); !errors.Is(err, messages.ErrEncryptionRequired) {
+		t.Errorf("private text: want ErrEncryptionRequired, got %v", err)
+	}
+	if err := validateContent(messages.ChatPrivate, "", []byte{1}, &alg, 0); err != nil {
+		t.Errorf("private ciphertext: %v", err)
+	}
 	for _, c := range cases {
-		err := validateContent(c.text, c.ciphertext, c.alg, c.attachments)
+		err := validateContent(messages.ChatGroup, c.text, c.ciphertext, c.alg, c.attachments)
 		if (err != nil) != c.wantErr {
 			t.Errorf("%s: err=%v, wantErr=%v", c.name, err, c.wantErr)
 		}
@@ -64,7 +72,18 @@ func TestScheduleValidation(t *testing.T) {
 	if _, err := svc.Schedule(t.Context(), Input{ChatType: "private", ChatID: uuid.New(), SendAt: time.Now().Add(time.Hour)}, actor); err != ErrValidation {
 		t.Errorf("empty content: want ErrValidation, got %v", err)
 	}
-	if _, err := svc.Schedule(t.Context(), Input{ChatType: "private", ChatID: uuid.New(), Text: "hi", SendAt: time.Now().Add(-time.Hour)}, actor); err != ErrValidation {
+	if _, err := svc.Schedule(t.Context(), Input{ChatType: "group", ChatID: uuid.New(), Text: "hi", SendAt: time.Now().Add(-time.Hour)}, actor); err != ErrValidation {
 		t.Errorf("past sendAt: want ErrValidation, got %v", err)
+	}
+}
+
+// Audit A-10: a private chat takes text only as ciphertext, and a scheduled
+// message is no back door — refused before anything is stored.
+func TestSchedulingPlaintextIntoAPrivateChatIsRefused(t *testing.T) {
+	svc := NewService(nil, nil, nil, nil, nil, nil)
+	actor := Actor{UserID: uuid.New(), RoleLevel: 5}
+	_, err := svc.Schedule(t.Context(), Input{ChatType: "private", ChatID: uuid.New(), Text: "in the clear", SendAt: time.Now().Add(time.Hour)}, actor)
+	if !errors.Is(err, messages.ErrEncryptionRequired) {
+		t.Fatalf("plaintext scheduled into a private chat: want ErrEncryptionRequired, got %v", err)
 	}
 }

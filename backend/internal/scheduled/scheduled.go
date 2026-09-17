@@ -139,9 +139,13 @@ type Input struct {
 }
 
 // validateContent enforces the same body rules as messages.Send.
-func validateContent(text string, ciphertext []byte, alg *int16, attachments int) error {
+func validateContent(chatType, text string, ciphertext []byte, alg *int16, attachments int) error {
 	if text != "" && len(ciphertext) > 0 {
 		return ErrValidation
+	}
+	// A scheduled message is no back door into a private chat (audit A-10).
+	if chatType == messages.ChatPrivate && text != "" {
+		return messages.ErrEncryptionRequired
 	}
 	if text == "" && len(ciphertext) == 0 && attachments == 0 {
 		return ErrValidation
@@ -205,7 +209,7 @@ func (s *Service) Schedule(ctx context.Context, in Input, actor Actor) (DTO, err
 	if in.ChatType != messages.ChatPrivate && in.ChatType != messages.ChatGroup {
 		return DTO{}, ErrValidation
 	}
-	if err := validateContent(in.Text, in.Ciphertext, in.Alg, len(in.AttachmentIDs)); err != nil {
+	if err := validateContent(in.ChatType, in.Text, in.Ciphertext, in.Alg, len(in.AttachmentIDs)); err != nil {
 		return DTO{}, err
 	}
 	if err := validateSendAt(in.SendAt, time.Now()); err != nil {
@@ -286,7 +290,7 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, in UpdateInput, acto
 		if in.Text != nil {
 			text = strings.TrimSpace(*in.Text)
 		}
-		if err := validateContent(text, in.Ciphertext, in.Alg, len(m.AttachmentIDs)); err != nil {
+		if err := validateContent(m.ChatType, text, in.Ciphertext, in.Alg, len(m.AttachmentIDs)); err != nil {
 			return DTO{}, err
 		}
 		m.Text = nil
@@ -390,7 +394,7 @@ func (s *Service) ProcessDue(ctx context.Context, now time.Time, batch int) (int
 		if row.Text != nil {
 			text = *row.Text
 		}
-		if validateContent(text, row.Ciphertext, row.Alg, len(attachmentIDs)) != nil {
+		if validateContent(row.ChatType, text, row.Ciphertext, row.Alg, len(attachmentIDs)) != nil {
 			if err := cancel(); err != nil {
 				return 0, err
 			}
@@ -412,6 +416,7 @@ func (s *Service) ProcessDue(ctx context.Context, now time.Time, batch int) (int
 		}, messages.ActorMeta{UserID: row.SenderID, RoleLevel: level})
 		switch {
 		case errors.Is(err, messages.ErrEmptyContent),
+			errors.Is(err, messages.ErrEncryptionRequired),
 			errors.Is(err, messages.ErrNotFound),
 			errors.Is(err, messages.ErrForbidden),
 			errors.Is(err, messages.ErrBadChatType):

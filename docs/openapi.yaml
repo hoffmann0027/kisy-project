@@ -1426,6 +1426,7 @@ paths:
                 ttlSeconds: { type: [integer, 'null'], description: Per-message disappearing timer (stage J); overrides the chat default. }
                 threadRootId: { type: [string, 'null'], format: uuid, description: Thread reply (stage K, groups only) — the root message id; root must be in the same chat and not a reply itself. }
       responses:
+        '422': { $ref: '#/components/responses/E2EERequired' }
         '201':
           description: Message created
           content:
@@ -1476,8 +1477,11 @@ paths:
         audience must not be broader than any source's (403 — content never
         moves up the clearance hierarchy). E2EE source messages are rejected
         (409) — the server cannot read them, so the client decrypts and
-        re-sends them via POST /messages with forwardedFrom* set. Each forward
-        is audited.
+        re-sends them via POST /messages with forwardedFrom* set. Into a
+        PRIVATE target a source with text must come with its client-encrypted
+        body in `encrypted` — a private chat stores text only as ciphertext;
+        without it the request fails with 422 E2EE_REQUIRED and nothing is
+        created. Each forward is audited.
       requestBody:
         required: true
         content:
@@ -1493,8 +1497,21 @@ paths:
                   items: { type: string, format: uuid }
                 targetChatType: { type: string, enum: [private, group] }
                 targetChatId: { type: string, format: uuid }
+                encrypted:
+                  type: object
+                  description: >
+                    Private targets only: source message id → the client's
+                    MLS ciphertext of that message's text.
+                  additionalProperties:
+                    type: object
+                    required: [ciphertext, alg]
+                    properties:
+                      ciphertext: { type: string, format: byte }
+                      alg: { type: integer }
+                      epoch: { type: integer, format: int64 }
       responses:
         '413': { $ref: '#/components/responses/QuotaExceeded' }
+        '422': { $ref: '#/components/responses/E2EERequired' }
         '201':
           description: Forwarded messages created
           content:
@@ -1569,6 +1586,7 @@ paths:
           application/json:
             schema: { type: object, required: [text], properties: { text: { type: string, minLength: 1, maxLength: 8000 } } }
       responses:
+        '422': { $ref: '#/components/responses/E2EERequired' }
         '200':
           description: Edited
           content:
@@ -2095,6 +2113,7 @@ paths:
                   description: The actor's own unlinked uploads; re-verified at send time.
                 sendAt: { type: string, format: date-time }
       responses:
+        '422': { $ref: '#/components/responses/E2EERequired' }
         '201':
           description: Scheduled message snapshot
           content:
@@ -2155,6 +2174,7 @@ paths:
                 contentKind: { type: integer }
                 sendAt: { type: string, format: date-time }
       responses:
+        '422': { $ref: '#/components/responses/E2EERequired' }
         '200':
           description: Updated snapshot
           content:
@@ -4300,6 +4320,15 @@ components:
           schema: { $ref: '#/components/schemas/Envelope' }
     Conflict:
       description: Resource conflict (e.g. username taken)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Envelope' }
+    E2EERequired:
+      description: >
+        A private chat accepts text only as end-to-end ciphertext (audit A-10).
+        Plaintext text — including an edit, a scheduled message or a forward
+        without client ciphertext — is refused, never stored. error.code is
+        E2EE_REQUIRED.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Envelope' }

@@ -280,6 +280,12 @@ func (s *Service) SendTx(ctx context.Context, q db.DBTX, in SendInput, actor Act
 	if text == "" && len(in.Ciphertext) == 0 && len(in.AttachmentIDs) == 0 {
 		return DTO{}, nil, ErrEmptyContent
 	}
+	// Fail closed (audit A-10): whatever went wrong on the client — its
+	// encryption failed, it is an old build, it is not ours — a private chat
+	// never stores text in the clear.
+	if in.ChatType == ChatPrivate && text != "" {
+		return DTO{}, nil, ErrEncryptionRequired
+	}
 	// An encrypted body is size-capped and must declare its scheme version.
 	if len(in.Ciphertext) > MaxCiphertextBytes || (len(in.Ciphertext) > 0 && in.Alg == nil) {
 		return DTO{}, nil, ErrEmptyContent
@@ -417,6 +423,16 @@ type ForwardInput struct {
 	SourceMessageIDs []uuid.UUID
 	TargetChatType   string
 	TargetChatID     uuid.UUID
+	// Encrypted carries, for a private target, the client-encrypted text of
+	// each source message that has text (keyed by source id).
+	Encrypted map[uuid.UUID]EncryptedText
+}
+
+// EncryptedText is one client-encrypted message body.
+type EncryptedText struct {
+	Ciphertext []byte
+	Alg        *int16
+	Epoch      *int64
 }
 
 // Forward copies plaintext messages the actor can access into a target chat,
@@ -467,6 +483,14 @@ func (s *Service) Forward(ctx context.Context, in ForwardInput, actor ActorMeta)
 		if len(src.Ciphertext) > 0 {
 			return nil, ErrForwardEncrypted
 		}
+		// Into a private chat, text travels only as the client's ciphertext —
+		// the server must not copy a group's clear text there (audit A-10).
+		if in.TargetChatType == ChatPrivate && src.Text != nil && strings.TrimSpace(*src.Text) != "" {
+			enc, ok := in.Encrypted[src.ID]
+			if !ok || len(enc.Ciphertext) == 0 || len(enc.Ciphertext) > MaxCiphertextBytes || enc.Alg == nil {
+				return nil, ErrEncryptionRequired
+			}
+		}
 		srcBreadth, err := s.clearanceBreadth(ctx, src.ChatType, src.ChatID)
 		if err != nil {
 			return nil, ErrNotFound
@@ -514,6 +538,12 @@ func (s *Service) Forward(ctx context.Context, in ForwardInput, actor ActorMeta)
 			ForwardedFromSenderID:   &senderID,
 			ForwardedFromSenderName: &senderName,
 			ExpiresAt:               targetExpiry,
+		}
+		if in.TargetChatType == ChatPrivate {
+			m.Text = nil
+			if enc, ok := in.Encrypted[src.ID]; ok && src.Text != nil && strings.TrimSpace(*src.Text) != "" {
+				m.Ciphertext, m.Alg, m.Epoch = enc.Ciphertext, enc.Alg, enc.Epoch
+			}
 		}
 		if err := s.repo.Create(ctx, s.pool, m); err != nil {
 			return nil, err
@@ -642,6 +672,11 @@ func (s *Service) Edit(ctx context.Context, messageID uuid.UUID, newText string,
 	}
 	if m.SenderID != actor.UserID {
 		return nil, ErrForbidden
+	}
+	// An edit is plaintext. In a private chat it would sit beside the
+	// ciphertext and be shown instead of it (audits A-10, A-35).
+	if m.ChatType == ChatPrivate {
+		return nil, ErrEncryptionRequired
 	}
 
 	updated, err := s.repo.Update(ctx, s.pool, messageID, actor.UserID, text, time.Now().UTC())

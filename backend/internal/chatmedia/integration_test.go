@@ -148,10 +148,13 @@ func TestTabsSplitByKind(t *testing.T) {
 func TestLinksTab(t *testing.T) {
 	h := setup(t)
 
+	// A private chat now takes only ciphertext (audit A-10); links are still
+	// extracted from the plaintext rows written before that rule, which live on
+	// in existing databases.
 	send := func(text string) {
-		if _, err := h.msgs.Send(h.ctx, messages.SendInput{
-			ChatType: "private", ChatID: h.chat, Text: text,
-		}, messages.ActorMeta{UserID: h.a, RoleLevel: 3}); err != nil {
+		if _, err := h.pool.Exec(h.ctx, `
+			INSERT INTO messages (chat_type, chat_id, sender_id, text, created_at)
+			VALUES ('private', $1, $2, $3, clock_timestamp())`, h.chat, h.a, text); err != nil {
 			t.Fatalf("send: %v", err)
 		}
 	}

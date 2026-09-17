@@ -78,8 +78,10 @@ func setup(t *testing.T) *harness {
 
 func (h *harness) send(t *testing.T, text string, ttl *int64) messages.DTO {
 	t.Helper()
+	// Private chats carry only ciphertext (audit A-10); the label names it.
+	alg := int16(1)
 	dto, err := h.msgs.Send(h.ctx, messages.SendInput{
-		ChatType: "private", ChatID: h.chat, Text: text, TTLSeconds: ttl,
+		ChatType: "private", ChatID: h.chat, Ciphertext: []byte(text), Alg: &alg, TTLSeconds: ttl,
 	}, h.mAlice)
 	if err != nil {
 		t.Fatalf("send: %v", err)
@@ -243,12 +245,19 @@ func TestForwardInheritsTargetTTL(t *testing.T) {
 	if _, err := h.svc.Set(h.ctx, "private", target, &ttl, h.alice); err != nil {
 		t.Fatalf("set target ttl: %v", err)
 	}
-	src := h.send(t, "перешлют меня", nil)
+	// A plaintext group message forwarded into the private chat, which takes
+	// the client's ciphertext for it (audit A-10).
+	src, err := h.msgs.Send(h.ctx, messages.SendInput{ChatType: "group", ChatID: uuid.New(), Text: "перешлют меня"}, h.mAlice)
+	if err != nil {
+		t.Fatalf("send source: %v", err)
+	}
+	alg := int16(1)
 
 	out, err := h.msgs.Forward(h.ctx, messages.ForwardInput{
 		SourceMessageIDs: []uuid.UUID{src.ID},
 		TargetChatType:   "private",
 		TargetChatID:     target,
+		Encrypted:        map[uuid.UUID]messages.EncryptedText{src.ID: {Ciphertext: []byte("перешлют меня"), Alg: &alg}},
 	}, h.mAlice)
 	if err != nil || len(out) != 1 {
 		t.Fatalf("forward: %v, %v", out, err)
@@ -276,7 +285,7 @@ func TestSendTxAppliesChatTTL(t *testing.T) {
 		t.Fatalf("begin: %v", err)
 	}
 	dto, deliver, err := h.msgs.SendTx(h.ctx, db.DBTX(tx), messages.SendInput{
-		ChatType: "private", ChatID: h.chat, Text: "из планировщика",
+		ChatType: "private", ChatID: h.chat, Ciphertext: []byte("из планировщика"), Alg: func() *int16 { a := int16(1); return &a }(),
 	}, h.mAlice)
 	if err != nil {
 		t.Fatalf("sendtx: %v", err)
