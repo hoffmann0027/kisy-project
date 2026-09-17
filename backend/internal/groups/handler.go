@@ -75,6 +75,13 @@ func (h *Handler) uploadAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Permission first, bytes second: the object key is per group, so storing
+	// before checking would replace the avatar even for a refused caller.
+	if err := h.svc.AuthorizeAvatarChange(r.Context(), groupID, actor); err != nil {
+		h.failAvatar(w, r, err)
+		return
+	}
+
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxAvatarUpload))
 	if err != nil {
 		httpresponse.Fail(w, r, http.StatusRequestEntityTooLarge, httpresponse.ErrValidationFailed, "image too large")
@@ -88,15 +95,21 @@ func (h *Handler) uploadAvatar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	g, err := h.svc.SetAvatar(r.Context(), groupID, url, actor)
+	if err != nil {
+		h.failAvatar(w, r, err)
+		return
+	}
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"group": g.ToDTO()})
+}
+
+func (h *Handler) failAvatar(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "group not found")
 	case errors.Is(err, ErrForbidden):
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "only the CEO or the group founder may change the avatar")
-	case err != nil:
-		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
 	default:
-		httpresponse.OK(w, r, http.StatusOK, map[string]any{"group": g.ToDTO()})
+		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
 	}
 }
 

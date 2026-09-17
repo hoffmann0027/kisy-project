@@ -76,16 +76,27 @@ func (s *Service) broadcast(groupID uuid.UUID) {
 	}
 }
 
-// SetAvatar points the group's avatar at an already-stored image URL. Only the
-// founder or the CEO may change it; other members get ErrForbidden. Returns
-// the refreshed group.
-func (s *Service) SetAvatar(ctx context.Context, groupID uuid.UUID, url string, actor ActorMeta) (*Group, error) {
+// AuthorizeAvatarChange reports whether the actor may replace the group's
+// avatar: only its founder or the CEO. A group the actor cannot see is
+// ErrNotFound. The image upload must call this BEFORE storing anything — the
+// stored object key is per group, so a write that is refused afterwards has
+// already replaced the picture everyone sees (audit A-02).
+func (s *Service) AuthorizeAvatarChange(ctx context.Context, groupID uuid.UUID, actor ActorMeta) error {
 	g, err := s.Get(ctx, groupID, actor)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if g.CreatedBy != actor.UserID && actor.RoleLevel != 1 {
-		return nil, ErrForbidden
+	if g.CreatedBy != actor.UserID && !access.IsCEO(actor.RoleLevel) {
+		return ErrForbidden
+	}
+	return nil
+}
+
+// SetAvatar points the group's avatar at an already-stored image URL, under
+// the same rule as AuthorizeAvatarChange. Returns the refreshed group.
+func (s *Service) SetAvatar(ctx context.Context, groupID uuid.UUID, url string, actor ActorMeta) (*Group, error) {
+	if err := s.AuthorizeAvatarChange(ctx, groupID, actor); err != nil {
+		return nil, err
 	}
 	if err := s.repo.SetAvatarURL(ctx, s.pool, groupID, url); err != nil {
 		return nil, err
