@@ -12,6 +12,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"kisy-backend/internal/groups"
 )
 
 // Result is one message match returned to the client.
@@ -56,8 +58,8 @@ func (s *Service) RemoveMessage(ctx context.Context, messageID uuid.UUID) {
 }
 
 // Search returns messages matching the query that the actor may see. Scoping
-// is done in SQL against the actor's private-chat participation and group
-// membership.
+// is done in SQL against the actor's private-chat participation and the groups
+// they are a member of and can still see (groups.MemberCanSeeSQL).
 func (s *Service) Search(ctx context.Context, actorID uuid.UUID, query string, limit int) ([]Result, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -80,7 +82,10 @@ func (s *Service) Search(ctx context.Context, actorID uuid.UUID, query string, l
 		       SELECT id FROM private_chats WHERE user_a_id = $1 OR user_b_id = $1))
 		    OR
 		    (m.chat_type = 'group' AND m.chat_id IN (
-		       SELECT group_id FROM group_members WHERE user_id = $1))
+		       SELECT gm.group_id FROM group_members gm
+		       JOIN groups g ON g.id = gm.group_id
+		       JOIN users me ON me.id = gm.user_id
+		       WHERE gm.user_id = $1 AND `+groups.MemberCanSeeSQL("g", "me")+`))
 		  )
 		ORDER BY ts_rank(si.search_vector, plainto_tsquery('russian', $2)) DESC, m.created_at DESC
 		LIMIT $3`,
