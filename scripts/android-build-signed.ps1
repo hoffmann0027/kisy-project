@@ -24,7 +24,9 @@ param(
   [string]$GoogleServices = (Join-Path $env:USERPROFILE "Downloads\google-services.json"),
   [string]$ApiOrigin = "https://kisy.onrender.com",
   [string]$OutDir = (Join-Path $env:USERPROFILE "Desktop"),
-  [string]$Repo = "hoffmann0027/kisy-project"
+  [string]$Repo = "hoffmann0027/kisy-project",
+  # Path to the Android SDK; found automatically when empty (see Find-AndroidSdk).
+  [string]$AndroidSdk = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,17 +34,76 @@ $root = Split-Path -Parent $PSScriptRoot
 $frontend = Join-Path $root "frontend"
 $android = Join-Path $frontend "android"
 
+# Same approach as the SDK: environment first, then the usual install places,
+# not trusting LOCALAPPDATA alone (a window of another account has its own).
 function Find-Jdk21 {
-  $candidates = @()
-  if ($env:JAVA_HOME) { $candidates += $env:JAVA_HOME }
-  $candidates += Get-ChildItem "$env:LOCALAPPDATA\Programs\jdk-21*" -Directory -ErrorAction SilentlyContinue | ForEach-Object FullName
-  $candidates += Get-ChildItem "$env:ProgramFiles\Eclipse Adoptium\jdk-21*" -Directory -ErrorAction SilentlyContinue | ForEach-Object FullName
-  $candidates += "$env:ProgramFiles\Android\Android Studio\jbr"
-  foreach ($c in $candidates) {
-    $release = Join-Path $c "release"
-    if ((Test-Path $release) -and ((Get-Content $release -Raw) -match 'JAVA_VERSION="2[1-9]')) { return $c }
+  $candidates = New-Object System.Collections.Generic.List[string]
+  foreach ($v in @($env:JAVA_HOME, [Environment]::GetEnvironmentVariable("JAVA_HOME", "User"),
+      [Environment]::GetEnvironmentVariable("JAVA_HOME", "Machine"))) {
+    if ($v) { $candidates.Add($v) }
   }
-  throw "JDK 21 not found (Capacitor 8 needs it): install one or set JAVA_HOME"
+  $patterns = @(
+    "$env:LOCALAPPDATA\Programs\jdk-2*",
+    "$env:USERPROFILE\AppData\Local\Programs\jdk-2*",
+    "$env:SystemDrive\Users\*\AppData\Local\Programs\jdk-2*",
+    "$env:ProgramFiles\Eclipse Adoptium\jdk-2*",
+    "$env:ProgramFiles\Java\jdk-2*",
+    "$env:ProgramFiles\Microsoft\jdk-2*"
+  )
+  foreach ($p in $patterns) {
+    Get-ChildItem $p -Directory -ErrorAction SilentlyContinue | ForEach-Object { $candidates.Add($_.FullName) }
+  }
+  $candidates.Add((Join-Path $env:ProgramFiles "Android\Android Studio\jbr"))
+  foreach ($c in $candidates) {
+    $dir = $c.Trim().Trim('"')
+    $release = Join-Path $dir "release"
+    if ((Test-Path $release) -and ((Get-Content $release -Raw) -match 'JAVA_VERSION="2[1-9]')) { return $dir }
+  }
+  $checked = ($candidates | Select-Object -Unique | ForEach-Object { "  $_" }) -join [Environment]::NewLine
+  throw ("JDK 21 not found (Capacitor 8 needs it). Checked:" + [Environment]::NewLine + $checked +
+    [Environment]::NewLine + "Install Temurin 21 or set JAVA_HOME.")
+}
+
+# A directory counts as an SDK only if it holds what the build uses: a platform
+# and build-tools with apksigner. Every candidate is tried in turn - a stale
+# ANDROID_HOME in this window must not hide a working SDK - and the error lists
+# everything that was checked.
+function Find-AndroidSdk([string]$explicit) {
+  $candidates = New-Object System.Collections.Generic.List[string]
+  if ($explicit) {
+    $candidates.Add($explicit)
+  }
+  else {
+    $vars = @(
+      $env:ANDROID_HOME, $env:ANDROID_SDK_ROOT,
+      [Environment]::GetEnvironmentVariable("ANDROID_HOME", "User"),
+      [Environment]::GetEnvironmentVariable("ANDROID_SDK_ROOT", "User"),
+      [Environment]::GetEnvironmentVariable("ANDROID_HOME", "Machine"),
+      [Environment]::GetEnvironmentVariable("ANDROID_SDK_ROOT", "Machine")
+    )
+    foreach ($v in $vars) { if ($v) { $candidates.Add($v) } }
+    $localProps = Join-Path $android "local.properties"
+    if (Test-Path $localProps) {
+      $line = Get-Content $localProps | Where-Object { $_ -match '^\s*sdk\.dir\s*=' } | Select-Object -First 1
+      # local.properties escapes ':' and '\' (sdk.dir=C\:\\Users\\...).
+      if ($line) { $candidates.Add((($line -replace '^\s*sdk\.dir\s*=\s*', '') -replace '\\(.)', '$1')) }
+    }
+    if ($env:LOCALAPPDATA) { $candidates.Add((Join-Path $env:LOCALAPPDATA "Android\Sdk")) }
+    if ($env:USERPROFILE) { $candidates.Add((Join-Path $env:USERPROFILE "AppData\Local\Android\Sdk")) }
+    Get-ChildItem "$env:SystemDrive\Users\*\AppData\Local\Android\Sdk" -Directory -ErrorAction SilentlyContinue |
+      ForEach-Object { $candidates.Add($_.FullName) }
+    $candidates.Add((Join-Path $env:ProgramFiles "Android\Sdk"))
+  }
+  foreach ($c in $candidates) {
+    $dir = $c.Trim().Trim('"')
+    if (-not $dir) { continue }
+    $hasPlatform = Test-Path (Join-Path $dir "platforms\android-*")
+    $hasSigner = Test-Path (Join-Path $dir "build-tools\*\lib\apksigner.jar")
+    if ($hasPlatform -and $hasSigner) { return (Resolve-Path $dir).Path }
+  }
+  $checked = ($candidates | Select-Object -Unique | ForEach-Object { "  $_" }) -join [Environment]::NewLine
+  throw ("Android SDK not found (needs platforms\android-* and build-tools). Checked:" + [Environment]::NewLine + $checked +
+    [Environment]::NewLine + "Pass -AndroidSdk <path>, or install the SDK from Android Studio (SDK Platform 36, Build-Tools 36).")
 }
 
 function Read-Secret([string]$prompt) {
@@ -85,6 +146,14 @@ function Invoke-Step([string]$title, [scriptblock]$body) {
   Invoke-Native $title $body -Stream | Out-Null
 }
 
+# The toolchain first, before anything is asked for.
+$env:JAVA_HOME = Find-Jdk21
+$sdk = Find-AndroidSdk $AndroidSdk
+$env:ANDROID_HOME = $sdk
+$env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
+Write-Host "JDK:         $env:JAVA_HOME"
+Write-Host "Android SDK: $sdk"
+
 if (-not (Test-Path $Keystore)) { throw "keystore not found: $Keystore (run scripts\android-signing-setup.ps1 first)" }
 if (-not (Test-Path $GoogleServices)) { throw "google-services.json not found: $GoogleServices (push notifications need it)" }
 
@@ -92,12 +161,6 @@ try { $want = (Invoke-Native "gh variable get" { gh variable get ANDROID_SIGNING
 catch { throw "repository variable ANDROID_SIGNING_CERT_SHA256 is not readable (run scripts\android-signing-setup.ps1)$([Environment]::NewLine)$($_.Exception.Message)" }
 $want = ($want -replace "[:\s]", "").ToLower()
 if (-not $want) { throw "repository variable ANDROID_SIGNING_CERT_SHA256 is empty (run scripts\android-signing-setup.ps1)" }
-
-$env:JAVA_HOME = Find-Jdk21
-$sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA "Android\Sdk" }
-if (-not (Test-Path $sdk)) { throw "Android SDK not found: set ANDROID_HOME" }
-$env:ANDROID_HOME = $sdk
-$env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
 
 $commit = (Invoke-Native "git rev-parse" { git -C $root rev-parse --short HEAD }) -join ""
 $dirty = Invoke-Native "git status" { git -C $root status --porcelain -- frontend }
