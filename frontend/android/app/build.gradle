@@ -1,11 +1,14 @@
 apply plugin: 'com.android.application'
 
 // Release identity and signing come from the environment, never from the
-// repository. Google Play rejects a re-upload of the same versionCode, so CI
-// derives it from the run number; the keystore is a base64 secret the workflow
-// materialises into a file. With none of it set (a local build) the release
-// variant still assembles — just unsigned, which is enough to check that the
-// bundle builds.
+// repository. The keystore is a base64 secret the workflow materialises into a
+// file, and it signs BOTH variants: Android installs an update only over an
+// app signed with the same key, and a debug build left on the default debug
+// key — a fresh random one on every CI runner — could never be updated in
+// place. Every update became uninstall-and-reinstall, which wipes the
+// device's E2EE keys. With no keystore set (a local build) the debug variant
+// uses the machine's own debug key and the release variant assembles
+// unsigned; neither is for distribution.
 def releaseKeystore = System.getenv("KISY_KEYSTORE_FILE")
 def appVersionCode = (System.getenv("KISY_VERSION_CODE") ?: "1") as Integer
 def appVersionName = System.getenv("KISY_VERSION_NAME") ?: "1.0"
@@ -39,6 +42,11 @@ android {
         }
     }
     buildTypes {
+        debug {
+            if (releaseKeystore) {
+                signingConfig signingConfigs.release
+            }
+        }
         release {
             if (releaseKeystore) {
                 signingConfig signingConfigs.release

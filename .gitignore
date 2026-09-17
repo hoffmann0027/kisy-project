@@ -44,3 +44,7 @@ logs/
 backups/
 *.sql.gz
 *.sql.gz.gpg
+
+# App signing keys never enter the repository (docs/android.md).
+*.jks
+*.keystore

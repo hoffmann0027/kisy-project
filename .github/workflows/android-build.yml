@@ -2,9 +2,10 @@
 # publishes the APK as a downloadable artifact — no local JDK or Android SDK
 # needed, GitHub's runners already ship both.
 #
-# The debug APK is for testing on your own phone (install it directly).
-# The signed build for Google Play is the "Android release" workflow, which
-# needs the upload keystore — see docs/android.md.
+# The debug APK is for testers (install it directly). It is signed with the
+# same app key as the release, so each new build installs over the previous
+# one and keeps the app's data, E2EE keys included. The Play bundle is the
+# "Android release" workflow. Signing setup: docs/android.md.
 name: Android build
 
 on:
@@ -36,6 +37,26 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+
+      # Every build is signed with the one app key. Without it the build stops:
+      # an APK signed with the runner's random debug key cannot be installed
+      # over the app already on a phone, and reinstalling wipes its E2EE keys.
+      - name: Check the signing secrets are present
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          CERT_SHA256: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
+        run: |
+          missing=""
+          [ -n "$KEYSTORE" ] || missing="$missing ANDROID_KEYSTORE_B64"
+          [ -n "$STORE_PASSWORD" ] || missing="$missing ANDROID_KEYSTORE_PASSWORD"
+          [ -n "$KEY_ALIAS" ] || missing="$missing ANDROID_KEY_ALIAS"
+          [ -n "$CERT_SHA256" ] || missing="$missing ANDROID_SIGNING_CERT_SHA256(variable)"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing signing configuration:$missing — run scripts/android-signing-setup.ps1 (docs/android.md)" >&2
+            exit 1
+          fi
 
       - name: Install dependencies
         run: npm ci
@@ -75,6 +96,15 @@ jobs:
       # The native call rules (earpiece/loudspeaker/headset routing and the
       # proximity lock being released when a call ends) are plain JUnit tests.
       # They run before the APK is built, so a broken rule never ships.
+      - name: Unpack the signing keystore
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/kisy-signing.jks"
+          # Minutes since the epoch: grows with every build of either workflow,
+          # so a newer APK always installs over an older one.
+          echo "KISY_VERSION_CODE=$(( $(date +%s) / 60 ))" >> "$GITHUB_ENV"
+
       - name: Native unit tests
         run: ./gradlew --no-daemon testDebugUnitTest
         working-directory: frontend/android
@@ -82,6 +112,34 @@ jobs:
       - name: Assemble debug APK
         run: ./gradlew --no-daemon assembleDebug
         working-directory: frontend/android
+        env:
+          KISY_KEYSTORE_FILE: ${{ runner.temp }}/kisy-signing.jks
+          KISY_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KISY_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KISY_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KISY_VERSION_NAME: dev-${{ github.sha }}
+
+      # The pinned fingerprint catches a secret that was replaced by another key:
+      # such a build would install on no phone that has the app.
+      - name: Verify the signature is the app key
+        working-directory: frontend/android
+        env:
+          CERT_SHA256: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
+        run: |
+          apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort | tail -1)
+          for apk in app/build/outputs/apk/debug/*.apk; do
+            got=$("$apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)
+            want=$(printf '%s' "$CERT_SHA256" | tr -d ': ' | tr 'A-F' 'a-f')
+            if [ "$got" != "$want" ]; then
+              echo "::error::$apk is signed with $got, expected the app key $want" >&2
+              exit 1
+            fi
+            echo "$apk signed with the app key ($got)"
+          done
+
+      - name: Remove the keystore from the runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/kisy-signing.jks"
 
       - name: Upload APK
         uses: actions/upload-artifact@v5
