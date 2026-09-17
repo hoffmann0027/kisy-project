@@ -54,7 +54,14 @@ type Handler struct {
 	mw           *Middleware
 	ipHashSalt   string
 	secureCookie bool
+	// nativeOrigins are the WebView origins of the packaged apps; only
+	// requests from them may receive tokens in a response body (audit A-06).
+	nativeOrigins []string
 }
+
+// SetNativeOrigins sets the app origins allowed to receive tokens in the
+// response body (NATIVE_APP_ORIGINS). Empty: no request ever does.
+func (h *Handler) SetNativeOrigins(origins []string) { h.nativeOrigins = origins }
 
 func NewHandler(svc *Service, mw *Middleware, ipHashSalt string, secureCookie bool) *Handler {
 	return &Handler{svc: svc, mw: mw, ipHashSalt: ipHashSalt, secureCookie: secureCookie}
@@ -136,7 +143,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.setAuthCookies(w, res.Tokens)
-	httpresponse.OK(w, r, http.StatusCreated, withTokens(r, map[string]any{"user": res.User.ToDTO()}, res.Tokens))
+	httpresponse.OK(w, r, http.StatusCreated, h.withTokens(r, map[string]any{"user": res.User.ToDTO()}, res.Tokens))
 }
 
 type loginRequest struct {
@@ -162,20 +169,25 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.setAuthCookies(w, res.Tokens)
-	httpresponse.OK(w, r, http.StatusOK, withTokens(r, map[string]any{"user": res.User.ToDTO()}, res.Tokens))
+	httpresponse.OK(w, r, http.StatusOK, h.withTokens(r, map[string]any{"user": res.User.ToDTO()}, res.Tokens))
 }
 
 func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
-	sessionID, plain, ok := refreshFromRequest(r)
+	// Native clients have no cookie jar for us: they send the same
+	// "<sessionID>.<secret>" string back in the body. Which of the two the
+	// token came from decides whether new tokens may go back in the body.
+	fromBody := false
+	sessionID, plain, ok := uuid.Nil, "", false
+	if h.wantsTokenBody(r) {
+		sessionID, plain, ok = refreshFromBody(w, r)
+		fromBody = ok
+	}
 	if !ok {
-		// Native clients have no cookie jar for us: they send the same
-		// "<sessionID>.<secret>" string back in the body.
-		var body struct {
-			RefreshToken string `json:"refreshToken"`
-		}
-		if err := httpjson.Decode(w, r, &body); err == nil {
-			sessionID, plain, ok = splitRefreshToken(body.RefreshToken)
-		}
+		sessionID, plain, ok = refreshFromRequest(r)
+	}
+	if !ok && !fromBody {
+		sessionID, plain, ok = refreshFromBody(w, r)
+		fromBody = ok
 	}
 	if !ok {
 		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "missing refresh token")
@@ -190,9 +202,14 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.setAuthCookies(w, res.Tokens)
-	httpresponse.OK(w, r, http.StatusOK, withTokens(r, map[string]any{
-		"accessExpiresAt": res.Tokens.AccessExpiresAt,
-	}, res.Tokens))
+	payload := map[string]any{"accessExpiresAt": res.Tokens.AccessExpiresAt}
+	// A token that came from the HttpOnly cookie is never handed back
+	// readable, whatever the request asks for: that would launder the cookie
+	// into a token any script on the page can take (audit A-06).
+	if fromBody {
+		payload = h.withTokens(r, payload, res.Tokens)
+	}
+	httpresponse.OK(w, r, http.StatusOK, payload)
 }
 
 func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
@@ -309,6 +326,17 @@ func (h *Handler) clearAuthCookies(w http.ResponseWriter) {
 	})
 }
 
+// refreshFromBody reads the refresh token a native client sends in the body.
+func refreshFromBody(w http.ResponseWriter, r *http.Request) (uuid.UUID, string, bool) {
+	var body struct {
+		RefreshToken string `json:"refreshToken"`
+	}
+	if err := httpjson.Decode(w, r, &body); err != nil {
+		return uuid.Nil, "", false
+	}
+	return splitRefreshToken(body.RefreshToken)
+}
+
 // refreshFromRequest parses the "<sessionID>.<token>" refresh cookie.
 func refreshFromRequest(r *http.Request) (uuid.UUID, string, bool) {
 	c, err := r.Cookie(RefreshCookieName)
@@ -326,15 +354,35 @@ func refreshFromRequest(r *http.Request) (uuid.UUID, string, bool) {
 // authenticate with `Authorization: Bearer` instead — the middleware already
 // accepts that — which means they need the raw tokens in the response body.
 //
-// This is deliberately opt-in per request: browsers keep getting cookies only,
-// so a XSS on the web app still cannot read a token. A native app has no
-// cross-site attacker to protect against and stores the tokens in the
-// platform keystore.
+// The header alone used to be enough, and any script can set a header: a XSS
+// on the web app sent it to /auth/refresh, the browser attached the HttpOnly
+// refresh cookie by itself, and the response carried a readable 30-day token
+// (audit A-06). Two conditions now, neither of which a page on the web origin
+// can meet:
+//   - the Origin is one of NATIVE_APP_ORIGINS. Browsers set Origin and scripts
+//     cannot change it; the app's WebView sends https://localhost, which the
+//     CSRF check already requires of it;
+//   - on refresh, the token came from the body, never from the cookie.
+//
+// Installed apps already satisfy both, so nothing on the phones changes.
 const nativeClientHeader = "X-Kisy-Client"
 
-// wantsTokenBody reports whether the caller asked for tokens in the payload.
-func wantsTokenBody(r *http.Request) bool {
-	return strings.EqualFold(r.Header.Get(nativeClientHeader), "native")
+// wantsTokenBody reports whether the caller asked for tokens in the payload
+// and is an app origin allowed to get them.
+func (h *Handler) wantsTokenBody(r *http.Request) bool {
+	if !strings.EqualFold(r.Header.Get(nativeClientHeader), "native") {
+		return false
+	}
+	origin := strings.TrimRight(r.Header.Get("Origin"), "/")
+	if origin == "" {
+		return false
+	}
+	for _, allowed := range h.nativeOrigins {
+		if strings.EqualFold(origin, strings.TrimRight(allowed, "/")) {
+			return true
+		}
+	}
+	return false
 }
 
 // tokenBody is the token envelope handed to native clients.
@@ -358,8 +406,8 @@ func newTokenBody(t TokenPair) tokenBody {
 
 // withTokens adds the token envelope to a response payload when the caller is
 // a native client; browsers get the payload untouched.
-func withTokens(r *http.Request, payload map[string]any, t TokenPair) map[string]any {
-	if wantsTokenBody(r) {
+func (h *Handler) withTokens(r *http.Request, payload map[string]any, t TokenPair) map[string]any {
+	if h.wantsTokenBody(r) {
 		payload["tokens"] = newTokenBody(t)
 	}
 	return payload

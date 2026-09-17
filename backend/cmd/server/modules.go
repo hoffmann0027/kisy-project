@@ -147,6 +147,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	}
 	authMW := auth.NewMiddleware(tokens, sessionsRepo, pool)
 	authHandler := auth.NewHandler(authSvc, authMW, cfg.IPHashSalt, cfg.Env == "production")
+	authHandler.SetNativeOrigins(cfg.NativeAppOrigins)
 
 	// userLevel resolves an active user's clearance; inactive or missing
 	// users report ok=false so callers cannot enumerate accounts.

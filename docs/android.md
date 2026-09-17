@@ -18,6 +18,10 @@ WebView отдаёт бандл со своего собственного origi
   поэтому нативный клиент авторизуется Bearer-токеном
   (`frontend/src/shared/lib/native.ts`), а бэкенд пускает этот origin через
   `NATIVE_APP_ORIGINS`.
+  Токены в теле ответа сервер отдаёт только запросу с заголовком
+  `X-Kisy-Client: native` **и** Origin из `NATIVE_APP_ORIGINS`; при обновлении —
+  только если refresh-токен пришёл в теле, а не из cookie. Иначе скрипт на
+  веб-версии превратил бы HttpOnly-cookie в читаемый токен (аудит A-06).
 - **API-адрес абсолютный.** Он вшивается в бандл при сборке через
   `VITE_NATIVE_API_ORIGIN` (в CI — из переменной репозитория
   `NATIVE_API_ORIGIN`, по умолчанию `https://kisy.onrender.com`).
