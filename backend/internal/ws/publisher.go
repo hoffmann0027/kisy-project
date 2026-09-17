@@ -83,10 +83,11 @@ func (p *Publisher) PublishPollChanged() {
 	p.hub.broadcast(encode(EventPollChanged, map[string]any{}))
 }
 
-// PublishGroupChanged tells a group's members the group's metadata (e.g. its
-// avatar) changed so they can refetch it; satisfies groups.ChangePublisher.
-func (p *Publisher) PublishGroupChanged(groupID uuid.UUID) {
-	p.hub.publishToChat("group", groupID, encode(EventGroupChanged, map[string]any{"groupId": groupID}))
+// PublishGroupChangedTo tells the given users a group changed. The frame
+// carries only the group id, so it may go to member rows that no longer have
+// access: that is how their clients learn to drop the group.
+func (p *Publisher) PublishGroupChangedTo(userIDs []uuid.UUID, groupID uuid.UUID) {
+	p.hub.publishToUsers(userIDs, encode(EventGroupChanged, map[string]any{"groupId": groupID}))
 }
 
 // PublishE2EEHandshake tells a chat's connected members an MLS commit or

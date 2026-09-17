@@ -491,10 +491,17 @@ func (s *Service) EnsureMember(ctx context.Context, groupID uuid.UUID, actor Act
 	return nil
 }
 
-// MemberIDs returns the user IDs of every member, for real-time event
-// fan-out.
+// MemberIDs returns the members who may still see the group, for real-time
+// fan-out, push and read counts (see ListMemberIDs).
 func (s *Service) MemberIDs(ctx context.Context, groupID uuid.UUID) ([]uuid.UUID, error) {
 	return s.repo.ListMemberIDs(ctx, s.pool, groupID)
+}
+
+// MemberRowIDs returns every member row, including members who can no longer
+// see the group. Only for the content-free "group changed" signal, so a
+// member who just lost access refetches and watches the group disappear.
+func (s *Service) MemberRowIDs(ctx context.Context, groupID uuid.UUID) ([]uuid.UUID, error) {
+	return s.repo.ListMemberRowIDs(ctx, s.pool, groupID)
 }
 
 // IsFounder reports whether the user created the group.

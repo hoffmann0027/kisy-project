@@ -25,6 +25,7 @@ type Repository interface {
 	AddMember(ctx context.Context, q db.DBTX, m *Member) error
 	IsMember(ctx context.Context, q db.DBTX, groupID, userID uuid.UUID) (bool, error)
 	ListMemberIDs(ctx context.Context, q db.DBTX, groupID uuid.UUID) ([]uuid.UUID, error)
+	ListMemberRowIDs(ctx context.Context, q db.DBTX, groupID uuid.UUID) ([]uuid.UUID, error)
 	Delete(ctx context.Context, q db.DBTX, id uuid.UUID) error
 	// DeleteGroupMessages removes the group's messages, whose polymorphic
 	// chat_id has no cascading foreign key.
@@ -379,11 +380,33 @@ func (r *PostgresRepository) SetMinRoleLevel(ctx context.Context, q db.DBTX, id 
 	return nil
 }
 
+// ListMemberIDs returns the members who may still see the group: active
+// accounts whose clearance clears it, in a group that is neither deleted nor
+// archived. These are the people real-time events, push and read counts are
+// for — a member row alone is not access (audit A-05).
 func (r *PostgresRepository) ListMemberIDs(ctx context.Context, q db.DBTX, groupID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := q.Query(ctx, `SELECT user_id FROM group_members WHERE group_id = $1`, groupID)
+	rows, err := q.Query(ctx, `
+		SELECT m.user_id FROM group_members m
+		JOIN groups g ON g.id = m.group_id
+		JOIN users u ON u.id = m.user_id
+		WHERE m.group_id = $1 AND u.is_active AND `+MemberCanSeeSQL("g", "u"), groupID)
 	if err != nil {
 		return nil, fmt.Errorf("groups: list member ids: %w", err)
 	}
+	return collectIDs(rows)
+}
+
+// ListMemberRowIDs returns every member row, access or not. Only for telling
+// members that the group itself changed — including that they lost it.
+func (r *PostgresRepository) ListMemberRowIDs(ctx context.Context, q db.DBTX, groupID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.Query(ctx, `SELECT user_id FROM group_members WHERE group_id = $1`, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("groups: list member rows: %w", err)
+	}
+	return collectIDs(rows)
+}
+
+func collectIDs(rows pgx.Rows) ([]uuid.UUID, error) {
 	defer rows.Close()
 
 	var ids []uuid.UUID

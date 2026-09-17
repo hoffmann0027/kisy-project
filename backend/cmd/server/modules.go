@@ -427,7 +427,18 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	usersSvc.SetBroadcaster(func(_ context.Context, audience []uuid.UUID, profile users.DTO) {
 		wsPublisher.PublishUserUpdated(audience, profile)
 	})
-	groupsSvc.SetChangePublisher(wsPublisher.PublishGroupChanged)
+	// "group changed" goes to every member row, not only to members who can
+	// still see the group: it carries no content, and a member who just lost
+	// access must hear it to drop the group from their list (audit A-05).
+	groupChanged := func(groupID uuid.UUID) {
+		ids, err := groupsSvc.MemberRowIDs(context.Background(), groupID)
+		if err != nil {
+			log.Warn("group changed: list member rows", "group", groupID, "error", err)
+			return
+		}
+		wsPublisher.PublishGroupChangedTo(ids, groupID)
+	}
+	groupsSvc.SetChangePublisher(groupChanged)
 	// Notify a join-request applicant (a non-member for a rejection) of the
 	// decision via a per-user realtime notification.
 	groupsSvc.SetDecisionNotifier(func(userID, groupID uuid.UUID, approved bool) {
@@ -867,13 +878,13 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	adminSvc := admin.NewService(pool, usersRepo, sessionsRepo, auditRec)
 	adminSvc.SetGroupsRepository(groupsRepo)
 	adminSvc.SetUserChanged(usersSvc.ProfileChanged)
-	adminSvc.SetGroupChanged(wsPublisher.PublishGroupChanged)
+	adminSvc.SetGroupChanged(groupChanged)
 
 	// --- moderation of groups and communities (CEO) ---
 	moderationSvc := moderation.NewService(pool, moderation.NewRepository(), auditRec, log)
 	moderationSvc.SetNotifier(moderationNotifier{notifications: notificationsSvc})
 	moderationSvc.SetRoleReader(moderation.GroupRoles{Groups: groupsSvc})
-	moderationSvc.SetGroupChanged(wsPublisher.PublishGroupChanged)
+	moderationSvc.SetGroupChanged(groupChanged)
 	// A mute, its lifting, a deletion or a restore changes which posts the
 	// popular feed may hold; recompute now rather than at the next 5-minute
 	// pass. The page SQL already filters, so this only keeps offsets honest.
