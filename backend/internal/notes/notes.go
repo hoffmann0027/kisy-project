@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"kisy-backend/internal/platform/db"
+	"kisy-backend/internal/quota"
 )
 
 const (
@@ -148,8 +149,24 @@ func (r *PostgresRepository) Delete(ctx context.Context, q db.DBTX, id, userID u
 // Service holds notes business logic. Every method is scoped to the acting
 // user's own notes.
 type Service struct {
-	pool *pgxpool.Pool
-	repo Repository
+	pool    *pgxpool.Pool
+	repo    Repository
+	quota   *quota.Checker
+	maxFile int64
+}
+
+// SetQuota installs the per-account storage quota (audit A-07).
+func (s *Service) SetQuota(q *quota.Checker) { s.quota = q }
+
+// SetMaxFileBytes overrides the per-file ceiling (config NOTE_FILE_MAX_MB).
+func (s *Service) SetMaxFileBytes(n int64) { s.maxFile = n }
+
+// MaxFileBytes is the per-file ceiling in force.
+func (s *Service) MaxFileBytes() int64 {
+	if s.maxFile > 0 {
+		return s.maxFile
+	}
+	return MaxFileBytes
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository) *Service {
@@ -174,7 +191,7 @@ func (s *Service) CreateFile(ctx context.Context, userID uuid.UUID, fileName, ca
 	if len(raw) == 0 {
 		return DTO{}, ErrEmpty
 	}
-	if len(raw) > MaxFileBytes {
+	if int64(len(raw)) > s.MaxFileBytes() {
 		return DTO{}, ErrTooLarge
 	}
 	caption = strings.TrimSpace(caption)
@@ -190,7 +207,23 @@ func (s *Service) CreateFile(ctx context.Context, userID uuid.UUID, fileName, ca
 		name = "file"
 	}
 	mime := http.DetectContentType(raw)
-	return s.repo.Create(ctx, s.pool, userID, text, &name, &mime, int64(len(raw)), raw)
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return DTO{}, fmt.Errorf("notes: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := s.quota.ReserveUserBytes(ctx, tx, userID, int64(len(raw))); err != nil {
+		return DTO{}, err
+	}
+	note, err := s.repo.Create(ctx, tx, userID, text, &name, &mime, int64(len(raw)), raw)
+	if err != nil {
+		return DTO{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return DTO{}, fmt.Errorf("notes: commit: %w", err)
+	}
+	return note, nil
 }
 
 // List returns the user's notes, newest first.

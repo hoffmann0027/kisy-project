@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/quota"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
 )
@@ -19,9 +20,6 @@ import (
 const (
 	defaultPageSize = 20
 	maxPageSize     = 50
-	// maxMediaUpload bounds one uploaded file at the transport level; the
-	// blob store applies the real policy.
-	maxMediaUpload = 25 << 20 // 25 MiB
 )
 
 type Handler struct {
@@ -202,7 +200,7 @@ func (h *Handler) uploadMedia(w http.ResponseWriter, r *http.Request) {
 		notFound(w, r)
 		return
 	}
-	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxMediaUpload))
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, h.svc.MaxMediaBytes()))
 	if err != nil {
 		httpresponse.Fail(w, r, http.StatusRequestEntityTooLarge, httpresponse.ErrValidationFailed, "file too large")
 		return
@@ -272,6 +270,11 @@ func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		notFound(w, r)
+	case errors.Is(err, ErrTooLarge):
+		httpresponse.Fail(w, r, http.StatusRequestEntityTooLarge, httpresponse.ErrValidationFailed, "файл слишком большой")
+	case quota.Is(err):
+		status, msg, _ := quota.Describe(err)
+		httpresponse.Fail(w, r, status, httpresponse.ErrQuotaExceeded, msg)
 	case errors.Is(err, ErrMembersOnly):
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "сообщество закрытое: записи видят только участники")
 	case errors.Is(err, ErrForbidden):

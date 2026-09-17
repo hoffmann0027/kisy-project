@@ -36,8 +36,10 @@ const (
 	ErrAccessDenied           = "ACCESS_DENIED"
 	ErrResourceNotFound       = "RESOURCE_NOT_FOUND"
 	ErrRateLimited            = "RATE_LIMITED"
-	ErrValidationFailed       = "VALIDATION_FAILED"
-	ErrInternal               = "INTERNAL_ERROR"
+	// ErrQuotaExceeded: a storage quota or the posts-per-hour limit (audit A-07).
+	ErrQuotaExceeded    = "QUOTA_EXCEEDED"
+	ErrValidationFailed = "VALIDATION_FAILED"
+	ErrInternal         = "INTERNAL_ERROR"
 	// Display names (migration 46) get their own codes: the sign-up and rename
 	// forms have to tell "taken" from "not allowed" without parsing a message.
 	ErrDisplayNameTaken   = "DISPLAY_NAME_TAKEN"

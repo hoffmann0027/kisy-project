@@ -37,3 +37,14 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 }
+
+/**
+ * The text to show for a failed request: the server's own wording when it
+ * refused on a limit the user can act on (a storage quota, the posting rate —
+ * audit A-07), otherwise the caller's generic fallback. Everything else keeps
+ * the fallback, so internal messages never reach the screen.
+ */
+export function userFacingError(err: unknown, fallback: string): string {
+  if (err instanceof ApiError && err.code === "QUOTA_EXCEEDED" && err.message) return err.message;
+  return fallback;
+}

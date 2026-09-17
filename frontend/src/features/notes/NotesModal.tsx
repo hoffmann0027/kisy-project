@@ -4,6 +4,7 @@ import { Button, Modal, Spinner, toast } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import { formatRelative } from "@shared/lib/format";
 import type { Note } from "@shared/api/types";
+import { userFacingError } from "@shared/api/envelope";
 import { useNoteMutations, useNotes } from "@entities/note/queries";
 
 interface Props {
@@ -46,7 +47,7 @@ export function NotesModal({ open, onClose }: Props) {
     if (file) {
       m.createFile.mutate(
         { file, text: body || undefined },
-        { onSuccess: reset, onError: () => toast.error("Не удалось сохранить заметку") },
+        { onSuccess: reset, onError: (e) => toast.error(userFacingError(e, "Не удалось сохранить заметку")) },
       );
     } else {
       m.createText.mutate(body, {

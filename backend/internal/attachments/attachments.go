@@ -24,6 +24,7 @@ import (
 	"kisy-backend/internal/access"
 	"kisy-backend/internal/platform/blobstore"
 	"kisy-backend/internal/platform/db"
+	"kisy-backend/internal/quota"
 )
 
 var (
@@ -71,6 +72,9 @@ var voiceMimes = map[string]bool{
 type Limits struct {
 	MaxBytesLeadership int64
 	MaxBytesStaff      int64
+	// MaxBytesBasic is the ceiling for an account outside the hierarchy
+	// (open registration); zero falls back to MaxBytesStaff.
+	MaxBytesBasic      int64
 	LeadershipMaxLevel int
 	ChunkBytes         int
 	SessionTTL         time.Duration
@@ -84,6 +88,11 @@ func (l Limits) MaxBytesFor(roleLevel int) int64 {
 	// level-less account (zero) as the most senior one there is.
 	if access.MeetsClearance(roleLevel, l.LeadershipMaxLevel) {
 		return l.MaxBytesLeadership
+	}
+	// Open registration makes a level-less account free to create, so it gets
+	// the smallest ceiling (audit A-07).
+	if !access.HasLevel(roleLevel) && l.MaxBytesBasic > 0 {
+		return l.MaxBytesBasic
 	}
 	return l.MaxBytesStaff
 }
@@ -358,6 +367,8 @@ type Service struct {
 	// blobs, when set, receives the bytes of every new upload; the database
 	// row then keeps only the object key. Nil = legacy in-database storage.
 	blobs blobstore.Store
+	// quota bounds what one account may keep in storage (audit A-07).
+	quota *quota.Checker
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository, limits Limits) *Service {
@@ -369,6 +380,27 @@ func NewService(pool *pgxpool.Pool, repo Repository, limits Limits) *Service {
 // inline bytes is served from the database, so previously stored files keep
 // working before (and during) a migration.
 func (s *Service) SetBlobStore(b blobstore.Store) { s.blobs = b }
+
+// SetQuota installs the per-account storage quota.
+func (s *Service) SetQuota(q *quota.Checker) { s.quota = q }
+
+// CheckCopyQuota reports whether uploader may receive copies of the given
+// messages' attachments (a forward stores them again under the forwarder).
+func (s *Service) CheckCopyQuota(ctx context.Context, uploader uuid.UUID, sourceMessageIDs []uuid.UUID) error {
+	if s.quota == nil || len(sourceMessageIDs) == 0 {
+		return nil
+	}
+	var bytes int64
+	if err := s.pool.QueryRow(ctx,
+		`SELECT COALESCE(sum(size_bytes), 0) FROM attachments WHERE message_id = ANY($1)`,
+		sourceMessageIDs).Scan(&bytes); err != nil {
+		return fmt.Errorf("attachments: size of forwarded files: %w", err)
+	}
+	if bytes == 0 {
+		return nil
+	}
+	return s.quota.ReserveUserBytes(ctx, s.pool, uploader, bytes)
+}
 
 // newObjectKey mints a random object name. It is generated before the row
 // exists (the bytes must land in the store first, so a failed upload never
@@ -420,6 +452,17 @@ func (s *Service) store(ctx context.Context, fileName string, raw []byte, upload
 	// row keeps only the key; the database never sees the payload. Order
 	// matters: an orphaned object is harmless (reaped by lifecycle policy),
 	// an orphaned row would be a broken download.
+	// The quota is decided and the row written in one transaction under the
+	// account's quota lock, so parallel uploads cannot all fit (audit A-07).
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return DTO{}, fmt.Errorf("attachments: begin upload: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := s.quota.ReserveUserBytes(ctx, tx, uploader, int64(len(raw))); err != nil {
+		return DTO{}, err
+	}
+
 	data, path := raw, ""
 	if s.blobs != nil {
 		path = newObjectKey()
@@ -429,7 +472,10 @@ func (s *Service) store(ctx context.Context, fileName string, raw []byte, upload
 		data = nil
 	}
 
-	id, err := s.repo.Create(ctx, s.pool, name, mime, int64(len(raw)), data, path, uploader, normalized)
+	id, err := s.repo.Create(ctx, tx, name, mime, int64(len(raw)), data, path, uploader, normalized)
+	if err == nil {
+		err = tx.Commit(ctx)
+	}
 	if err != nil {
 		if path != "" {
 			// Best-effort: don't leave the object behind if the row failed.

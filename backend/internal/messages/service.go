@@ -114,6 +114,7 @@ type Service struct {
 	clearance  ClearanceResolver
 	senderName SenderNamer
 	attachCopy AttachmentCopier
+	copyQuota  CopyQuota
 	pub        Publisher
 	reactions  ReactionLoader
 	notifier   Notifier
@@ -161,6 +162,15 @@ func (s *Service) SetForwarding(c ClearanceResolver, namer SenderNamer, copier A
 	s.senderName = namer
 	s.attachCopy = copier
 }
+
+// CopyQuota reports whether the forwarder may store copies of the source
+// messages' attachments. A forward duplicates the files under the forwarder,
+// so without this a single upload forwarded again and again would grow storage
+// without bound (audit A-07).
+type CopyQuota func(ctx context.Context, forwarder uuid.UUID, sourceMessageIDs []uuid.UUID) error
+
+// SetCopyQuota installs the quota check forwarding runs before copying files.
+func (s *Service) SetCopyQuota(q CopyQuota) { s.copyQuota = q }
 
 // AttachmentCopier duplicates a source message's attachments onto a new
 // message id, returning the new attachment DTOs. Injected to avoid a
@@ -473,6 +483,13 @@ func (s *Service) Forward(ctx context.Context, in ForwardInput, actor ActorMeta)
 			}
 		}
 		items = append(items, prepared{src: src, senderName: name})
+	}
+
+	// Checked before anything is written, so a refused forward creates nothing.
+	if s.copyQuota != nil {
+		if err := s.copyQuota(ctx, actor.UserID, in.SourceMessageIDs); err != nil {
+			return nil, err
+		}
 	}
 
 	// A forward is a NEW message: it inherits the TARGET chat's disappearing

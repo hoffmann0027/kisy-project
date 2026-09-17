@@ -66,8 +66,21 @@ func (s *Service) InitUpload(ctx context.Context, uploader uuid.UUID, roleLevel 
 		Meta:          meta,
 		ExpiresAt:     time.Now().Add(s.limits.SessionTTL),
 	}
-	if err := s.repo.CreateSession(ctx, s.pool, session); err != nil {
+	// The declared size is reserved now: the chunks are stored as they arrive,
+	// so checking only at completion would let them bypass the quota.
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return SessionDTO{}, fmt.Errorf("attachments: begin init: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := s.quota.ReserveUserBytes(ctx, tx, uploader, declaredBytes); err != nil {
 		return SessionDTO{}, err
+	}
+	if err := s.repo.CreateSession(ctx, tx, session); err != nil {
+		return SessionDTO{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return SessionDTO{}, fmt.Errorf("attachments: commit init: %w", err)
 	}
 	return SessionDTO{
 		ID:             session.ID,

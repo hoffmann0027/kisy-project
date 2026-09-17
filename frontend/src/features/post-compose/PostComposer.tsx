@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Button, IconButton, toast } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
+import { userFacingError } from "@shared/api/envelope";
 import { useCreatePost } from "@entities/post/queries";
 
 // Writing a post: text plus up to ten files.
@@ -36,7 +37,7 @@ export function PostComposer({ communityId }: { communityId: string }) {
           setFiles([]);
           if (fileInput.current) fileInput.current.value = "";
         },
-        onError: () => toast.error("Не удалось опубликовать пост"),
+        onError: (e) => toast.error(userFacingError(e, "Не удалось опубликовать пост")),
       },
     );
   };

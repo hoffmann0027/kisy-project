@@ -31,7 +31,7 @@ import { ScheduledPanel } from "@features/scheduled/ScheduledPanel";
 import { ThreadPanel } from "@features/threads/ThreadPanel";
 import { e2eeSession } from "@entities/e2ee";
 import { messagesApi } from "@shared/api/endpoints";
-import { ApiError } from "@shared/api/envelope";
+import { ApiError, userFacingError } from "@shared/api/envelope";
 import { useAuthStore } from "@shared/store/auth";
 import { useTypingStore } from "@shared/store/typing";
 import { useReadReceiptStore } from "@shared/store/readReceipts";
@@ -281,7 +281,7 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
           toast.error(
             e instanceof ApiError && e.status === 403
               ? "Нельзя переслать в чат с более широкой аудиторией"
-              : "Не удалось переслать сообщения",
+              : userFacingError(e, "Не удалось переслать сообщения"),
           );
         },
       },

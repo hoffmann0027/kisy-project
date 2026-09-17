@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/quota"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
 	"kisy-backend/pkg/pagination"
@@ -433,6 +434,9 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "message text must not be empty")
 	case errors.Is(err, ErrBadChatType):
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "unknown chat type")
+	case quota.Is(err):
+		status, msg, _ := quota.Describe(err)
+		httpresponse.Fail(w, r, status, httpresponse.ErrQuotaExceeded, msg)
 	case errors.Is(err, ErrForwardBroadens):
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "cannot forward to a broader audience")
 	case errors.Is(err, ErrForwardEncrypted):

@@ -75,6 +75,7 @@ type Config struct {
 	// Upload bounds attachment uploads (stage A: chunked uploads with
 	// clearance-differentiated limits — no hardcoded 10 MiB).
 	Upload UploadConfig
+	Quota  QuotaConfig
 
 	// BootstrapCEOUsername/Password create the very first Level-1 account
 	// when the users table is empty. Optional after first launch.
@@ -131,8 +132,26 @@ type ICEConfig struct {
 type UploadConfig struct {
 	MaxBytesLeadership int64
 	MaxBytesStaff      int64
-	ChunkBytes         int
-	SessionTTL         time.Duration
+	// MaxBytesBasic: accounts outside the hierarchy (open registration).
+	MaxBytesBasic int64
+	ChunkBytes    int
+	SessionTTL    time.Duration
+}
+
+// QuotaConfig bounds storage and posting per account and per community
+// (audit A-07). Megabytes / counts in env; zero disables a limit. The CEO is
+// never limited.
+//
+// The defaults assume the worst supported deployment: no object store, so every
+// byte lands in Postgres on a small managed plan. Raise them once BLOB_S3_* is on.
+type QuotaConfig struct {
+	UserBytesBasic      int64
+	UserBytesInvited    int64
+	CommunityBytes      int64
+	PostsPerHourBasic   int
+	PostsPerHourInvited int
+	PostMediaMaxBytes   int64
+	NoteFileMaxBytes    int64
 }
 
 // LeadershipMaxLevel is the strongest clearance band for upload limits:
@@ -333,10 +352,41 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	basicMB, err := getEnvInt("UPLOAD_MAX_MB_BASIC", 10)
+	if err != nil {
+		return nil, err
+	}
 	cfg.Upload = UploadConfig{
 		MaxBytesLeadership: int64(leadershipMB) << 20,
 		MaxBytesStaff:      int64(staffMB) << 20,
+		MaxBytesBasic:      int64(basicMB) << 20,
 		ChunkBytes:         chunkKB << 10,
+	}
+
+	// Storage quotas and the posting rate (audit A-07).
+	quotaMB := map[string]int{
+		"QUOTA_USER_MB_BASIC": 100, "QUOTA_USER_MB_INVITED": 1024, "QUOTA_COMMUNITY_MB": 500,
+		"POST_MEDIA_MAX_MB": 10, "NOTE_FILE_MAX_MB": 10,
+		"POSTS_PER_HOUR_BASIC": 5, "POSTS_PER_HOUR_INVITED": 30,
+	}
+	for key, def := range quotaMB {
+		v, err := getEnvInt(key, def)
+		if err != nil {
+			return nil, err
+		}
+		if v < 0 {
+			return nil, fmt.Errorf("config: %s must not be negative", key)
+		}
+		quotaMB[key] = v
+	}
+	cfg.Quota = QuotaConfig{
+		UserBytesBasic:      int64(quotaMB["QUOTA_USER_MB_BASIC"]) << 20,
+		UserBytesInvited:    int64(quotaMB["QUOTA_USER_MB_INVITED"]) << 20,
+		CommunityBytes:      int64(quotaMB["QUOTA_COMMUNITY_MB"]) << 20,
+		PostsPerHourBasic:   quotaMB["POSTS_PER_HOUR_BASIC"],
+		PostsPerHourInvited: quotaMB["POSTS_PER_HOUR_INVITED"],
+		PostMediaMaxBytes:   int64(quotaMB["POST_MEDIA_MAX_MB"]) << 20,
+		NoteFileMaxBytes:    int64(quotaMB["NOTE_FILE_MAX_MB"]) << 20,
 	}
 	if cfg.Upload.SessionTTL, err = getEnvDuration("UPLOAD_SESSION_TTL", 24*time.Hour); err != nil {
 		return nil, err

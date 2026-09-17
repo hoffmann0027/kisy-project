@@ -4,6 +4,7 @@ import { ApiImage } from "@shared/ui/ApiImage";
 import { Icon } from "@shared/ui/icons";
 import { EmojiPicker, IconButton, toast } from "@shared/ui";
 import type { Attachment, Message } from "@shared/api/types";
+import { userFacingError } from "@shared/api/envelope";
 import { fileTypeLabel, formatBytes, uploadFile } from "@entities/attachment/upload";
 import { useUploadLimit } from "@entities/attachment/queries";
 import { useVoiceRecorder } from "@features/voice-message/recorder";
@@ -96,8 +97,8 @@ export function Composer({
             setUploads((prev) => prev.map((u) => (u.key === key ? { ...u, progress: fraction } : u))),
         });
         setAttachments((prev) => [...prev, attachment]);
-      } catch {
-        if (!abort.signal.aborted) toast.error(`Не удалось загрузить «${file.name}»`);
+      } catch (err) {
+        if (!abort.signal.aborted) toast.error(userFacingError(err, `Не удалось загрузить «${file.name}»`));
       } finally {
         setUploads((prev) => prev.filter((u) => u.key !== key));
       }

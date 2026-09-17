@@ -892,6 +892,7 @@ paths:
               properties:
                 text: { type: string, maxLength: 8000 }
       responses:
+        '429': { $ref: '#/components/responses/QuotaExceeded' }
         '201':
           description: Post created
           content:
@@ -1493,6 +1494,7 @@ paths:
                 targetChatType: { type: string, enum: [private, group] }
                 targetChatId: { type: string, format: uuid }
       responses:
+        '413': { $ref: '#/components/responses/QuotaExceeded' }
         '201':
           description: Forwarded messages created
           content:
@@ -4298,6 +4300,14 @@ components:
           schema: { $ref: '#/components/schemas/Envelope' }
     Conflict:
       description: Resource conflict (e.g. username taken)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Envelope' }
+    QuotaExceeded:
+      description: >
+        A limit the user can act on (audit A-07): the account's or the
+        community's storage quota (413), or the posts-per-hour limit (429).
+        error.code is QUOTA_EXCEEDED and error.message is written for the user.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Envelope' }

@@ -22,6 +22,8 @@ var (
 	ErrForbidden = errors.New("posts: not permitted")
 	ErrEmpty     = errors.New("posts: a post needs text or media")
 	ErrTooLong   = errors.New("posts: text too long")
+	// ErrTooLarge: an uploaded media file exceeds the configured ceiling.
+	ErrTooLarge = errors.New("posts: media file too large")
 	// ErrNotCommunity is returned when the target is an ordinary group: a
 	// group is a conversation, and its wall does not exist.
 	ErrNotCommunity = errors.New("posts: this group is not a community")
@@ -33,6 +35,10 @@ var (
 // MaxTextLength bounds a post body. Generous compared to a chat message —
 // a post is written once and read many times.
 const MaxTextLength = 8000
+
+// DefaultMaxMediaBytes is the per-file ceiling for post media when the
+// operator sets none (config POST_MEDIA_MAX_MB).
+const DefaultMaxMediaBytes = 10 << 20
 
 // MaxMediaPerPost bounds one post's attachments.
 const MaxMediaPerPost = 10

@@ -45,6 +45,7 @@ import (
 	"kisy-backend/internal/platform/ratelimit"
 	"kisy-backend/internal/posts"
 	"kisy-backend/internal/push"
+	"kisy-backend/internal/quota"
 	"kisy-backend/internal/rating"
 	"kisy-backend/internal/reactions"
 	"kisy-backend/internal/readstate"
@@ -308,13 +309,25 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	})
 
 	// --- attachments (bytes in object storage when configured, else the DB) ---
+	// One quota checker for every path that stores bytes or publishes posts
+	// (audit A-07).
+	quotas := quota.New(quota.Policy{
+		UserBytesBasic:      cfg.Quota.UserBytesBasic,
+		UserBytesInvited:    cfg.Quota.UserBytesInvited,
+		CommunityBytes:      cfg.Quota.CommunityBytes,
+		PostsPerHourBasic:   cfg.Quota.PostsPerHourBasic,
+		PostsPerHourInvited: cfg.Quota.PostsPerHourInvited,
+	})
 	attachmentsSvc := attachments.NewService(pool, attachments.NewPostgresRepository(), attachments.Limits{
 		MaxBytesLeadership: cfg.Upload.MaxBytesLeadership,
 		MaxBytesStaff:      cfg.Upload.MaxBytesStaff,
+		MaxBytesBasic:      cfg.Upload.MaxBytesBasic,
 		LeadershipMaxLevel: config.LeadershipMaxLevel,
 		ChunkBytes:         cfg.Upload.ChunkBytes,
 		SessionTTL:         cfg.Upload.SessionTTL,
 	})
+	attachmentsSvc.SetQuota(quotas)
+	messagesSvc.SetCopyQuota(attachmentsSvc.CheckCopyQuota)
 	if blobs != nil {
 		attachmentsSvc.SetBlobStore(blobs)
 	}
@@ -457,6 +470,8 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	// --- community posts and the feed ---
 	postsSvc := posts.NewService(pool, posts.NewPostgresRepository(), postsCommunities{groups: groupsSvc}, auditRec)
 	postsSvc.SetRanker(posts.NewRedisRanker(rdb))
+	postsSvc.SetQuota(quotas)
+	postsSvc.SetMaxMediaBytes(cfg.Quota.PostMediaMaxBytes)
 	if blobs != nil {
 		// Without an object store the bytes stay in the row (migration 44), so
 		// attachments work either way.
@@ -596,6 +611,8 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 
 	// --- personal notes ---
 	notesSvc := notes.NewService(pool, notes.NewPostgresRepository())
+	notesSvc.SetQuota(quotas)
+	notesSvc.SetMaxFileBytes(cfg.Quota.NoteFileMaxBytes)
 	notesHandler := notes.NewHandler(notesSvc, func(r *http.Request) (uuid.UUID, bool) {
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {

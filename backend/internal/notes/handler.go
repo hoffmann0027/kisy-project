@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/quota"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
 )
@@ -79,7 +80,7 @@ func (h *Handler) createFile(w http.ResponseWriter, r *http.Request) {
 		unauth(w, r)
 		return
 	}
-	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxFileBytes+1024))
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, h.svc.MaxFileBytes()+1024))
 	if err != nil {
 		httpresponse.Fail(w, r, http.StatusRequestEntityTooLarge, httpresponse.ErrValidationFailed, "file too large")
 		return
@@ -162,6 +163,9 @@ func fail(w http.ResponseWriter, r *http.Request, err error) {
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "invalid note")
 	case errors.Is(err, ErrTooLarge):
 		httpresponse.Fail(w, r, http.StatusRequestEntityTooLarge, httpresponse.ErrValidationFailed, "file too large")
+	case quota.Is(err):
+		status, msg, _ := quota.Describe(err)
+		httpresponse.Fail(w, r, status, httpresponse.ErrQuotaExceeded, msg)
 	default:
 		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
 	}

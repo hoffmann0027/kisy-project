@@ -13,6 +13,7 @@ import (
 
 	"kisy-backend/internal/access"
 	"kisy-backend/internal/audit"
+	"kisy-backend/internal/quota"
 )
 
 // CommunityView is a community as one particular actor sees it.
@@ -78,6 +79,8 @@ type Service struct {
 	media       MediaStore
 	pub         Publisher
 	ranker      Ranker
+	quota       *quota.Checker
+	maxMedia    int64
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository, communities Communities, rec audit.Recorder) *Service {
@@ -87,6 +90,20 @@ func NewService(pool *pgxpool.Pool, repo Repository, communities Communities, re
 func (s *Service) SetPublisher(p Publisher)   { s.pub = p }
 func (s *Service) SetRanker(r Ranker)         { s.ranker = r }
 func (s *Service) SetMediaStore(m MediaStore) { s.media = m }
+
+// SetQuota installs the storage quotas and the posts-per-hour limit (audit A-07).
+func (s *Service) SetQuota(q *quota.Checker) { s.quota = q }
+
+// SetMaxMediaBytes overrides the per-file ceiling for post media (config POST_MEDIA_MAX_MB).
+func (s *Service) SetMaxMediaBytes(n int64) { s.maxMedia = n }
+
+// MaxMediaBytes is the per-file ceiling for post media in force.
+func (s *Service) MaxMediaBytes() int64 {
+	if s.maxMedia > 0 {
+		return s.maxMedia
+	}
+	return DefaultMaxMediaBytes
+}
 
 // CreateInput is validated by the handler before it reaches the service.
 type CreateInput struct {
@@ -131,6 +148,12 @@ func (s *Service) Create(ctx context.Context, in CreateInput, actor ActorMeta) (
 		return nil, fmt.Errorf("posts: begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx)
+
+	// Posts per hour are counted in the same transaction as the insert, under
+	// the author's lock, so a burst cannot all slip under the limit (A-07).
+	if err := s.quota.ReservePost(ctx, tx, actor.UserID); err != nil {
+		return nil, err
+	}
 
 	p := &Post{CommunityID: in.CommunityID, AuthorID: actor.UserID, Text: text}
 	if err := s.repo.Create(ctx, tx, p); err != nil {
@@ -302,6 +325,9 @@ func (s *Service) AttachMedia(
 	if len(file.Bytes) == 0 {
 		return nil, ErrEmpty
 	}
+	if int64(len(file.Bytes)) > s.MaxMediaBytes() {
+		return nil, ErrTooLarge
+	}
 	p, err := s.repo.Get(ctx, s.pool, postID)
 	if err != nil {
 		return nil, err
@@ -340,6 +366,19 @@ func (s *Service) AttachMedia(
 	// row. The alternative — refusing attachments on a deployment that has no
 	// bucket — would make the feature depend on infrastructure the user never
 	// asked about.
+	// Both quotas — the author's and the community's — are decided in the
+	// transaction that writes the row, under their locks (audit A-07).
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("posts: begin media: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := s.quota.ReserveUserBytes(ctx, tx, actor.UserID, m.SizeBytes); err != nil {
+		return nil, err
+	}
+	if err := s.quota.ReserveCommunityBytes(ctx, tx, p.CommunityID, m.SizeBytes); err != nil {
+		return nil, err
+	}
 	if s.media != nil {
 		path, err := s.media.Put(ctx, name, mime, file.Bytes)
 		if err != nil {
@@ -349,8 +388,11 @@ func (s *Service) AttachMedia(
 	} else {
 		m.Bytes = file.Bytes
 	}
-	if err := s.repo.AddMedia(ctx, s.pool, postID, []Media{m}); err != nil {
+	if err := s.repo.AddMedia(ctx, tx, postID, []Media{m}); err != nil {
 		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("posts: commit media: %w", err)
 	}
 
 	page, err := s.render(ctx, []Post{*p}, actor)
