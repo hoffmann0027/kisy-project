@@ -52,18 +52,46 @@ function Read-Secret([string]$prompt) {
   finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
 }
 
+# Windows PowerShell 5.1 turns every line a native program writes to stderr
+# into an error record, and with ErrorActionPreference=Stop that aborts the
+# script although the program succeeded: gh prints its status to stderr,
+# keytool its progress, npm and Gradle their warnings. Native programs are
+# therefore judged by their exit code alone. Returns stdout; with -Stream, every
+# line is shown as it arrives instead.
+function Invoke-Native([string]$what, [scriptblock]$command, [switch]$Stream) {
+  $saved = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  $stdout = New-Object System.Collections.Generic.List[string]
+  $all = New-Object System.Collections.Generic.List[string]
+  try {
+    & $command 2>&1 | ForEach-Object {
+      $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { [string]$_ }
+      if ($_ -isnot [System.Management.Automation.ErrorRecord]) { $stdout.Add($line) }
+      $all.Add($line)
+      if ($Stream) { Write-Host $line }
+    }
+    $code = $LASTEXITCODE
+  }
+  finally { $ErrorActionPreference = $saved }
+  if ($code -ne 0) {
+    $tail = ($all | Select-Object -Last 20) -join [Environment]::NewLine
+    throw "$what failed (exit $code)$([Environment]::NewLine)$tail"
+  }
+  return ,$stdout.ToArray()
+}
+
 function Invoke-Step([string]$title, [scriptblock]$body) {
   Write-Host "== $title"
-  & $body
-  if ($LASTEXITCODE -ne 0) { throw "$title failed (exit $LASTEXITCODE)" }
+  Invoke-Native $title $body -Stream | Out-Null
 }
 
 if (-not (Test-Path $Keystore)) { throw "keystore not found: $Keystore (run scripts\android-signing-setup.ps1 first)" }
 if (-not (Test-Path $GoogleServices)) { throw "google-services.json not found: $GoogleServices (push notifications need it)" }
 
-$want = (gh variable get ANDROID_SIGNING_CERT_SHA256 --repo $Repo)
-if ($LASTEXITCODE -ne 0 -or -not $want) { throw "repository variable ANDROID_SIGNING_CERT_SHA256 is not set (run scripts\android-signing-setup.ps1)" }
+try { $want = (Invoke-Native "gh variable get" { gh variable get ANDROID_SIGNING_CERT_SHA256 --repo $Repo }) -join "" }
+catch { throw "repository variable ANDROID_SIGNING_CERT_SHA256 is not readable (run scripts\android-signing-setup.ps1)$([Environment]::NewLine)$($_.Exception.Message)" }
 $want = ($want -replace "[:\s]", "").ToLower()
+if (-not $want) { throw "repository variable ANDROID_SIGNING_CERT_SHA256 is empty (run scripts\android-signing-setup.ps1)" }
 
 $env:JAVA_HOME = Find-Jdk21
 $sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA "Android\Sdk" }
@@ -71,8 +99,8 @@ if (-not (Test-Path $sdk)) { throw "Android SDK not found: set ANDROID_HOME" }
 $env:ANDROID_HOME = $sdk
 $env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
 
-$commit = (git -C $root rev-parse --short HEAD)
-$dirty = (git -C $root status --porcelain -- frontend)
+$commit = (Invoke-Native "git rev-parse" { git -C $root rev-parse --short HEAD }) -join ""
+$dirty = Invoke-Native "git status" { git -C $root status --porcelain -- frontend }
 if ($dirty) { Write-Warning "frontend has uncommitted changes; the APK will include them" }
 
 $googleTarget = Join-Path $android "app\google-services.json"
@@ -104,7 +132,8 @@ finally {
 
 $apk = Join-Path $android "app\build\outputs\apk\debug\app-debug.apk"
 $apksigner = Get-ChildItem (Join-Path $sdk "build-tools\*\lib\apksigner.jar") | Sort-Object FullName | Select-Object -Last 1
-$certs = & (Join-Path $env:JAVA_HOME "bin\java.exe") -jar $apksigner.FullName verify --print-certs $apk
+$java = Join-Path $env:JAVA_HOME "bin\java.exe"
+$certs = Invoke-Native "apksigner verify" { & $java -jar $apksigner.FullName verify --print-certs $apk }
 $got = (($certs | Select-String "Signer #1 certificate SHA-256 digest:" | Select-Object -First 1).ToString() -replace ".*digest:\s*", "").Trim().ToLower()
 if ($got -ne $want) { throw "the APK is signed with $got, not the app key $want - do NOT distribute it" }
 

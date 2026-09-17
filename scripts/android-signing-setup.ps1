@@ -49,14 +49,67 @@ function Read-Secret([string]$prompt) {
   finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
 }
 
+# Windows PowerShell 5.1 turns every line a native program writes to stderr
+# into an error record, and with ErrorActionPreference=Stop that aborts the
+# script although the program succeeded: gh prints its status to stderr,
+# keytool its progress, npm and Gradle their warnings. Native programs are
+# therefore judged by their exit code alone. Returns stdout; with -Stream, every
+# line is shown as it arrives instead.
+function Invoke-Native([string]$what, [scriptblock]$command, [switch]$Stream) {
+  $saved = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  $stdout = New-Object System.Collections.Generic.List[string]
+  $all = New-Object System.Collections.Generic.List[string]
+  try {
+    & $command 2>&1 | ForEach-Object {
+      $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { [string]$_ }
+      if ($_ -isnot [System.Management.Automation.ErrorRecord]) { $stdout.Add($line) }
+      $all.Add($line)
+      if ($Stream) { Write-Host $line }
+    }
+    $code = $LASTEXITCODE
+  }
+  finally { $ErrorActionPreference = $saved }
+  if ($code -ne 0) {
+    $tail = ($all | Select-Object -Last 20) -join [Environment]::NewLine
+    throw "$what failed (exit $code)$([Environment]::NewLine)$tail"
+  }
+  return ,$stdout.ToArray()
+}
+
+# The secret goes to gh as exact bytes on its stdin. Piping a string to a native
+# program in Windows PowerShell 5.1 re-encodes it (UTF-8 with a BOM on this
+# machine) and appends a newline: a BOM in ANDROID_KEYSTORE_B64 breaks
+# `base64 -d` in CI, and in the password it leaves the keystore unopenable.
 function Set-RepoSecret([string]$name, [string]$value) {
-  $value | gh secret set $name --repo $Repo
-  if ($LASTEXITCODE -ne 0) { throw "gh secret set $name failed" }
+  $gh = (Get-Command gh -CommandType Application | Select-Object -First 1).Source
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = $gh
+  $psi.Arguments = "secret set $name --repo $Repo"
+  $psi.UseShellExecute = $false
+  $psi.RedirectStandardInput = $true
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  # .NET Framework opens the child's stdin writer in Console.InputEncoding and
+  # writes that encoding's preamble at once; UTF-8 without a BOM has none.
+  $savedInput = [Console]::InputEncoding
+  [Console]::InputEncoding = New-Object System.Text.UTF8Encoding $false
+  try { $p = [System.Diagnostics.Process]::Start($psi) }
+  finally { [Console]::InputEncoding = $savedInput }
+  $stdout = $p.StandardOutput.ReadToEndAsync()
+  $stderr = $p.StandardError.ReadToEndAsync()
+  $bytes = (New-Object System.Text.UTF8Encoding $false).GetBytes($value)
+  $p.StandardInput.BaseStream.Write($bytes, 0, $bytes.Length)
+  $p.StandardInput.Close()
+  $p.WaitForExit()
+  if ($p.ExitCode -ne 0) {
+    throw "gh secret set $name failed (exit $($p.ExitCode))$([Environment]::NewLine)$($stderr.Result)$($stdout.Result)"
+  }
 }
 
 $keytool = Find-Keytool
-gh auth status 1>$null 2>$null
-if ($LASTEXITCODE -ne 0) { throw "gh is not signed in: run 'gh auth login' first" }
+try { Invoke-Native "gh auth status" { gh auth status } | Out-Null }
+catch { throw "gh is not signed in: run 'gh auth login' first$([Environment]::NewLine)$($_.Exception.Message)" }
 
 $keystore = Join-Path $OutDir "kisy-signing.jks"
 if (Test-Path $keystore) {
@@ -67,18 +120,22 @@ New-Item -ItemType Directory -Force $OutDir | Out-Null
 Write-Host "Password for the signing key: at least 16 characters. Save it in the password manager NOW."
 $password = Read-Secret "Password"
 if ($password.Length -lt 16) { throw "the password is shorter than 16 characters" }
+# Printable ASCII only: the password crosses keytool's environment on Windows
+# and Gradle's on the Linux runner; outside ASCII that depends on code pages.
+if ($password -notmatch "^[!-~]+$") { throw "use printable ASCII only (letters, digits, punctuation; no spaces)" }
 if ((Read-Secret "Repeat the password") -ne $password) { throw "the passwords differ" }
 
 # keytool reads the password from the environment, never from argv.
 $env:KISY_SIGNING_PASSWORD = $password
 try {
-  & $keytool -genkeypair -v -storetype PKCS12 -keystore $keystore -alias $Alias `
-    -keyalg RSA -keysize 4096 -validity 10000 `
-    -dname "CN=KISY, O=KISY" `
-    -storepass:env KISY_SIGNING_PASSWORD -keypass:env KISY_SIGNING_PASSWORD
-  if ($LASTEXITCODE -ne 0) { throw "keytool failed" }
+  Invoke-Native "keytool -genkeypair" {
+    & $keytool -genkeypair -v -storetype PKCS12 -keystore $keystore -alias $Alias `
+      -keyalg RSA -keysize 4096 -validity 10000 `
+      -dname "CN=KISY, O=KISY" `
+      -storepass:env KISY_SIGNING_PASSWORD -keypass:env KISY_SIGNING_PASSWORD
+  } -Stream | Out-Null
 
-  $listing = & $keytool -list -v -keystore $keystore -alias $Alias -storepass:env KISY_SIGNING_PASSWORD
+  $listing = Invoke-Native "keytool -list" { & $keytool -list -v -keystore $keystore -alias $Alias -storepass:env KISY_SIGNING_PASSWORD }
   $line = $listing | Select-String "SHA256:" | Select-Object -First 1
   if (-not $line) { throw "could not read the certificate fingerprint" }
   $sha256 = ($line.ToString() -replace ".*SHA256:\s*", "" -replace ":", "").Trim().ToLower()
@@ -89,8 +146,7 @@ try {
   # PKCS12 has one password for the store and the key.
   Set-RepoSecret "ANDROID_KEY_PASSWORD" $password
 
-  gh variable set ANDROID_SIGNING_CERT_SHA256 --repo $Repo --body $sha256
-  if ($LASTEXITCODE -ne 0) { throw "gh variable set failed" }
+  Invoke-Native "gh variable set ANDROID_SIGNING_CERT_SHA256" { gh variable set ANDROID_SIGNING_CERT_SHA256 --repo $Repo --body $sha256 } | Out-Null
 }
 finally {
   Remove-Item Env:KISY_SIGNING_PASSWORD -ErrorAction SilentlyContinue
