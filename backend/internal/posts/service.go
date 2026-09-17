@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"kisy-backend/internal/access"
 	"kisy-backend/internal/audit"
 )
 
@@ -198,11 +199,27 @@ func (s *Service) Delete(ctx context.Context, postID uuid.UUID, actor ActorMeta)
 	return nil
 }
 
+// readable resolves a community for someone about to READ its wall, its media
+// or react to its posts. Seeing a community (it is listed, you may ask to join)
+// is not the same as reading it: a closed community is members-only, and only
+// the CEO sees inside without joining, for moderation. Audit A-01 was exactly
+// this line missing — visibility alone let any account read closed walls.
+func (s *Service) readable(ctx context.Context, communityID uuid.UUID, actor ActorMeta) (CommunityView, error) {
+	view, err := s.communities.Resolve(ctx, communityID, actor)
+	if err != nil {
+		return CommunityView{}, err
+	}
+	if !view.IsPublic && !view.IsMember && !access.IsCEO(actor.RoleLevel) {
+		return CommunityView{}, ErrMembersOnly
+	}
+	return view, nil
+}
+
 // ListCommunity returns one community's wall.
 func (s *Service) ListCommunity(
 	ctx context.Context, communityID uuid.UUID, cursor string, limit int, actor ActorMeta,
 ) (Page, error) {
-	if _, err := s.communities.Resolve(ctx, communityID, actor); err != nil {
+	if _, err := s.readable(ctx, communityID, actor); err != nil {
 		return Page{}, err
 	}
 	before, err := decodeCursor(cursor)
@@ -264,8 +281,8 @@ func (s *Service) React(ctx context.Context, postID uuid.UUID, emoji string, on 
 	if err != nil {
 		return err
 	}
-	// Seeing the community is enough to react to its posts; posting is not.
-	if _, err := s.communities.Resolve(ctx, p.CommunityID, actor); err != nil {
+	// Reading the wall is enough to react to its posts; posting is not.
+	if _, err := s.readable(ctx, p.CommunityID, actor); err != nil {
 		return err
 	}
 	if on {
@@ -355,7 +372,7 @@ func (s *Service) ReadMedia(ctx context.Context, mediaID uuid.UUID, actor ActorM
 		return nil, "", "", err
 	}
 	// The community decides: a file is exactly as visible as its post.
-	if _, err := s.communities.Resolve(ctx, p.CommunityID, actor); err != nil {
+	if _, err := s.readable(ctx, p.CommunityID, actor); err != nil {
 		return nil, "", "", err
 	}
 	// Whichever half of the XOR this row uses (migration 44).

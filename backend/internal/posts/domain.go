@@ -25,6 +25,9 @@ var (
 	// ErrNotCommunity is returned when the target is an ordinary group: a
 	// group is a conversation, and its wall does not exist.
 	ErrNotCommunity = errors.New("posts: this group is not a community")
+	// ErrMembersOnly: the community is visible, but it is not public and the
+	// reader is not a member — its wall, media and reactions are closed.
+	ErrMembersOnly = errors.New("posts: this community is open to members only")
 )
 
 // MaxTextLength bounds a post body. Generous compared to a chat message —

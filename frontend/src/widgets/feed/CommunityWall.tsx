@@ -8,15 +8,29 @@ import "./feed.css";
 // A community's own wall. Same cards as the feed; each still speaks as the
 // community, but its header does not link back to the page it is already on.
 
-export function CommunityWall({ group, canPost }: { group: Group; canPost: boolean }) {
-  const wall = useCommunityPosts(group.id);
+// A closed community is members-only: the server refuses its wall to anyone
+// who has not joined (audit A-01), so the screen says so instead of asking.
+export function CommunityWall({
+  group,
+  canPost,
+  membersOnly = false,
+}: {
+  group: Group;
+  canPost: boolean;
+  membersOnly?: boolean;
+}) {
+  const wall = useCommunityPosts(membersOnly ? null : group.id);
   const posts = wall.data?.pages.flatMap((p) => p.posts) ?? [];
 
   return (
     <div className="feed__scroll">
       {canPost && <PostComposer communityId={group.id} />}
 
-      {wall.isPending ? (
+      {membersOnly ? (
+        <div className="feed__empty">
+          Сообщество закрытое: записи видят только участники. Подайте заявку, чтобы вступить.
+        </div>
+      ) : wall.isPending ? (
         <div style={{ display: "flex", justifyContent: "center", padding: 32 }}>
           <Spinner size={28} />
         </div>

@@ -272,6 +272,8 @@ func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		notFound(w, r)
+	case errors.Is(err, ErrMembersOnly):
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "сообщество закрытое: записи видят только участники")
 	case errors.Is(err, ErrForbidden):
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "у вас нет прав публиковать здесь")
 	case errors.Is(err, ErrNotCommunity):

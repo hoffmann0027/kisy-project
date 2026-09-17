@@ -119,7 +119,11 @@ export function GroupView({ group }: { group: Group }) {
           {tabs}
         </header>
         {banner}
-        <CommunityWall group={group} canPost={viewer?.canPost ?? false} />
+        <CommunityWall
+          group={group}
+          canPost={viewer?.canPost ?? false}
+          membersOnly={!group.isPublic && !caps.canAdmin && viewer !== undefined && !viewer.member}
+        />
         {members}
       </section>
     );

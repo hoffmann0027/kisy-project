@@ -853,9 +853,10 @@ paths:
       tags: [posts]
       summary: A community's wall, newest first
       description: >
-        Visible to anyone who can see the community — members and, for a public
-        one, non-members too. A community nobody may see answers 404, never
-        403: "you may not see this" still says it exists.
+        Readable by members and, for a public community, by non-members too;
+        the CEO reads every wall (moderation). A closed community the caller can
+        see but has not joined answers 403 — it is listed, so its existence is
+        no secret. A community nobody may see answers 404.
       parameters:
         - name: cursor
           in: query
@@ -873,6 +874,7 @@ paths:
                   - $ref: '#/components/schemas/Envelope'
                   - properties:
                       data: { $ref: '#/components/schemas/PostPage' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
     post:
       tags: [posts]
@@ -978,6 +980,7 @@ paths:
                 emoji: { type: string, maxLength: 32 }
       responses:
         '200': { description: Reacted, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
     delete:
       tags: [posts]
@@ -1011,6 +1014,7 @@ paths:
           content:
             application/octet-stream:
               schema: { type: string, format: binary }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
   /feed:

@@ -68,6 +68,7 @@ function renderView(group: Group, viewer: GroupViewer) {
 }
 
 const reader: GroupViewer = { member: true, role: "member", canPost: false, canUseWorkspace: false };
+const stranger: GroupViewer = { member: false, role: "", canPost: false, canUseWorkspace: false };
 const owner: GroupViewer = { member: true, role: "owner", canPost: true, canUseWorkspace: true };
 
 beforeEach(() => {
@@ -103,6 +104,21 @@ describe("a community's screen", () => {
     expect(screen.getByText("Удалить сообщество")).toBeTruthy(); // the modal is open
     expect(screen.queryByText("Уровень доступа")).toBeNull();
     expect(screen.queryByText("Без ограничения по уровню")).toBeNull();
+  });
+
+  it("keeps a closed community's wall shut to someone who has not joined (audit A-01)", () => {
+    signIn({ id: "u-outsider", roleLevel: null, accountKind: "basic" });
+    // The server answers 403 here; the screen must say why instead of looking empty.
+    renderView(community({ isPublic: false, joinPolicy: "request", createdBy: "u-someone" }), stranger);
+    expect(screen.getByText(/записи видят только участники/)).toBeTruthy();
+    expect(screen.queryByText("Пока здесь нет постов.")).toBeNull();
+  });
+
+  it("shows a closed community's wall to its members", () => {
+    signIn({ id: "u-reader" });
+    renderView(community({ isPublic: false, joinPolicy: "request", createdBy: "u-someone" }), reader);
+    expect(screen.queryByText(/записи видят только участники/)).toBeNull();
+    expect(screen.getByText("Пока здесь нет постов.")).toBeTruthy();
   });
 
   it("still shows it to an invited account", () => {
