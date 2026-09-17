@@ -9,6 +9,8 @@
 # The target should be EMPTY — this loads the schema and data, it does not drop
 # existing objects. psql runs in a Postgres 18 container (version-matched).
 set -euo pipefail
+# DOCKER_RUN_ARGS: extra `docker run` flags for the client container (e.g.
+# "--network kisy-test" so a test can reach a database in another container).
 
 : "${TARGET_DATABASE_URL:?set TARGET_DATABASE_URL (destination connection string)}"
 FILE="${1:?usage: db-restore.sh <dump.sql[.gz][.gpg]>}"
@@ -29,6 +31,7 @@ case "$FILE" in
 esac
 
 echo "Restoring $FILE into the target database (loads schema + data)…"
-docker run --rm -i "$PG_IMAGE" \
+# shellcheck disable=SC2086 # DOCKER_RUN_ARGS is a word list on purpose
+docker run --rm -i ${DOCKER_RUN_ARGS:-} "$PG_IMAGE" \
   psql -v ON_ERROR_STOP=1 "$TARGET_DATABASE_URL" < "$SQL"
 echo "Restore complete."

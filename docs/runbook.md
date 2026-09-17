@@ -78,9 +78,15 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml \
 Actions** (`.github/workflows/db-backup.yml`) — сервер держать не нужно:
 
 - **ежедневно** (03:17 UTC) снимается дамп Neon (`pg_dump` клиентом v18 в
-  контейнере), кладётся артефактом в GitHub (**30 дней**) и, если настроено,
-  копируется в offsite-хранилище (S3/B2/R2);
-- сразу же **restore-drill**: дамп восстанавливается во временный Postgres 18 и
+  контейнере) и **потоком шифруется** gpg (AES-256) — открытый текст на диск не
+  попадает. Без `BACKUP_GPG_PASSPHRASE` workflow отказывается работать;
+- дамп кладётся в **приватный** S3-совместимый бакет. Репозиторий публичный, а
+  артефакты публичного репозитория скачивает любой вошедший пользователь GitHub,
+  поэтому артефактом бэкап выгружается **только если репозиторий приватный**.
+  Не настроен бакет и репозиторий публичный → бэкап снят и проверен, но workflow
+  падает с ошибкой «stored nowhere» (аудит A-08);
+- сразу же **restore-drill**: дамп расшифровывается и восстанавливается тем же
+  `scripts/db-restore.sh` во временный Postgres 18, затем
   прогоняется `scripts/backup-smoke-check.sql` (миграции на месте и не dirty,
   ключевые таблицы читаются). Битый бэкап роняет workflow;
 - **алерт**: упавший scheduled-workflow → GitHub шлёт письмо владельцу репо.
@@ -89,28 +95,34 @@ Actions** (`.github/workflows/db-backup.yml`) — сервер держать н
 ### Секреты репозитория (Settings → Secrets and variables → Actions)
 
 - **`DATABASE_URL`** (обяз.) — прямая строка Neon (`…?sslmode=require`).
-- `BACKUP_GPG_PASSPHRASE` (опц.) — тогда дамп шифруется AES-256 «at rest».
-- `S3_BUCKET` / `S3_ENDPOINT` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`
-  (опц.) — выгрузка в S3-совместимое хранилище (Backblaze B2 / Cloudflare R2).
+- **`BACKUP_GPG_PASSPHRASE`** (обяз.) — пароль шифрования дампа. Храни его
+  **вне** GitHub (менеджер паролей): без него бэкап не восстановить.
+- **`S3_BUCKET` / `S3_ENDPOINT` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`**
+  (обяз., пока репозиторий публичный) — **приватный** бакет (Cloudflare R2 /
+  Backblaze B2). Ключ доступа — только на запись в этот бакет.
 
 ### Ручной бэкап по требованию
 
 - Кнопкой: вкладка **Actions → DB backup → Run workflow**.
 - Локально: `DATABASE_URL='…neon…' scripts/db-backup.sh backups`
-  (нужен Docker; `BACKUP_GPG_PASSPHRASE` — чтобы зашифровать).
+  (нужен Docker; с `BACKUP_GPG_PASSPHRASE` получится `.sql.gz.gpg`;
+  `REQUIRE_ENCRYPTION=1` запрещает дамп без пароля).
+- Проверка самих скриптов: `bash scripts/test/db-backup-roundtrip.sh` —
+  шифрованный дамп → восстановление в пустую БД → smoke-check (гоняется в CI).
 
 ### Восстановление (recovery) в новую Neon-базу
 
-1. Скачай свежий дамп: Actions → последний зелёный run → **Artifacts →
-   db-backup**. (Или возьми локальный/offsite файл.)
+1. Скачай свежий дамп из приватного бакета (`aws s3 ls s3://$S3_BUCKET/`,
+   `--endpoint-url` для R2/B2). Artifacts в Actions есть только у приватного репо.
 2. Заведи новую базу на Neon, возьми её прямую строку.
 3. Восстанови:
    ```bash
    TARGET_DATABASE_URL='postgresql://…new-neon…?sslmode=require' \
-     scripts/db-restore.sh backups/kisy-YYYYMMDDTHHMMSSZ.sql.gz
+     BACKUP_GPG_PASSPHRASE='…' \
+     scripts/db-restore.sh backups/kisy-YYYYMMDDTHHMMSSZ.sql.gz.gpg
    ```
-   (`.gpg`-файл потребует `BACKUP_GPG_PASSPHRASE`.) Восстанавливай в **пустую**
-   базу — скрипт грузит схему и данные, не дропая существующее.
+   Восстанавливай в **пустую** базу — скрипт грузит схему и данные, не дропая
+   существующее.
 4. В Render → сервис `kisy` → Environment → поменяй `DATABASE_URL` на новую
    строку → Deploy.
 

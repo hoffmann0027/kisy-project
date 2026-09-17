@@ -185,3 +185,13 @@ jobs:
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
             aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f \
             image --severity CRITICAL --ignore-unfixed --exit-code 1 kisy-frontend:ci
+
+  backup-scripts:
+    name: Backup round-trip (encrypted dump → restore)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Real Postgres containers + real migrations: a dump bigger than a pipe
+      # buffer must survive, be ciphertext, and restore with every row.
+      - name: scripts/test/db-backup-roundtrip.sh
+        run: bash scripts/test/db-backup-roundtrip.sh
