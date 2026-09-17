@@ -128,10 +128,20 @@ jobs:
         env:
           CERT_SHA256: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
         run: |
-          apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort | tail -1)
+          set -o pipefail
+          apksigner=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
+          echo "apksigner: $apksigner"
+          want=$(printf '%s' "$CERT_SHA256" | tr -d ': ' | tr 'A-F' 'a-f')
           for apk in app/build/outputs/apk/release/app-release.apk; do
-            got=$("$apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)
-            want=$(printf '%s' "$CERT_SHA256" | tr -d ': ' | tr 'A-F' 'a-f')
+            # The whole report goes to the log: a certificate digest is public,
+            # and without it a mismatch cannot be diagnosed.
+            report=$("$apksigner" verify --verbose --print-certs "$apk")
+            echo "$report"
+            got=$(echo "$report" | sed -n 's/^Signer.*certificate SHA-256 digest: *//p' | tr -d ': ' | tr 'A-F' 'a-f' | sort -u)
+            if [ -z "$got" ]; then
+              echo "::error::no signer certificate digest found in the apksigner report for $apk" >&2
+              exit 1
+            fi
             if [ "$got" != "$want" ]; then
               echo "::error::$apk is signed with $got, expected the app key $want" >&2
               exit 1
