@@ -13,6 +13,37 @@ const RETRY_DELAYS_MS = [400, 800, 1600, 3200];
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// The page's memory belongs to one account (audit A-11). The E2EE session and
+// its in-flight start, the MLS chat states, the react-query cache with its
+// chat list and decrypted messages, the drafts and the presence stores are all
+// module state with no owner of their own. Signing out used to clear only
+// `user`, so whoever signed in next in the same tab inherited the previous
+// account's session — and its E2EE identity, which the server then refused,
+// which is exactly the failure that used to fall back to plaintext.
+//
+// Rather than chase every cache (and the next one someone adds), the page is
+// reloaded whenever it stops belonging to the account it was loaded for.
+// What survives a reload is on purpose: the per-account encrypted keystore in
+// IndexedDB, without which that account's history could never be read again.
+let pageOwner: string | null = null;
+let reloadPage = () => window.location.reload();
+
+/** Test-only: observe reloads instead of performing them. */
+export function setPageReloaderForTests(fn: () => void, owner: string | null = null): void {
+  reloadPage = fn;
+  pageOwner = owner;
+}
+
+/** Claims the page for a signed-in account; false when it must reload first. */
+function claimPage(userId: string): boolean {
+  if (pageOwner !== null && pageOwner !== userId) {
+    reloadPage();
+    return false;
+  }
+  pageOwner = userId;
+  return true;
+}
+
 interface AuthState {
   user: User | null;
   status: Status;
@@ -42,6 +73,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     for (let attempt = 0; ; attempt++) {
       try {
         const { user } = await usersApi.me();
+        if (!claimPage(user.id)) return;
         set({ user, status: "authenticated" });
         return;
       } catch (err) {
@@ -62,11 +94,16 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   login: async (username, password) => {
     const { user } = await authApi.login(username, password);
+    // Another account used this page: its memory must go before this one
+    // sees anything. The new session's cookies/tokens are already stored, so
+    // the reload comes back signed in.
+    if (!claimPage(user.id)) return;
     set({ user, status: "authenticated" });
   },
 
   register: async (inviteToken, username, displayName, password) => {
     const { user } = await authApi.register(inviteToken, username, displayName, password);
+    if (!claimPage(user.id)) return;
     set({ user, status: "authenticated" });
   },
 
@@ -80,6 +117,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       await authApi.logout();
     } finally {
       set({ user: null, status: "anonymous" });
+      // Nothing of the signed-out account may stay in memory.
+      if (pageOwner !== null) reloadPage();
     }
   },
 

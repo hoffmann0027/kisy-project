@@ -10,18 +10,21 @@ import { ApiError } from "@shared/api/envelope";
 // hand worked, because by then the network was up.
 
 const api = vi.hoisted(() => ({ me: vi.fn() }));
+const authApi = vi.hoisted(() => ({ login: vi.fn(), register: vi.fn(), logout: vi.fn() }));
 vi.mock("@shared/api/endpoints", () => ({
   usersApi: api,
-  authApi: { login: vi.fn(), register: vi.fn(), logout: vi.fn() },
+  authApi,
 }));
 vi.mock("@shared/lib/nativePush", () => ({ forgetNativePushDevice: vi.fn(async () => {}) }));
 
-const { useAuthStore } = await import("./auth");
+const { useAuthStore, setPageReloaderForTests } = await import("./auth");
+const reload = vi.fn();
 
 const user = { id: "u1", username: "hamza", displayName: "Hamza", roleLevel: 1 };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  setPageReloaderForTests(reload);
   useAuthStore.setState({ user: null, status: "loading" });
 });
 
@@ -74,5 +77,51 @@ describe("restoring the session on start", () => {
     expect(useAuthStore.getState().status).toBe("anonymous");
     // One answer is enough when it is the server's: no pointless retries.
     expect(api.me).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Audit A-11: signing out cleared `user` and nothing else. The next account
+// to sign in on the same page inherited the previous one's E2EE session, chat
+// list, decrypted messages and drafts — all module state with no owner.
+describe("the page belongs to one account", () => {
+  const other = { ...user, id: "u2", username: "other" };
+
+  it("reloads after signing out, so nothing of the account stays in memory", async () => {
+    setPageReloaderForTests(reload, user.id);
+    authApi.logout.mockResolvedValue({ loggedOut: true });
+    await useAuthStore.getState().logout();
+    expect(useAuthStore.getState().user).toBeNull();
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("reloads even when the server could not be told about the sign-out", async () => {
+    setPageReloaderForTests(reload, user.id);
+    authApi.logout.mockRejectedValue(new TypeError("Failed to fetch"));
+    await useAuthStore.getState().logout().catch(() => {});
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("reloads before another account signing in on this page sees anything", async () => {
+    // The session ended without logout() (revoked elsewhere, expired): the
+    // page still holds the first account's state.
+    setPageReloaderForTests(reload, user.id);
+    authApi.login.mockResolvedValue({ user: other });
+    await useAuthStore.getState().login("other", "password");
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(useAuthStore.getState().user).toBeNull();
+  });
+
+  it("does not reload when the same account signs back in", async () => {
+    setPageReloaderForTests(reload, user.id);
+    authApi.login.mockResolvedValue({ user });
+    await useAuthStore.getState().login("hamza", "password");
+    expect(reload).not.toHaveBeenCalled();
+    expect(useAuthStore.getState().user?.id).toBe(user.id);
+  });
+
+  it("does not reload for the first sign-in of a fresh page", async () => {
+    authApi.login.mockResolvedValue({ user });
+    await useAuthStore.getState().login("hamza", "password");
+    expect(reload).not.toHaveBeenCalled();
   });
 });

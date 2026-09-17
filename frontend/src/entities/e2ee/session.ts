@@ -27,6 +27,7 @@ const POOL_INDEX = "kp/index";
 
 let session: E2EESession | null = null;
 let initPromise: Promise<E2EESession | null> | null = null;
+let initUserId: string | null = null;
 
 export function e2eeSession(): E2EESession | null {
   return session;
@@ -41,7 +42,14 @@ export function e2eeSession(): E2EESession | null {
  */
 export function initE2EE(userId: string): Promise<E2EESession | null> {
   if (session && session.userId === userId) return Promise.resolve(session);
+  // Another account's session (or its start) is still in memory. Handing it
+  // over would encrypt as that account (audit A-11); the sign-in path reloads
+  // the page, so this only guards a caller that got here some other way.
+  if ((session && session.userId !== userId) || (initPromise && initUserId !== userId)) {
+    return Promise.resolve(null);
+  }
   if (!initPromise) {
+    initUserId = userId;
     initPromise = bootstrap(userId).catch((err) => {
       console.warn("E2EE init failed; private chats cannot send until it starts", err);
       initPromise = null;
@@ -55,6 +63,7 @@ export function initE2EE(userId: string): Promise<E2EESession | null> {
 export function resetE2EEForTests(): void {
   session = null;
   initPromise = null;
+  initUserId = null;
 }
 
 async function bootstrap(userId: string): Promise<E2EESession> {
