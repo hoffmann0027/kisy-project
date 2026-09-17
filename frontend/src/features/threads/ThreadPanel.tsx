@@ -11,6 +11,7 @@ import {
   useSendMessage,
   useThreadMessages,
 } from "@entities/message/queries";
+import { canEditMessage } from "@entities/message/permissions";
 import { useAuthStore } from "@shared/store/auth";
 import { MessageBubble } from "@widgets/conversation/MessageBubble";
 import { Composer } from "@widgets/conversation/Composer";
@@ -68,7 +69,7 @@ export function ThreadPanel({ root, onClose, onReact, onDelete, onEdit, onOpenIm
       message={m}
       mine={m.senderId === me.id}
       canDelete={m.senderId === me.id || me.roleLevel === 1}
-      canEdit={m.senderId === me.id && !m.pending && !m.failed && !m.encrypted}
+      canEdit={canEditMessage(m, me.id)}
       replyPreview={previewFor(m.replyTo)}
       onReply={setReplyTo}
       onEdit={onEdit}

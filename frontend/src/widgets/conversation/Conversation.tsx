@@ -26,6 +26,7 @@ import {
   useReaction,
   useSendMessage,
 } from "@entities/message/queries";
+import { canEditMessage } from "@entities/message/permissions";
 import { pendingForChat, useScheduledMessages, useScheduleMessage } from "@entities/message/scheduled";
 import { ScheduledPanel } from "@features/scheduled/ScheduledPanel";
 import { ThreadPanel } from "@features/threads/ThreadPanel";
@@ -483,7 +484,7 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
                 message={m}
                 mine={m.senderId === me.id}
                 canDelete={m.senderId === me.id || me.roleLevel === 1}
-                canEdit={m.senderId === me.id && !m.pending && !m.failed && !m.encrypted}
+                canEdit={canEditMessage(m, me.id)}
                 status={statusFor(m)}
                 replyPreview={previewFor(m.replyTo)}
                 replyTargetId={m.replyTo}
