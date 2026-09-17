@@ -35,6 +35,9 @@ type Service struct {
 	// dummyHash equalizes login timing for unknown usernames so response
 	// latency does not reveal whether an account exists.
 	dummyHash string
+
+	// kick ends the sockets of revoked sessions (see SessionKicker).
+	kick SessionKicker
 }
 
 func NewService(
@@ -52,6 +55,7 @@ func NewService(
 		return nil, fmt.Errorf("auth: prepare dummy hash: %w", err)
 	}
 	return &Service{
+		kick:             noKick{},
 		pool:             pool,
 		users:            usersRepo,
 		sessions:         sessions,
@@ -389,6 +393,7 @@ func (s *Service) Refresh(ctx context.Context, sessionID uuid.UUID, plainRefresh
 	if token.HashOpaqueToken(plainRefresh) != sess.RefreshTokenHash {
 		// Old rotated token replayed against a live session.
 		_ = s.sessions.Revoke(ctx, s.pool, sess.ID, now)
+		s.kick.KickSession(sess.UserID, sess.ID)
 		_ = s.audit.Record(ctx, s.pool, audit.Event{
 			ActorID:    &sess.UserID,
 			Action:     audit.ActionSessionReuse,
@@ -441,6 +446,7 @@ func (s *Service) Logout(ctx context.Context, userID, sessionID uuid.UUID, meta 
 	if err := s.sessions.Revoke(ctx, s.pool, sessionID, now); err != nil && !errors.Is(err, ErrSessionNotFound) {
 		return err
 	}
+	s.kick.KickSession(userID, sessionID)
 	return s.audit.Record(ctx, s.pool, audit.Event{
 		ActorID:    &userID,
 		Action:     audit.ActionUserLogout,
@@ -459,6 +465,7 @@ func (s *Service) LogoutAll(ctx context.Context, userID, currentSessionID uuid.U
 	if err != nil {
 		return 0, err
 	}
+	s.kick.KickUser(userID, uuid.Nil)
 	if err := s.audit.Record(ctx, s.pool, audit.Event{
 		ActorID:    &userID,
 		Action:     audit.ActionUserLogoutAll,
@@ -525,5 +532,8 @@ func (s *Service) ChangePassword(ctx context.Context, userID, currentSessionID u
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("auth: commit: %w", err)
 	}
+	// After the commit: a socket kicked earlier could reconnect while the
+	// revocation is still invisible to the handshake.
+	s.kick.KickUser(userID, currentSessionID)
 	return nil
 }

@@ -1,6 +1,8 @@
 package ws
 
 import (
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,6 +15,20 @@ const (
 	pingPeriod     = (pongWait * 9) / 10
 	maxMessageSize = 16 * 1024
 	sendBuffer     = 32
+
+	// CloseSessionEnded is the close code a client gets when the session its
+	// socket authenticated with was revoked (logout, password change,
+	// deactivation, role change). A reconnect with the same token is refused,
+	// so the client has to renew or sign in again.
+	CloseSessionEnded = 4001
+
+	// sessionRecheck bounds how long a socket can outlive its session when
+	// the instant kick never arrives — a Redis outage, or a session revoked
+	// outside the services (cmd/resetpw writes the table directly).
+	sessionRecheck = 30 * time.Second
+	// inboundRecheck is how stale a session check may be before a frame the
+	// client sends — a message, a call signal — is acted on.
+	inboundRecheck = 5 * time.Second
 )
 
 // Client is one WebSocket connection for one authenticated user. A user
@@ -27,6 +43,43 @@ type Client struct {
 
 	// subs is the set of user IDs whose presence this client wants.
 	subs map[uuid.UUID]struct{}
+
+	// done is closed when the client is deregistered; it stops watchSession.
+	done    chan struct{}
+	endOnce sync.Once
+	// checkedAt is when the session was last confirmed live (unix nanos).
+	checkedAt atomic.Int64
+}
+
+// end closes the connection because its session is over. The close frame
+// tells the client why; closing the socket makes readPump return, which
+// deregisters the client. Safe from any goroutine, any number of times
+// (gorilla allows WriteControl and Close concurrently with the pumps).
+func (c *Client) end(reason string) {
+	c.endOnce.Do(func() {
+		msg := websocket.FormatCloseMessage(CloseSessionEnded, reason)
+		_ = c.conn.WriteControl(websocket.CloseMessage, msg, time.Now().Add(writeWait))
+		_ = c.conn.Close()
+	})
+}
+
+// watchSession re-checks the session on a timer and ends the connection once
+// it is revoked. The kick published on revocation is the fast path; this is
+// the one that cannot be missed.
+func (c *Client) watchSession(every time.Duration) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-c.done:
+			return
+		case <-t.C:
+			if !c.hub.sessionLive(c) {
+				c.end("session ended")
+				return
+			}
+		}
+	}
 }
 
 // readPump reads inbound frames until the connection closes, dispatching

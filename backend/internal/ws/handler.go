@@ -2,6 +2,7 @@ package ws
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -62,12 +63,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		sessionID: actor.SessionID,
 		roleLevel: actor.RoleLevel,
 		subs:      make(map[uuid.UUID]struct{}),
+		done:      make(chan struct{}),
 	}
+	client.checkedAt.Store(time.Now().UnixNano()) // just authenticated
 
 	h.hub.addClient(client)
 
 	go client.writePump()
 	go client.readPump()
+	go client.watchSession(h.hub.recheckEvery())
 }
 
 // originChecker permits handshakes from the configured allowed origin or from

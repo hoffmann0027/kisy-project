@@ -49,6 +49,27 @@ type Service struct {
 	groups       groups.Repository
 	userChanged  func(ctx context.Context, id uuid.UUID)
 	groupChanged func(id uuid.UUID)
+
+	// kick ends the target's open sockets once their sessions are revoked
+	// (audit A-03); nil leaves that to the sockets' own re-check.
+	kick auth.SessionKicker
+}
+
+// SetSessionKicker wires the connection kick for role changes, password
+// resets and deactivations.
+func (s *Service) SetSessionKicker(k auth.SessionKicker) { s.kick = k }
+
+// commitAndKick commits a transaction that revoked every session of target
+// and only then ends the target's sockets, so a reconnect cannot slip in
+// before the revocation is visible.
+func (s *Service) commitAndKick(ctx context.Context, tx interface{ Commit(context.Context) error }, target uuid.UUID) error {
+	if err := commit(ctx, tx); err != nil {
+		return err
+	}
+	if s.kick != nil {
+		s.kick.KickUser(target, uuid.Nil)
+	}
+	return nil
 }
 
 func NewService(pool *pgxpool.Pool, usersRepo users.Repository, sessions auth.SessionRepository, rec audit.Recorder) *Service {
@@ -127,7 +148,7 @@ func (s *Service) ChangeRole(ctx context.Context, targetID uuid.UUID, newLevel i
 	}); err != nil {
 		return err
 	}
-	return commit(ctx, tx)
+	return s.commitAndKick(ctx, tx, targetID)
 }
 
 // ResetPassword sets a new password chosen by the CEO, forces a change on
@@ -164,7 +185,7 @@ func (s *Service) ResetPassword(ctx context.Context, targetID uuid.UUID, newPass
 	}); err != nil {
 		return err
 	}
-	return commit(ctx, tx)
+	return s.commitAndKick(ctx, tx, targetID)
 }
 
 // SetActive activates or deactivates an account. Deactivation revokes all
@@ -202,6 +223,9 @@ func (s *Service) SetActive(ctx context.Context, targetID uuid.UUID, active bool
 		RequestID:  actor.RequestID,
 	}); err != nil {
 		return err
+	}
+	if !active {
+		return s.commitAndKick(ctx, tx, targetID)
 	}
 	return commit(ctx, tx)
 }

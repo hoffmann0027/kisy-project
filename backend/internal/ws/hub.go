@@ -46,7 +46,12 @@ const (
 	channelFanout    = "kisy:ws:fanout"
 	channelPresence  = "kisy:ws:presence"
 	channelBroadcast = "kisy:ws:broadcast"
+	channelKick      = "kisy:ws:kick"
 )
+
+// SessionChecker reports whether a socket's session is still live: not
+// revoked, not expired, and still the user's. An error means "unknown".
+type SessionChecker func(ctx context.Context, userID, sessionID uuid.UUID) (bool, error)
 
 // RecipientResolver returns the user IDs that should receive events for a
 // chat (participants for private chats, members for groups). Injected to
@@ -74,6 +79,19 @@ type Hub struct {
 	// onOffline records a user's last-seen time when their final connection
 	// closes (best-effort; may be nil).
 	onOffline func(ctx context.Context, userID uuid.UUID)
+
+	// checkSession confirms a socket's session is still live (nil: no
+	// re-check); recheck is how often each socket does so.
+	checkSession SessionChecker
+	recheck      time.Duration
+}
+
+// kickEnvelope selects the sockets to end: one session of a user, or every
+// session of a user except Keep (uuid.Nil keeps none).
+type kickEnvelope struct {
+	UserID    uuid.UUID `json:"u"`
+	SessionID uuid.UUID `json:"s"`
+	Keep      uuid.UUID `json:"k"`
 }
 
 type fanoutEnvelope struct {
@@ -93,6 +111,90 @@ func NewHub(log *slog.Logger, rdb *redis.Client, resolve RecipientResolver) *Hub
 		resolve:     resolve,
 		clients:     make(map[uuid.UUID]map[*Client]struct{}),
 		subscribers: make(map[uuid.UUID]map[*Client]struct{}),
+		recheck:     sessionRecheck,
+	}
+}
+
+// SetSessionChecker wires the session re-check that ends sockets whose
+// session was revoked (audit A-03). every <= 0 keeps the default interval.
+func (h *Hub) SetSessionChecker(check SessionChecker, every time.Duration) {
+	h.checkSession = check
+	if every > 0 {
+		h.recheck = every
+	}
+}
+
+func (h *Hub) recheckEvery() time.Duration { return h.recheck }
+
+// sessionLive re-checks a client's session and records when it last passed.
+// A failed check (the database is unreachable) keeps the socket: dropping
+// every connection on a blip would only stampede the reconnects, and the
+// handshake they would retry needs the same database.
+func (h *Hub) sessionLive(c *Client) bool {
+	if h.checkSession == nil {
+		return true
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	live, err := h.checkSession(ctx, c.userID, c.sessionID)
+	if err != nil {
+		h.log.Warn("ws: session re-check failed", "error", err)
+		return true
+	}
+	if live {
+		c.checkedAt.Store(time.Now().UnixNano())
+	}
+	return live
+}
+
+// sessionFresh is sessionLive with a short memory, for the frames a client
+// sends: acting on one needs a recent answer, not a query per typing event.
+func (h *Hub) sessionFresh(c *Client) bool {
+	if time.Since(time.Unix(0, c.checkedAt.Load())) < inboundRecheck {
+		return true
+	}
+	return h.sessionLive(c)
+}
+
+// KickSession ends the sockets of one revoked session, on every instance.
+func (h *Hub) KickSession(userID, sessionID uuid.UUID) {
+	h.publishKick(kickEnvelope{UserID: userID, SessionID: sessionID})
+}
+
+// KickUser ends every socket of a user except those of keep (uuid.Nil keeps
+// none), on every instance: logout everywhere, a password change, a
+// deactivation, a role change.
+func (h *Hub) KickUser(userID, keep uuid.UUID) {
+	h.publishKick(kickEnvelope{UserID: userID, Keep: keep})
+}
+
+func (h *Hub) publishKick(env kickEnvelope) {
+	payload, _ := json.Marshal(env)
+	if err := h.rdb.Publish(context.Background(), channelKick, payload).Err(); err != nil {
+		// Other instances fall back to their re-check; this one need not wait.
+		h.log.Warn("ws: kick publish failed", "error", err)
+		h.onKick(payload)
+	}
+}
+
+func (h *Hub) onKick(payload []byte) {
+	var env kickEnvelope
+	if err := json.Unmarshal(payload, &env); err != nil || env.UserID == uuid.Nil {
+		return
+	}
+	h.mu.RLock()
+	var ending []*Client
+	for c := range h.clients[env.UserID] {
+		switch {
+		case env.SessionID != uuid.Nil && c.sessionID != env.SessionID:
+		case env.Keep != uuid.Nil && c.sessionID == env.Keep:
+		default:
+			ending = append(ending, c)
+		}
+	}
+	h.mu.RUnlock()
+	for _, c := range ending {
+		c.end("session revoked")
 	}
 }
 
@@ -117,7 +219,7 @@ func (h *Hub) SetCallSignaler(cs CallSignaler) { h.calls = cs }
 // Run subscribes to the Redis channels and delivers received events to
 // local clients until ctx is cancelled. It should run in its own goroutine.
 func (h *Hub) Run(ctx context.Context) {
-	sub := h.rdb.Subscribe(ctx, channelFanout, channelPresence, channelBroadcast)
+	sub := h.rdb.Subscribe(ctx, channelFanout, channelPresence, channelBroadcast, channelKick)
 	defer sub.Close()
 
 	ch := sub.Channel()
@@ -136,6 +238,8 @@ func (h *Hub) Run(ctx context.Context) {
 				h.onPresence([]byte(msg.Payload))
 			case channelBroadcast:
 				h.onBroadcast([]byte(msg.Payload))
+			case channelKick:
+				h.onKick([]byte(msg.Payload))
 			}
 		}
 	}
@@ -173,6 +277,7 @@ func (h *Hub) removeClient(c *Client) {
 		}
 	}
 	close(c.send)
+	close(c.done)
 	h.mu.Unlock()
 
 	metrics.WSDisconnect()

@@ -17,6 +17,13 @@ func (h *Hub) handleInbound(c *Client, raw []byte) {
 		return
 	}
 
+	// A frame acts with the socket's identity, so the session behind it must
+	// still be live, not merely have been live at the handshake (audit A-03).
+	if !h.sessionFresh(c) {
+		c.end("session ended")
+		return
+	}
+
 	ctx := context.Background()
 
 	// Voice-call signaling frames ("call.invite", "call.answer", …) are

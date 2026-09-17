@@ -420,6 +420,20 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		}
 	}
 	hub := ws.NewHub(log, rdb, recipientResolver)
+	// A socket lives on the session it authenticated with: revoking the session
+	// ends the socket at once (the kick), and a periodic re-check catches the
+	// revocations the kick never hears about (audit A-03).
+	authSvc.SetSessionKicker(hub)
+	hub.SetSessionChecker(func(ctx context.Context, userID, sessionID uuid.UUID) (bool, error) {
+		sess, err := sessionsRepo.GetByID(ctx, pool, sessionID)
+		if errors.Is(err, auth.ErrSessionNotFound) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		return sess.UserID == userID && sess.Active(time.Now().UTC()), nil
+	}, 0)
 	wsPublisher := ws.NewPublisher(hub)
 	limiter := ratelimit.NewLimiter(rdb, log)
 	messagesSvc.SetPublisher(wsPublisher)
@@ -877,6 +891,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	// --- admin (CEO) ---
 	adminSvc := admin.NewService(pool, usersRepo, sessionsRepo, auditRec)
 	adminSvc.SetGroupsRepository(groupsRepo)
+	adminSvc.SetSessionKicker(hub)
 	adminSvc.SetUserChanged(usersSvc.ProfileChanged)
 	adminSvc.SetGroupChanged(groupChanged)
 
