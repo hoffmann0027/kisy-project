@@ -2,10 +2,12 @@ package linkpreview
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -126,5 +128,26 @@ func TestAbsoluteRejectsNonHTTP(t *testing.T) {
 	}
 	if got := absolute(base, "//cdn.example.com/a.png"); got != "https://cdn.example.com/a.png" {
 		t.Fatalf("protocol-relative resolve: %q", got)
+	}
+}
+
+// Audit A-26: the cache key was the raw URL, so one request could park a
+// megabyte-sized key in Redis. A URL is capped at 2048 bytes, and the key is a
+// fixed-size digest whatever the URL.
+func TestLongURLIsRefusedAndKeysAreBounded(t *testing.T) {
+	long := "https://example.com/" + strings.Repeat("a", 2048)
+	if err := preValidate(long); !errors.Is(err, ErrBlockedURL) {
+		t.Fatalf("URL of %d bytes: %v, want ErrBlockedURL", len(long), err)
+	}
+	if err := preValidate("https://example.com/" + strings.Repeat("a", 2000)); err != nil {
+		t.Fatalf("URL under the cap: %v", err)
+	}
+	k1 := fmtCacheKey("https://example.com/" + strings.Repeat("a", 2000))
+	k2 := fmtCacheKey("https://example.com/b")
+	if len(k1) != len(k2) || len(k1) > 100 {
+		t.Fatalf("cache keys must be fixed-size digests: %d vs %d bytes", len(k1), len(k2))
+	}
+	if k2 == fmtCacheKey("https://example.com/c") {
+		t.Fatal("different URLs share a cache key")
 	}
 }

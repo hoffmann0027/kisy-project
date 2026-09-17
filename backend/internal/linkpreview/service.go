@@ -90,7 +90,14 @@ func (s *Service) ImageProxy(ctx context.Context, rawURL string) ([]byte, string
 
 // preValidate is a cheap up-front scheme/host check before any cache or
 // network work.
+// maxURLBytes: longer URLs are refused before anything else (audit A-26).
+// 2048 is what browsers and link shorteners treat as the practical ceiling.
+const maxURLBytes = 2048
+
 func preValidate(rawURL string) error {
+	if len(rawURL) > maxURLBytes {
+		return ErrBlockedURL
+	}
 	u, err := parseURL(rawURL)
 	if err != nil {
 		return err

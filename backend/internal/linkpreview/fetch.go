@@ -8,8 +8,9 @@ package linkpreview
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -181,8 +182,11 @@ func fetch(ctx context.Context, client *http.Client, rawURL string, limit int64,
 	return &fetchResult{body: body, mimeType: mime, finalURL: resp.Request.URL}, nil
 }
 
+// fmtCacheKey is a fixed-size digest of the URL, never the URL itself: a key
+// the caller controls in length is a way to fill Redis (audit A-26).
 func fmtCacheKey(rawURL string) string {
-	return fmt.Sprintf("linkpreview:%s", rawURL)
+	sum := sha256.Sum256([]byte(rawURL))
+	return "linkpreview:" + hex.EncodeToString(sum[:])
 }
 
 func parseURL(rawURL string) (*url.URL, error) {
