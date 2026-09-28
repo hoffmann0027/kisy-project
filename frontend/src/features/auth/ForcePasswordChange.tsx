@@ -2,6 +2,7 @@ import { useState } from "react";
 import { authApi } from "@shared/api/endpoints";
 import { useAuthStore } from "@shared/store/auth";
 import { Button, Input, toast } from "@shared/ui";
+import { PASSWORD_RULE_TEXT, passwordProblem } from "@shared/lib/password";
 import { ApiError } from "@shared/api/envelope";
 
 // ForcePasswordChange is a blocking screen shown when the signed-in account
@@ -18,8 +19,9 @@ export function ForcePasswordChange() {
   const [busy, setBusy] = useState(false);
 
   const submit = async () => {
-    if (newPassword.length < 12) {
-      toast.error("Новый пароль — минимум 12 символов");
+    const problem = passwordProblem(newPassword);
+    if (problem) {
+      toast.error(`Новый пароль — ${problem.toLowerCase()}`);
       return;
     }
     if (newPassword !== confirm) {
@@ -68,7 +70,7 @@ export function ForcePasswordChange() {
             autoFocus
           />
           <Input
-            label="Новый пароль (мин. 12 символов)"
+            label={`Новый пароль (${PASSWORD_RULE_TEXT})`}
             type="password"
             autoComplete="new-password"
             value={newPassword}

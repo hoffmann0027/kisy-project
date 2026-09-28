@@ -9,12 +9,12 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/auth/password"
 	"kisy-backend/internal/platform/clientip"
 	"kisy-backend/internal/platform/turnstile"
 	"kisy-backend/internal/users"
@@ -34,21 +34,10 @@ var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9_]{3,32}$`)
 
 // Password policy per docs/spec/06-security.md: length 12-128 with at
 // least one letter and one digit.
-func validPassword(p string) bool {
-	if len(p) < 12 || len(p) > 128 {
-		return false
-	}
-	var hasLetter, hasDigit bool
-	for _, r := range p {
-		switch {
-		case unicode.IsLetter(r):
-			hasLetter = true
-		case unicode.IsDigit(r):
-			hasDigit = true
-		}
-	}
-	return hasLetter && hasDigit
-}
+// validPassword is the shared policy (internal/auth/password). It lived here
+// as a private copy while two other places checked the length only (audit
+// D-14).
+func validPassword(p string) bool { return password.Valid(p) }
 
 // Handler exposes the /auth/* endpoints.
 type Handler struct {
@@ -158,7 +147,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validPassword(req.Password) {
-		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "password must be 12-128 characters and contain a letter and a digit")
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, password.RuleText)
 		return
 	}
 
@@ -287,7 +276,7 @@ func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validPassword(req.NewPassword) {
-		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "newPassword must be 12-128 characters and contain a letter and a digit")
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, password.RuleText)
 		return
 	}
 

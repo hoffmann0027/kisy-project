@@ -9,6 +9,7 @@ import { useAuthStore } from "@shared/store/auth";
 import { authApi } from "@shared/api/endpoints";
 import { ApiError } from "@shared/api/envelope";
 import { displayNameErrorMessage, displayNameSchema, normalizeDisplayName } from "@shared/lib/displayName";
+import { PASSWORD_RULE_TEXT, passwordProblem } from "@shared/lib/password";
 import { TurnstileWidget, type TurnstileHandle } from "@features/auth/TurnstileWidget";
 
 const schema = z
@@ -23,12 +24,12 @@ const schema = z
     // What people see and search for — unlike the login, letters only, and
     // unique ignoring case.
     displayName: displayNameSchema,
-    password: z
-      .string()
-      .min(12, "Минимум 12 символов")
-      .max(128, "Не более 128 символов")
-      .regex(/[A-Za-z]/, "Нужна хотя бы одна буква")
-      .regex(/[0-9]/, "Нужна хотя бы одна цифра"),
+    // The server's rule, not a stricter one: /[A-Za-z]/ here refused a
+    // Cyrillic password the API accepts (audit D-14).
+    password: z.string().superRefine((value, ctx) => {
+      const problem = passwordProblem(value);
+      if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem });
+    }),
     confirm: z.string(),
   })
   .refine((d) => d.password === d.confirm, { path: ["confirm"], message: "Пароли не совпадают" });
@@ -150,7 +151,7 @@ export function RegisterPage() {
           {...register("displayName")}
         />
         <Input
-          label="Пароль"
+          label={`Пароль (${PASSWORD_RULE_TEXT})`}
           type="password"
           autoComplete="new-password"
           error={errors.password?.message}

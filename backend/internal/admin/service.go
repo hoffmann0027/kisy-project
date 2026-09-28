@@ -154,7 +154,9 @@ func (s *Service) ChangeRole(ctx context.Context, targetID uuid.UUID, newLevel i
 // ResetPassword sets a new password chosen by the CEO, forces a change on
 // next login and revokes all of the target's sessions.
 func (s *Service) ResetPassword(ctx context.Context, targetID uuid.UUID, newPassword string, actor ActorMeta) error {
-	if len(newPassword) < 12 || len(newPassword) > 128 {
+	// The same rule the sign-up form enforces: a password the CEO sets must
+	// not be weaker than one a user is allowed to choose (audit D-14).
+	if !password.Valid(newPassword) {
 		return ErrWeakPassword
 	}
 	hash, err := password.Hash(newPassword)

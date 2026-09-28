@@ -4,6 +4,7 @@ import { Avatar, Button, Input, Modal, Spinner, toast } from "@shared/ui";
 import { adminApi } from "@shared/api/endpoints";
 import { ROLE_LABELS, roleLabel, type User } from "@shared/api/types";
 import { useAuthStore } from "@shared/store/auth";
+import { PASSWORD_RULE_TEXT, passwordProblem } from "@shared/lib/password";
 
 export function UsersTab() {
   const me = useAuthStore((s) => s.user!);
@@ -120,6 +121,9 @@ export function UsersTab() {
 
 function ResetPasswordModal({ user, onClose }: { user: User | null; onClose: () => void }) {
   const [pw, setPw] = useState("");
+  // The CEO's reset obeys the same rule as sign-up: the server refuses a
+  // weaker password, and the form used to promise otherwise (audit D-14).
+  const problem = passwordProblem(pw);
   const reset = useMutation({
     mutationFn: (id: string) => adminApi.resetPassword(id, pw),
     onSuccess: () => {
@@ -127,7 +131,7 @@ function ResetPasswordModal({ user, onClose }: { user: User | null; onClose: () 
       setPw("");
       onClose();
     },
-    onError: () => toast.error("Не удалось сбросить пароль (минимум 12 символов)"),
+    onError: () => toast.error(`Не удалось сбросить пароль (${PASSWORD_RULE_TEXT})`),
   });
 
   return (
@@ -137,9 +141,10 @@ function ResetPasswordModal({ user, onClose }: { user: User | null; onClose: () 
         type="text"
         value={pw}
         onChange={(e) => setPw(e.target.value)}
-        placeholder="Минимум 12 символов"
+        placeholder={PASSWORD_RULE_TEXT}
+        error={pw ? (problem ?? undefined) : undefined}
       />
-      <Button block loading={reset.isPending} onClick={() => user && reset.mutate(user.id)}>
+      <Button block disabled={!!problem} loading={reset.isPending} onClick={() => user && reset.mutate(user.id)}>
         Сбросить пароль
       </Button>
     </Modal>

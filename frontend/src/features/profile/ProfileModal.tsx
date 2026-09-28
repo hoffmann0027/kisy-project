@@ -98,8 +98,9 @@ export function ProfileModal({ open, onClose }: Props) {
   };
 
   const changePassword = async () => {
-    if (newPassword.length < 12) {
-      toast.error("Новый пароль — минимум 12 символов");
+    const problem = passwordProblem(newPassword);
+    if (problem) {
+      toast.error(`Новый пароль — ${problem.toLowerCase()}`);
       return;
     }
     setBusy(true);
