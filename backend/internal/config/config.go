@@ -660,6 +660,10 @@ func (c *Config) validateProduction() error {
 		}
 	}
 
+	// A feature whose variables are half filled in is not a feature: it is a
+	// deploy that looks healthy with something dead inside it (audit D-03).
+	problems = append(problems, c.halfConfigured()...)
+
 	if len(problems) > 0 {
 		return fmt.Errorf("config: refusing to start in production:\n  - %s", strings.Join(problems, "\n  - "))
 	}

@@ -45,6 +45,12 @@ func run() error {
 	log := logger.New(cfg.LogLevel)
 	slog.SetDefault(log)
 
+	// Which optional features this deployment actually got. Printed because
+	// every one of them used to switch itself off in silence when its
+	// variables were missing, and we found out from users (audit D-03).
+	features := cfg.Features()
+	log.Info("features", "summary", features.String())
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -97,6 +103,7 @@ func run() error {
 		allowedOrigin: cfg.WSAllowedOrigin,
 		nativeOrigins: cfg.NativeAppOrigins,
 		webDir:        cfg.WebDir,
+		features:      features,
 
 		trustedProxyCIDRs: cfg.TrustedProxyCIDRs,
 	})
@@ -136,6 +143,9 @@ type routerDeps struct {
 	allowedOrigin string
 	nativeOrigins []string
 	webDir        string
+	// features is reported by /ready so an operator can see from outside
+	// which optional features are live (audit D-03).
+	features config.Features
 	// Networks our own reverse proxies live in; empty means no
 	// X-Forwarded-For entry is believed (see the middleware note below).
 	trustedProxyCIDRs []string
@@ -188,7 +198,10 @@ func newRouter(d routerDeps) http.Handler {
 			return
 		}
 
-		httpresponse.OK(w, r, http.StatusOK, map[string]string{"status": "ready"})
+		httpresponse.OK(w, r, http.StatusOK, map[string]any{
+			"status":   "ready",
+			"features": d.features.Map(),
+		})
 	})
 
 	m := d.mods

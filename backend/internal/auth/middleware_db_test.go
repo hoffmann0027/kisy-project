@@ -52,8 +52,8 @@ func TestRequireAuthSeparatesDeadSessionFromDeadDatabase(t *testing.T) {
 	revoked := time.Now().UTC().Add(-time.Minute)
 
 	cases := []struct {
-		name  string
-		repo  stubSessions
+		name string
+		repo stubSessions
 		want int
 	}{
 		{"database unavailable", stubSessions{err: errors.New("dial tcp: connection refused")}, http.StatusServiceUnavailable},
