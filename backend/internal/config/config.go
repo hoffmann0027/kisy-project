@@ -119,6 +119,10 @@ type Config struct {
 	// RunMigrations forces schema migrations to run on boot. Defaults to
 	// true outside production; a managed single-service deploy sets it true.
 	RunMigrations bool
+
+	// MetricsToken guards GET /metrics (METRICS_TOKEN). See loadMetricsToken
+	// in Load: empty means open in development and closed in production.
+	MetricsToken string
 }
 
 // PostgresDSN returns the effective database connection string.
@@ -508,6 +512,13 @@ func Load() (*Config, error) {
 	}
 
 	cfg.WebDir = os.Getenv("WEB_DIR")
+
+	// Scrape token for /metrics. In production an empty value closes the
+	// endpoint rather than opening it: the single-service deploy has no proxy
+	// in front to hide it, so it was answering the public internet (audit
+	// A-18). Outside production it stays open — a local Prometheus should work
+	// out of the box.
+	cfg.MetricsToken = os.Getenv("METRICS_TOKEN")
 
 	// Migrations run automatically outside production; RUN_MIGRATIONS
 	// overrides (managed single-service deploys set it true).

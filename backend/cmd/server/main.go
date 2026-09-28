@@ -4,12 +4,14 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"kisy-backend/internal/admin"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -100,6 +102,8 @@ func run() error {
 		pg:            pgPool,
 		rdb:           redisClient,
 		mods:          mods,
+		metricsToken:  cfg.MetricsToken,
+		metricsOpen:   cfg.Env != "production",
 		allowedOrigin: cfg.WSAllowedOrigin,
 		nativeOrigins: cfg.NativeAppOrigins,
 		webDir:        cfg.WebDir,
@@ -146,6 +150,10 @@ type routerDeps struct {
 	// features is reported by /ready so an operator can see from outside
 	// which optional features are live (audit D-03).
 	features config.Features
+	// metricsToken is the bearer token GET /metrics demands; metricsOpen
+	// allows an unauthenticated scrape when no token is set (development).
+	metricsToken string
+	metricsOpen  bool
 	// Networks our own reverse proxies live in; empty means no
 	// X-Forwarded-For entry is believed (see the middleware note below).
 	trustedProxyCIDRs []string
@@ -175,9 +183,11 @@ func newRouter(d routerDeps) http.Handler {
 	r.Use(requestLogger(d.log))
 	r.Use(middleware.Timeout(30 * time.Second))
 
-	// Prometheus scrape endpoint. Internal only — the edge proxy does not
-	// forward /metrics, so it is unreachable from the public internet.
-	r.Handle("/metrics", metrics.Handler())
+	// Prometheus scrape endpoint. "Internal only" used to be the whole
+	// protection, and it was wrong: the managed deploy serves the SPA from this
+	// same process with no proxy in front, so /metrics was answering the public
+	// internet with route-level traffic counts and pool state (audit A-18).
+	r.Get("/metrics", metricsHandler(d.metricsToken, d.metricsOpen))
 
 	// Liveness: process is up, no dependency checks.
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -438,6 +448,33 @@ func perRouteLimits(l *ratelimit.Limiter) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 			}
 		})
+	}
+}
+
+// metricsHandler serves the Prometheus endpoint to a scraper that proves it is
+// one, and pretends the endpoint does not exist to anyone else.
+//
+// 404 rather than 401: an unauthenticated caller learns nothing, not even that
+// there is something here to come back for.
+func metricsHandler(token string, openWithoutToken bool) http.HandlerFunc {
+	scrape := metrics.Handler()
+	return func(w http.ResponseWriter, r *http.Request) {
+		if token != "" {
+			// Constant time: a token compared byte by byte can be guessed one
+			// byte at a time from the response timing.
+			given := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+			if subtle.ConstantTimeCompare([]byte(given), []byte(token)) != 1 {
+				http.NotFound(w, r)
+				return
+			}
+			scrape.ServeHTTP(w, r)
+			return
+		}
+		if !openWithoutToken {
+			http.NotFound(w, r)
+			return
+		}
+		scrape.ServeHTTP(w, r)
 	}
 }
 
