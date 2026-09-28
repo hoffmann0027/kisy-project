@@ -103,6 +103,13 @@ func (p *Publisher) PublishE2EEWelcome(userID uuid.UUID, data any) {
 	p.hub.publishToUsers([]uuid.UUID{userID}, encode(EventE2EEWelcome, data))
 }
 
+// PublishE2EEDeviceAdded tells the given users that a new device of someone
+// they talk to has appeared, so whichever of their devices is online adds it
+// to the chats they share.
+func (p *Publisher) PublishE2EEDeviceAdded(userIDs []uuid.UUID, data any) {
+	p.hub.publishToUsers(userIDs, encode(EventE2EEDeviceAdded, data))
+}
+
 // --- call signaling relay (satisfies calls.CallPublisher structurally) ---
 //
 // Each method relays one server→client call event to a single user's connected

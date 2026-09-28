@@ -139,6 +139,7 @@ import { UserFacingError } from "@shared/lib/errors";
 import type { E2EESession } from "./session";
 import { topUpKeyPackages } from "./session";
 import {
+  addDeviceToChat,
   adoptOutgoingPlaintext,
   cacheOutgoingPlaintext,
   cachePlaintext,
@@ -292,6 +293,61 @@ describe("E2EE private chat orchestration", () => {
     // Nothing of bob's survived: no commit, no welcome, no state.
     expect(server.handshake.filter((h) => h.chatId === chatId)).toHaveLength(0);
     expect(server.welcomes.filter((w) => w.chatId === chatId)).toHaveLength(0);
+  });
+
+  // Audit B-02: a device that appears after the chat exists — a reinstall, a
+  // second phone — used to be stranded: nobody added it, it built its own
+  // group, and then neither side could read the other. Now whoever is online
+  // adds it, and it reads everything sent from that moment.
+  it("a device that appears after the chat is added to it and reads on", async () => {
+    const alice = await makeSession("user-alice");
+    const bob = await makeSession("user-bob");
+    await publishPool(bob, 3);
+    const chatId = "chat-late-device";
+
+    // The chat exists between alice and bob's first device.
+    await encryptForChat(alice, chatId, "user-bob", "первое сообщение");
+    await processWelcomes(bob);
+
+    // Bob reinstalls: a new device, a fresh pool, and no state for the chat.
+    const bob2 = await makeSession("user-bob");
+    await publishPool(bob2, 3);
+    expect(await addDeviceToChat(alice, chatId, bob2.identity.deviceId, "user-bob")).toBe(true);
+
+    // It joins from the Welcome alice just sent, and bob's first device
+    // applies the commit from the feed — what the app does on e2ee.handshake.
+    const joined = await processWelcomes(bob2);
+    expect(joined).toEqual([chatId]);
+    await processChatHandshake(bob, "private", chatId);
+    const after = await encryptForChat(alice, chatId, "user-bob", "после переустановки");
+    const view = await hydrateMessage(bob2, messageDTO("m9", chatId, "user-alice", after.ciphertext));
+    expect(view.text).toBe("после переустановки");
+
+    // Bob's first device is still in the same group — adding a device must
+    // not push anyone out.
+    const forBob1 = await hydrateMessage(bob, messageDTO("m10", chatId, "user-alice", after.ciphertext));
+    expect(forBob1.text).toBe("после переустановки");
+  });
+
+  // Two devices can try to add the same newcomer at once. One commit is
+  // accepted; the other is dropped rather than saved as a second group.
+  it("only one side adds the newcomer when both try", async () => {
+    const alice = await makeSession("user-alice");
+    const bob = await makeSession("user-bob");
+    await publishPool(bob, 3);
+    const chatId = "chat-double-add";
+    await encryptForChat(alice, chatId, "user-bob", "первое");
+    await processWelcomes(bob);
+
+    const bob2 = await makeSession("user-bob");
+    await publishPool(bob2, 4);
+
+    const [first, second] = [
+      await addDeviceToChat(alice, chatId, bob2.identity.deviceId, "user-bob"),
+      await addDeviceToChat(bob, chatId, bob2.identity.deviceId, "user-bob"),
+    ];
+    expect(first).toBe(true);
+    expect(second).toBe(false);
   });
 
   it("refuses, with a reason, when the peer has never set up encryption", async () => {

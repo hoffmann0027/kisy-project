@@ -18,6 +18,7 @@ import {
   e2eeSession,
   hydrateMessage,
   initE2EE,
+  addDeviceToChat,
   processChatHandshake,
   processWelcomes,
   sweepExpiredPlaintext,
@@ -110,6 +111,19 @@ export function useRealtime() {
               for (const chatId of joined) {
                 qc.invalidateQueries({ queryKey: messageKeys.list("private", chatId) });
               }
+            });
+          }
+          break;
+        }
+        case "e2ee.device.added": {
+          // Кто-то из собеседников зашёл с нового устройства (или мы сами
+          // переустановили приложение). Добавляет тот, кто сейчас в сети;
+          // если добавили параллельно — сервер примет один коммит, остальные
+          // догонят состояние (B-02).
+          const s = e2eeSession();
+          if (s) {
+            void addDeviceToChat(s, ev.data.chatId, ev.data.deviceId, ev.data.userId).then((added) => {
+              if (added) qc.invalidateQueries({ queryKey: messageKeys.list("private", ev.data.chatId) });
             });
           }
           break;

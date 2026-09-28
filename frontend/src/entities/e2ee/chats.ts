@@ -328,32 +328,98 @@ async function joinFromWelcome(
 
 export async function processChatHandshake(s: E2EESession, chatType: ChatType, chatId: string): Promise<void> {
   if (chatType !== "private") return; // groups are stage 5
-  await withChatLock(chatId, async () => {
-    let state = await loadState(s, chatId);
-    if (!state) return;
+  await withChatLock(chatId, () => catchUpHandshake(s, chatId));
+}
+
+/**
+ * Apply every handshake frame this device has not seen. Assumes the caller
+ * holds the chat's lock.
+ */
+async function catchUpHandshake(s: E2EESession, chatId: string): Promise<void> {
+  let state = await loadState(s, chatId);
+  if (!state) return;
+
+  const sodium = await getSodium();
+  const cursorRaw = await s.store.get(`hs/${chatId}`);
+  const afterId = cursorRaw ? utf8dec.decode(cursorRaw) : undefined;
+  const { messages } = await e2eeApi.listHandshake("private", chatId, afterId);
+
+  for (const frame of messages) {
+    // Our own commits are already applied locally at creation time — MLS
+    // cannot process a commit authored by itself.
+    if (frame.senderDevice !== s.identity.deviceId) {
+      try {
+        const result = await processIncoming(
+          state,
+          sodium.from_base64(frame.payload, sodium.base64_variants.ORIGINAL),
+        );
+        state = result.state;
+      } catch (err) {
+        console.warn(`E2EE: failed to apply handshake ${frame.id} for chat ${chatId}`, err);
+      }
+    }
+    await s.store.put(`hs/${chatId}`, utf8(frame.id));
+  }
+  await saveState(s, chatId, state);
+}
+
+/**
+ * Add a device that appeared after the chat did (audit B-02).
+ *
+ * Whoever is online does it — the loser of the race simply gets
+ * EPOCH_CONFLICT and catches up, so no election is needed. Returns true when
+ * this client is the one that added it.
+ *
+ * Does nothing when we have no state for the chat (then we are not in the
+ * group either, and somebody else will do it) or when the device is already a
+ * member — the commit would be empty.
+ */
+export async function addDeviceToChat(s: E2EESession, chatId: string, deviceId: string, ownerUserId: string): Promise<boolean> {
+  if (deviceId === s.identity.deviceId) return false;
+  return withChatLock(chatId, async () => {
+    const state = await loadState(s, chatId);
+    if (!state) return false;
 
     const sodium = await getSodium();
-    const cursorRaw = await s.store.get(`hs/${chatId}`);
-    const afterId = cursorRaw ? utf8dec.decode(cursorRaw) : undefined;
-    const { messages } = await e2eeApi.listHandshake(chatType, chatId, afterId);
+    const { keyPackages } = await e2eeApi.claimKeyPackages(ownerUserId, s.identity.deviceId);
+    const forDevice = keyPackages.filter((kp) => kp.deviceId === deviceId);
+    if (forDevice.length === 0) return false;
 
-    for (const frame of messages) {
-      // Our own commits are already applied locally at creation time — MLS
-      // cannot process a commit authored by itself.
-      if (frame.senderDevice !== s.identity.deviceId) {
-        try {
-          const result = await processIncoming(
-            state,
-            sodium.from_base64(frame.payload, sodium.base64_variants.ORIGINAL),
-          );
-          state = result.state;
-        } catch (err) {
-          console.warn(`E2EE: failed to apply handshake ${frame.id} for chat ${chatId}`, err);
-        }
-      }
-      await s.store.put(`hs/${chatId}`, utf8(frame.id));
+    const packages = forDevice.map((kp) => sodium.from_base64(kp.keyPackage, sodium.base64_variants.ORIGINAL));
+    const commit = await addMembers(state, packages);
+    const toB64 = (u: Uint8Array) => sodium.to_base64(u, sodium.base64_variants.ORIGINAL);
+
+    try {
+      await e2eeApi.publishHandshake({
+        chatType: "private",
+        chatId,
+        kind: "commit",
+        senderDevice: s.identity.deviceId,
+        payload: toB64(commit.commit),
+        epoch: Number(commit.epoch),
+      });
+    } catch (err) {
+      if (!isEpochConflict(err)) throw err;
+      // Someone else added the device first. Their commit is in the feed;
+      // ours is thrown away, not saved — saving it is what used to fork the
+      // group.
+      await catchUpHandshake(s, chatId);
+      return false;
     }
-    await saveState(s, chatId, state);
+
+    if (commit.welcome) {
+      await e2eeApi.publishHandshake({
+        chatType: "private",
+        chatId,
+        kind: "welcome",
+        senderDevice: s.identity.deviceId,
+        payload: toB64(commit.welcome),
+        epoch: Number(commit.epoch),
+        recipients: { [deviceId]: ownerUserId },
+      });
+    }
+    await saveState(s, chatId, commit.state);
+    return true;
   });
 }
 

@@ -47,6 +47,10 @@ const (
 	// clients fetch the ciphertext frames via /api/v1/e2ee.
 	EventE2EEHandshake = "e2ee.handshake"
 	EventE2EEWelcome   = "e2ee.welcome"
+	// EventE2EEDeviceAdded: someone's new device needs adding to the chats
+	// they already share with you — otherwise it can read nothing, and if it
+	// builds its own group, neither can you (audit B-02).
+	EventE2EEDeviceAdded = "e2ee.device.added"
 
 	EventError = "error"
 )

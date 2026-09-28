@@ -29,6 +29,9 @@ export type ServerEvent =
   | { event: "call.timeout"; data: { callId: string } }
   | { event: "e2ee.handshake"; data: E2EEHandshakeData }
   | { event: "e2ee.welcome"; data: { chatType: string; chatId: string; deviceId: string } }
+  // Новое устройство собеседника (или своё второе) нужно добавить в общий чат,
+  // иначе оно не прочитает в нём ничего (B-02).
+  | { event: "e2ee.device.added"; data: { chatType: string; chatId: string; deviceId: string; userId: string } }
   | { event: "error"; data: { message: string } };
 
 export interface E2EEHandshakeData {

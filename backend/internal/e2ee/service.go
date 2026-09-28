@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"log/slog"
 )
 
 // vouchContext must match VOUCH_CONTEXT in frontend/src/shared/crypto/identity.ts:
@@ -31,6 +32,20 @@ type Publisher interface {
 	// PublishE2EEWelcome tells one user's connected clients a welcome awaits
 	// one of their devices.
 	PublishE2EEWelcome(userID uuid.UUID, data any)
+	// PublishE2EEDeviceAdded tells these users that a new device appeared and
+	// needs adding to the chats they share with its owner (audit B-02).
+	PublishE2EEDeviceAdded(userIDs []uuid.UUID, data any)
+}
+
+// ChatsOfUser lists the private chats a user takes part in, as
+// (chatID, peerID) pairs. Injected in the composition root so this package
+// does not import chats.
+type ChatsOfUser func(ctx context.Context, userID uuid.UUID) ([]ChatPeer, error)
+
+// ChatPeer is one private chat and the person on the other side of it.
+type ChatPeer struct {
+	ChatID uuid.UUID
+	PeerID uuid.UUID
 }
 
 type Actor struct {
@@ -45,6 +60,9 @@ type Service struct {
 	pub        Publisher
 	peers      PeerCheck
 	claimLimit ClaimLimit
+	// chatsOf lists a user's private chats, to announce a new device to the
+	// people it now has to talk to (audit B-02).
+	chatsOf ChatsOfUser
 }
 
 // PeerCheck reports whether two users share a private chat.
@@ -125,8 +143,41 @@ func (s *Service) RegisterDevice(ctx context.Context, actor Actor, in RegisterDe
 	if err := s.repo.UpsertDevice(ctx, s.pool, d); err != nil {
 		return nil, err
 	}
+
+	// A new device can read nothing in chats that already exist, and if it
+	// builds its own group for one of them, neither can anyone else (audit
+	// B-02). Tell both sides: whichever device is online adds it, and the
+	// epoch gate makes sure exactly one of them succeeds.
+	s.announceDevice(ctx, d)
 	return d, nil
 }
+
+// announceDevice tells the owner's counterparts — and the owner's own other
+// clients — that this device needs adding to their shared chats. Best-effort:
+// a device that nobody adds now is added the next time anyone is online, and
+// the chat says it is waiting rather than pretending to work.
+func (s *Service) announceDevice(ctx context.Context, d *Device) {
+	if s.pub == nil || s.chatsOf == nil {
+		return
+	}
+	chats, err := s.chatsOf(ctx, d.UserID)
+	if err != nil {
+		slog.ErrorContext(ctx, "e2ee: list chats for a new device", "error", err)
+		return
+	}
+	for _, c := range chats {
+		s.pub.PublishE2EEDeviceAdded([]uuid.UUID{c.PeerID, d.UserID}, map[string]any{
+			"chatType": "private",
+			"chatId":   c.ChatID,
+			"deviceId": d.ID,
+			"userId":   d.UserID,
+		})
+	}
+}
+
+// SetChatsOfUser wires the lookup of a user's private chats, used to announce
+// a new device to the people it now has to talk to.
+func (s *Service) SetChatsOfUser(f ChatsOfUser) { s.chatsOf = f }
 
 // ListDevices returns a user's active devices. Any authenticated user may
 // query the directory — public keys are public; trust comes from TOFU and

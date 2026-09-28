@@ -308,3 +308,53 @@ func TestTwoDevicesCannotCommitTheSameEpoch(t *testing.T) {
 		t.Fatalf("a proposal carries no epoch and must not be refused: %v", err)
 	}
 }
+
+// Audit B-02: a device that appears after a chat exists can read nothing in
+// it, and if it builds its own group nobody can read anything. Registration
+// therefore tells both sides — the owner's other clients and the person on
+// the other side — which chats the new device has to be added to.
+func TestANewDeviceIsAnnouncedToTheChatsItsOwnerIsIn(t *testing.T) {
+	h := setup(t)
+	registerDevice(t, h, h.a) // alice's first device: the chat already exists
+
+	announced := &recordingPublisher{}
+	h.svc.SetPublisher(announced)
+	h.svc.SetChatsOfUser(func(context.Context, uuid.UUID) ([]e2ee.ChatPeer, error) {
+		return []e2ee.ChatPeer{{ChatID: h.chat, PeerID: h.b}}, nil
+	})
+
+	second := registerDevice(t, h, h.a) // the reinstall, or a second phone
+
+	if len(announced.devices) != 1 {
+		t.Fatalf("announcements = %d, want 1", len(announced.devices))
+	}
+	got := announced.devices[0]
+	if got.data["deviceId"] != second {
+		t.Fatalf("announced device = %v, want %v", got.data["deviceId"], second)
+	}
+	if got.data["chatId"] != h.chat {
+		t.Fatalf("announced chat = %v, want %v", got.data["chatId"], h.chat)
+	}
+	// Both sides hear it: the peer adds the device, the owner's own other
+	// clients learn their new device exists.
+	if len(got.users) != 2 {
+		t.Fatalf("told %d users, want 2 (the peer and the owner)", len(got.users))
+	}
+}
+
+type recordingPublisher struct {
+	devices []struct {
+		users []uuid.UUID
+		data  map[string]any
+	}
+}
+
+func (p *recordingPublisher) PublishE2EEHandshake(string, uuid.UUID, any) {}
+func (p *recordingPublisher) PublishE2EEWelcome(uuid.UUID, any)           {}
+func (p *recordingPublisher) PublishE2EEDeviceAdded(users []uuid.UUID, data any) {
+	m, _ := data.(map[string]any)
+	p.devices = append(p.devices, struct {
+		users []uuid.UUID
+		data  map[string]any
+	}{users: users, data: m})
+}

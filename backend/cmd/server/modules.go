@@ -893,6 +893,19 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		},
 	})
 	e2eeSvc.SetPublisher(wsPublisher)
+	// A new device has to be added to the chats its owner already has, by
+	// whoever is online (audit B-02).
+	e2eeSvc.SetChatsOfUser(func(ctx context.Context, userID uuid.UUID) ([]e2ee.ChatPeer, error) {
+		list, err := chatsSvc.ListForUser(ctx, chats.ActorMeta{UserID: userID})
+		if err != nil {
+			return nil, err
+		}
+		out := make([]e2ee.ChatPeer, 0, len(list))
+		for _, c := range list {
+			out = append(out, e2ee.ChatPeer{ChatID: c.ID, PeerID: c.Other(userID)})
+		}
+		return out, nil
+	})
 	// Key packages are claimable only by a chat partner, 20 per pair per hour —
 	// room for several devices and retries, not for draining a pool (A-09).
 	e2eeSvc.SetClaimPolicy(chatsSvc.SharePrivateChat, func(ctx context.Context, actor, target uuid.UUID) (bool, error) {
