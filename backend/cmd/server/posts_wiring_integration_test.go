@@ -126,3 +126,40 @@ func TestPublicCommunityWallIsReadableByNonMembers(t *testing.T) {
 		t.Fatalf("public react: %v", err)
 	}
 }
+
+// Audit A-13: in a community where every member may publish, the right to
+// write carried the right to erase — any member could delete anyone's post,
+// and there is no undo in the app. Deleting someone else's post belongs to
+// whoever runs the community.
+func TestOnlyTheAuthorAndTheCommunitysOwnPeopleDeleteAPost(t *testing.T) {
+	f, seed := newWallFixture(t)
+	member := seed("plain_member", 7)
+	groupID, postID, _ := f.community(t, true)
+
+	// Anyone may publish here, which is exactly the case A-13 was about.
+	if _, err := f.gsvc.SetPolicies(f.ctx, groupID, groups.PolicyJoinOpen, groups.PolicyPostAll,
+		groups.ActorMeta{UserID: f.founder.UserID, RoleLevel: f.founder.RoleLevel}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.gsvc.Join(f.ctx, groupID, groups.ActorMeta{UserID: member.UserID, RoleLevel: member.RoleLevel}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The member may write...
+	own, err := f.psvc.Create(f.ctx, posts.CreateInput{CommunityID: groupID, Text: "мой пост"}, member)
+	if err != nil {
+		t.Fatalf("a member of an open community must be able to publish: %v", err)
+	}
+	// ...but not erase the founder's post.
+	if err := f.psvc.Delete(f.ctx, postID, member); !errors.Is(err, posts.ErrForbidden) {
+		t.Fatalf("a plain member deleted someone else's post: %v", err)
+	}
+	// Their own, yes.
+	if err := f.psvc.Delete(f.ctx, own.ID, member); err != nil {
+		t.Fatalf("deleting their own post: %v", err)
+	}
+	// And the founder still moderates the wall.
+	if err := f.psvc.Delete(f.ctx, postID, f.founder); err != nil {
+		t.Fatalf("the founder deleting a post on their own wall: %v", err)
+	}
+}

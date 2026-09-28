@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/access"
 	"kisy-backend/internal/groups"
 	"kisy-backend/internal/platform/blobstore"
 	"kisy-backend/internal/posts"
@@ -50,6 +51,9 @@ func (c postsCommunities) Resolve(
 		IsMember:   vs.Member,
 		Verified:   g.VerifiedAt != nil,
 		CanPost:    vs.CanPost,
+		// Running the community, rather than merely being allowed to write in
+		// it: owner, editor or moderator — or the CEO, who moderates anywhere.
+		CanModerate: vs.Member && (groups.IsEditorTier(vs.Role) || access.IsCEO(actor.RoleLevel)),
 	}, nil
 }
 

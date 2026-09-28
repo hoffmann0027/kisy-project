@@ -30,6 +30,11 @@ type CommunityView struct {
 	Verified bool
 	// CanPost follows the group's own post policy and in-group role.
 	CanPost bool
+	// CanModerate: the viewer runs this community — its owner, editor or
+	// moderator, or the CEO. Deleting someone else's post takes this, not
+	// CanPost: in a community where everyone may publish, the right to write
+	// used to carry the right to erase what others wrote (audit A-13).
+	CanModerate bool
 }
 
 // Communities is the slice of the groups module that posts needs, injected in
@@ -214,7 +219,7 @@ func (s *Service) Delete(ctx context.Context, postID uuid.UUID, actor ActorMeta)
 	if err != nil {
 		return err
 	}
-	if p.AuthorID != actor.UserID && !community.CanPost {
+	if p.AuthorID != actor.UserID && !community.CanModerate {
 		return ErrForbidden
 	}
 	if err := s.repo.SoftDelete(ctx, s.pool, postID, time.Now().UTC()); err != nil {
@@ -526,7 +531,7 @@ func (s *Service) render(ctx context.Context, rows []Post, actor ActorMeta) ([]D
 			},
 			Media:     mediaDTOs(media[p.ID]),
 			Reactions: reactions[p.ID],
-			CanDelete: p.AuthorID == actor.UserID || community.CanPost,
+			CanDelete: p.AuthorID == actor.UserID || community.CanModerate,
 		}
 		if p.UpdatedAt.After(p.CreatedAt.Add(time.Second)) {
 			edited := p.UpdatedAt

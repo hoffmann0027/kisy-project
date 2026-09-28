@@ -44,6 +44,11 @@ const (
 
 // isEditorTier reports whether an in-group role belongs to the editor tier
 // (may post when post_policy=editors and may approve join requests).
+// IsEditorTier reports whether an in-group role runs the group: owner,
+// editor or moderator. Exported for the composition root, which decides who
+// may moderate a community's wall (audit A-13).
+func IsEditorTier(role string) bool { return isEditorTier(role) }
+
 func isEditorTier(role string) bool {
 	switch role {
 	case RoleOwner, RoleEditor, RoleModerator:
