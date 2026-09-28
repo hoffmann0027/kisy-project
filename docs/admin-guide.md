@@ -209,8 +209,15 @@ CAPTCHA_FAILED`, аккаунт не создаётся; если Cloudflare н�
 
 ## Резервные копии
 
-Операторы запускают `make backup` (в проде — ночью через cron) для дампа
-базы и `make restore` для восстановления. См. `docs/devops.md`.
+**Прод (Neon).** Бэкап снимает workflow «DB backup» раз в сутки:
+`scripts/db-backup.sh` шифрует дамп и кладёт в приватный бакет.
+Восстановление — `scripts/db-restore.sh` в новую базу, пошагово в
+[runbook.md](runbook.md), раздел «Backup / restore». Там же перечислены
+секреты, без которых workflow падает.
+
+**Локальный compose.** `make backup` / `make restore` — только для него:
+они работают через `docker compose exec postgres` и до управляемой базы не
+достают.
 
 ## Первичная инициализация (bootstrap)
 

@@ -18,26 +18,34 @@
 | Слой       | Технология                          |
 |------------|--------------------------------------|
 | Frontend   | React + TypeScript + Vite            |
-| Backend    | Go (Clean Architecture)              |
-| DB         | PostgreSQL 16                        |
-| Cache      | Redis                                |
+| Backend    | Go, пакет на фичу (см. ниже)        |
+| DB         | PostgreSQL (локально 16, прод — Neon 18) |
+| Cache      | Redis (прод — Upstash)              |
 | Realtime   | WebSockets                           |
-| Proxy      | Nginx                                |
-| Deploy     | Docker Compose                       |
+| Proxy      | Nginx (в compose; на Render его нет) |
+| Deploy     | Docker Compose или Render (`render.yaml`) |
 | Docs       | OpenAPI                              |
 
 ## Структура репозитория
 
 ```
-backend/    Go-сервис (Clean Architecture: domain/application/infrastructure/delivery)
-frontend/   React + TS SPA (feature-sliced design)
-database/   Обзор схемы, seed-данные
-deploy/     Nginx, Docker вспомогательные файлы
+backend/    Go-сервис: пакет на фичу (internal/<фича>: домен, сервис, SQL, хендлер),
+            композиционный корень — cmd/server/modules.go
+frontend/   React + TS SPA (feature-sliced design, соблюдён примерно наполовину)
+database/   Seed-данные; схема — источником истины служат backend/migrations
+deploy/     Nginx, coturn, мониторинг, вспомогательные файлы Docker
 docs/       Спецификация и документация
-scripts/    Вспомогательные скрипты (миграции, бэкапы, разработка)
-tests/      Интеграционные и e2e тесты
+design/     Мастер-логотип и генератор иконок
+scripts/    Вспомогательные скрипты (бэкапы, сертификаты, подпись Android)
+tests/      Нагрузочные сценарии k6 (интеграционные тесты живут рядом с кодом,
+            `*_integration_test.go` за тегом `integration`)
 .github/    CI/CD workflows
 ```
+
+Про «Clean Architecture» честно: слоёв domain/application/infrastructure нет —
+хендлеры тонкие и без SQL, но сервисы работают с pgx напрямую. Так и осталось
+осознанно; переписывание на книжные слои добавило бы шаблонного кода без
+выигрыша (аудит E-07).
 
 ## Быстрый старт (разработка)
 
@@ -51,29 +59,49 @@ docker compose up --build
 frontend, `/api/*` и `/ws` проксируются на backend, `/health` — liveness
 backend.
 
-Для разработки без Docker: `cd backend && go run ./cmd/server` (нужны
-локальные Postgres/Redis) и `cd frontend && npm run dev` (Vite на
+Первый вход: логин `ceo`, пароль — `BOOTSTRAP_CEO_PASSWORD` из `.env`;
+сразу после входа приложение потребует его сменить.
+
+Для разработки без Docker бэкенду нужно окружение: `.env` он сам не читает, а
+хосты по умолчанию — `postgres` и `redis` (имена сервисов compose). То есть
+`go run ./cmd/server` запускается так:
+
+```bash
+cd backend
+set -a; . ../.env; set +a          # bash; в PowerShell задайте переменные вручную
+POSTGRES_HOST=localhost REDIS_HOST=localhost go run ./cmd/server
+```
+
+Фронтенд без Docker: `cd frontend && npm run dev` (Vite на
 http://localhost:5173, проксирует `/api` и `/ws` на `localhost:8080`).
 
 ## Бесплатный хостинг (Render)
 
 Всё приложение разворачивается на бесплатном тарифе Render одним blueprint'ом
-(`render.yaml`): бэкенд сам отдаёт собранный фронтенд, БД и Redis — managed
-add-on'ы. Пошаговая инструкция: [docs/deploy-render.md](docs/deploy-render.md).
-Тот же all-in-one образ (`Dockerfile` в корне) можно запустить локально.
+(`render.yaml`): бэкенд сам отдаёт собранный фронтенд. База и Redis —
+**внешние** управляемые сервисы (Postgres на Neon, Redis на Upstash): у самого
+Render бесплатные Postgres/Redis удаляются через 30 дней, и это уже
+произошло 2026-08-07. Пошаговая инструкция:
+[docs/deploy-render.md](docs/deploy-render.md). Тот же all-in-one образ
+(`Dockerfile` в корне) можно запустить локально.
 
 ## Операции и наблюдаемость
 
 - `make help` — список задач (up/down/logs/test/lint/vuln/certs/backup…).
 - CI: [.github/workflows/ci.yml](.github/workflows/ci.yml) — lint, тесты
-  (+integration), govulncheck, npm audit, сборка образов. CD:
-  [release.yml](.github/workflows/release.yml) — публикация в GHCR по тегу,
-  деплой в staging и prod с ручным аппрувом. Полный гайд: [docs/devops.md](docs/devops.md).
+  (+integration), govulncheck, npm audit, gitleaks, trivy, сборка образов.
+  [release.yml](.github/workflows/release.yml) — публикация образов в GHCR по
+  тегу; деплоя в нём нет, прод на Render деплоится сам из `main`. Полный
+  гайд: [docs/devops.md](docs/devops.md).
 - TLS 1.3 в проде: `make certs && make prod` (см. devops-гайд).
 - Метрики Prometheus + Grafana: `make monitoring`
-  (Prometheus :9090, Grafana :3000). Backend отдаёт метрики на `/metrics`
-  (внутренний эндпоинт, не проксируется наружу).
-- Бэкапы БД: `make backup` / `make restore`.
+  (Prometheus :9090, Grafana :3000). Backend отдаёт метрики на `/metrics`; в
+  production эндпоинт закрыт токеном `METRICS_TOKEN` (без него — 404), вне
+  production открыт.
+- Бэкапы БД: `make backup` / `make restore` — **только локальный compose**.
+  Прод (Neon) бэкапится workflow «DB backup» и `scripts/db-backup.sh`;
+  восстановление — `scripts/db-restore.sh`, порядок в
+  [docs/runbook.md](docs/runbook.md), раздел «Backup / restore».
 
 ## Документация
 
@@ -89,7 +117,14 @@ add-on'ы. Пошаговая инструкция: [docs/deploy-render.md](docs
 
 ## Статус
 
-Реализованы этапы 1–7: фундамент, авторизация и доступ, backend core
-(REST + WebSocket), бизнес-логика, фронтенд, security-hardening, DevOps/CI-CD.
-Дополнительно: группы с ролевым доступом и Kanban-доски задач. См.
-`CLAUDE.md` для порядка этапов; следующий — этап 8 (тесты и документация).
+Все восемь этапов из `CLAUDE.md` пройдены. Сверх них: сообщества с лентой,
+доски задач, календарь, заметки, опросы, рейтинг, 1:1 аудиозвонки (WebRTC +
+coturn), сквозное шифрование личных чатов (MLS, RFC 9420), Android-приложение
+на Capacitor с пушами через FCM, антиспам (Turnstile, лимиты по аккаунту,
+карантин новых аккаунтов), удаление аккаунта, блокировки и жалобы.
+
+Что известно и не закрыто: у групповых чатов и сообществ сквозного шифрования
+нет (только TLS); сканирования файлов нет (есть чёрный список сигнатур);
+наблюдаемости и алертов на проде нет; спецификация в `docs/spec` местами
+расходится с кодом. Ближайшие шаги — публикация в Google Play
+([docs/PLAY_LISTING.md](docs/PLAY_LISTING.md)).

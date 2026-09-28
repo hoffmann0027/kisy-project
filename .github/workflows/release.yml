@@ -1,8 +1,8 @@
 name: Release
 
-# Builds and publishes versioned container images on a semver tag, then
-# deploys to staging automatically and to production behind a manual
-# approval gate (docs/spec/08-devops.md CI/CD).
+# Builds and publishes versioned container images on a semver tag. Deployment
+# is not part of it: production is Render, which deploys from main by itself
+# (see the note at the end of this file).
 on:
   push:
     tags: ["v*.*.*"]
@@ -58,54 +58,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy-staging:
-    name: Deploy to staging
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    environment:
-      name: staging
-      url: https://staging.kisy.example
-    steps:
-      - uses: actions/checkout@v5
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.STAGING_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            cd /opt/kisy
-            export KISY_VERSION=${{ needs.build-and-push.outputs.version }}
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-            docker compose exec -T backend wget -qO- http://localhost:8080/ready
-
-  deploy-production:
-    name: Deploy to production
-    needs: [build-and-push, deploy-staging]
-    runs-on: ubuntu-latest
-    # The "production" GitHub Environment must be configured with required
-    # reviewers, which turns this job into a manual approval gate.
-    environment:
-      name: production
-      url: https://kisy.example
-    steps:
-      - uses: actions/checkout@v5
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.PROD_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            cd /opt/kisy
-            export KISY_VERSION=${{ needs.build-and-push.outputs.version }}
-            # Record the current version for rollback before switching.
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-            docker compose exec -T backend wget -qO- http://localhost:8080/ready
-
-# Rollback: re-run this workflow from a previous green tag, or on the host
-# set KISY_VERSION to the prior version and `docker compose ... up -d`.
-# Images are immutable per tag in GHCR, so a rollback is a redeploy of the
-# older tag.
+# No deploy job on purpose.
+#
+# Production is Render: it builds from ./Dockerfile and deploys itself on every
+# push to main (render.yaml, autoDeploy: true). There is no staging host and no
+# SSH target — the two deploy jobs that used to live here pointed at
+# staging.kisy.example and kisy.example, hosts that never existed, and the first
+# tag pushed would have failed on them (audit C-13).
+#
+# What this workflow is for: publishing versioned, immutable images to GHCR so a
+# self-hosted compose deployment can pin a version, and so a release has
+# artifacts to point at. Rolling back such a deployment means setting
+# KISY_VERSION to the previous tag and `docker compose ... up -d`.
+#
+# Rolling back Render means redeploying an earlier commit from its dashboard
+# (Manual Deploy → pick a commit) — see docs/devops.md.

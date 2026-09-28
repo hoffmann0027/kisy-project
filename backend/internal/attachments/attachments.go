@@ -262,6 +262,10 @@ func NewPostgresRepository() *PostgresRepository { return &PostgresRepository{} 
 func (r *PostgresRepository) Create(ctx context.Context, q db.DBTX, name, mime string, size int64, data []byte, storagePath string, uploadedBy uuid.UUID, meta Meta) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := q.QueryRow(ctx, `
+		-- scan_status is written 'clean' and never read: there is no scanner
+		-- (docs/security.md, "Сканирование загружаемых файлов"). The column and
+		-- the CHECK stay for the day one appears; nothing gates visibility on
+		-- it today, whatever migration 8 promised (audit C-03).
 		INSERT INTO attachments (message_id, file_name, mime_type, size_bytes, storage_path, scan_status, data, uploaded_by,
 		                         kind, duration_ms, waveform, width, height)
 		VALUES (NULL, $1, $2, $3, $4, 'clean', $5, $6, $7, $8, $9, $10, $11)

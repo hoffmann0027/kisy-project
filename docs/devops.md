@@ -3,7 +3,22 @@
 Охватывает локальную разработку, CI/CD, продакшн-развёртывание,
 наблюдаемость, резервные копии и откат (`docs/spec/08-devops.md`).
 
-## Топология
+## Где что работает
+
+**Прод — Render** (регион Frankfurt), один web-сервис из корневого
+`Dockerfile`: тот же процесс отдаёт и API, и собранный SPA (`WEB_DIR`),
+Nginx впереди нет. Деплой автоматический на каждый push в `main`
+(`render.yaml`, `autoDeploy: true`) — отдельного шага в CI нет. Данные
+живут во внешних управляемых сервисах: **Postgres — Neon**, **Redis —
+Upstash** (бесплатные Postgres/Redis самого Render удаляются через 30 дней,
+это уже случилось 2026-08-07). Пошагово — [deploy-render.md](deploy-render.md).
+
+Откат прода: в дашборде Render *Manual Deploy* → выбрать более ранний коммит.
+
+**Самостоятельный хостинг (compose)** — вариант ниже: единый edge-Nginx и
+образы из GHCR. Для него и написаны остальные разделы этого документа.
+
+## Топология (compose)
 
 Единый edge-Nginx → статический бандл фронтенда + API/WebSocket бэкенда.
 Postgres и Redis только внутренние. Контейнеры: `postgres`, `redis`,
@@ -47,24 +62,18 @@ Postgres/Redis) и `cd frontend && npm run dev`.
 Dependabot (`.github/dependabot.yml`) еженедельно открывает сгруппированные
 PR с обновлениями Go-модулей, npm, GitHub Actions и базовых Docker-образов.
 
-## CD (GitHub Actions — `.github/workflows/release.yml`)
+## Публикация образов (GitHub Actions — `.github/workflows/release.yml`)
 
-Триггер — semver-тег (`vX.Y.Z`):
+Триггер — semver-тег (`vX.Y.Z`): собирает образы `backend` и `frontend` и
+пушит их в GHCR (`ghcr.io/<owner>/<repo>/{backend,frontend}`) с тегом версии
+и `latest`.
 
-1. **build-and-push** — собирает образы `backend` и `frontend` и пушит их в
-   GHCR (`ghcr.io/<owner>/<repo>/{backend,frontend}`), с тегом версии и
-   `latest`.
-2. **deploy-staging** — деплой по SSH на staging-хост, затем smoke-проверка
-   `/ready`. Использует GitHub Environment `staging`.
-3. **deploy-production** — то же, за гейтом Environment `production`.
-   Настройте **required reviewers** у этого Environment, чтобы шаг стал
-   ручным аппрувом.
+Деплоя в этом workflow нет. Раньше здесь были два SSH-шага на
+`staging.kisy.example` и `kisy.example` — хосты, которых никогда не
+существовало, так что первый же тег упал бы на них (аудит C-13). Прод
+деплоится сам, из `main`, силами Render.
 
-Необходимые секреты репозитория: `STAGING_HOST`, `PROD_HOST`,
-`DEPLOY_USER`, `DEPLOY_SSH_KEY`. На каждом хосте `/opt/kisy` содержит
-compose-файлы и продакшн-`.env`.
-
-### Продакшн-деплой (на хосте)
+### Деплой self-hosted стенда (на своём хосте)
 
 ```bash
 scripts/gen-dev-certs.sh          # или установите реальные CA-сертификаты в deploy/nginx/certs
@@ -104,15 +113,23 @@ make monitoring    # docker compose -f docker-compose.yml -f docker-compose.moni
 
 ## Резервные копии и восстановление
 
+**Прод — не здесь.** База живёт на Neon, и до неё `docker compose exec` не
+достаёт. Прод бэкапит workflow «DB backup» (`scripts/db-backup.sh`,
+шифрование обязательно, артефакт в приватный бакет), восстанавливает
+`scripts/db-restore.sh`. Порядок действий и нужные секреты —
+[runbook.md](runbook.md), раздел «Backup / restore».
+
+**Локальный compose:**
+
 ```bash
 make backup                       # gzip pg_dump в backups/, хранение 14 файлов
 BACKUP=backups/kisy-<stamp>.sql.gz make restore
 ```
 
-Запускайте `scripts/backup.sh` ночью через cron; задайте
-`BACKUP_GPG_RECIPIENT`, чтобы шифровать в покое и отправлять артефакт
-off-site. `scripts/restore.sh` восстанавливает самый свежий (или указанный)
-дамп.
+`BACKUP_GPG_RECIPIENT` шифрует дамп (тогда файл будет `.sql.gz.gpg`, и
+`restore.sh` расшифрует его сам). Восстановление идёт с
+`ON_ERROR_STOP=1`: дамп поверх непустой базы обязан падать, а не
+сообщать об успехе, применившись наполовину (аудит C-01).
 
 ## Секреты
 

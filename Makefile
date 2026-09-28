@@ -6,7 +6,7 @@ PROD := $(COMPOSE) -f docker-compose.yml -f docker-compose.prod.yml
 MON := $(COMPOSE) -f docker-compose.yml -f docker-compose.monitoring.yml
 
 .PHONY: help up down logs ps rebuild \
-        backend-test backend-lint frontend-build frontend-lint test lint \
+        backend-test backend-lint frontend-build frontend-test frontend-lint test lint \
         vuln certs prod monitoring loadtest backup restore migrate-down
 
 help: ## Show this help
@@ -34,6 +34,9 @@ backend-lint: ## gofmt + go vet
 backend-test: ## Run Go unit tests (race)
 	cd backend && go test -race ./...
 
+frontend-test: ## Run the SPA unit tests (vitest)
+	cd frontend && npm run test
+
 vuln: ## Run govulncheck + npm audit (shipped deps)
 	cd backend && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 	cd frontend && npm audit --omit=dev --audit-level=high
@@ -46,7 +49,7 @@ frontend-build: ## Production build of the SPA
 
 lint: backend-lint frontend-lint ## Lint everything
 
-test: backend-test ## Run the test suites
+test: backend-test frontend-test ## Run the test suites (Go + vitest)
 
 certs: ## Generate self-signed dev TLS certificates
 	bash scripts/gen-dev-certs.sh

@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# Nightly-style encrypted database backup. Dumps the running Postgres
-# container to backups/ as a gzip-compressed SQL file. For production,
-# schedule this via cron and ship the output to off-site encrypted storage;
-# set BACKUP_GPG_RECIPIENT to additionally encrypt with GPG.
+# Backup of the LOCAL docker-compose database. Dumps the running `postgres`
+# service to backups/ as a gzip-compressed SQL file; set BACKUP_GPG_RECIPIENT
+# to encrypt it with GPG.
+#
+# NOT the production path. Production runs on managed Postgres (Neon), which
+# this script cannot reach: it goes through `docker compose exec`. The
+# production backup is the "DB backup" workflow and scripts/db-backup.sh —
+# see docs/runbook.md, "Backup / restore" (audit C-01).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
