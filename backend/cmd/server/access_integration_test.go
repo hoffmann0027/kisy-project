@@ -8,11 +8,15 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	yaml "go.yaml.in/yaml/v3"
 
 	"kisy-backend/internal/config"
 	"kisy-backend/internal/platform/testdb"
@@ -94,6 +98,13 @@ func fullRouter(t *testing.T) http.Handler {
 // filled in so a handler reached by mistake gets far enough to show it.
 func walkRoutes(t *testing.T, h http.Handler) []route {
 	t.Helper()
+	return walkRoutesRaw(t, h)
+}
+
+// walkRoutesRaw is the walk itself: route.path has its parameters replaced by
+// real uuids (so a request can be made), route.raw keeps the pattern.
+func walkRoutesRaw(t *testing.T, h http.Handler) []route {
+	t.Helper()
 	walker, ok := h.(chi.Routes)
 	if !ok {
 		t.Fatal("router is not walkable")
@@ -106,6 +117,7 @@ func walkRoutes(t *testing.T, h http.Handler) []route {
 		if strings.HasSuffix(path, "/*") {
 			return nil
 		}
+		raw := path
 		for strings.Contains(path, "{") {
 			open := strings.Index(path, "{")
 			close := strings.Index(path[open:], "}") + open
@@ -114,7 +126,7 @@ func walkRoutes(t *testing.T, h http.Handler) []route {
 			}
 			path = path[:open] + uuid.NewString() + path[close+1:]
 		}
-		out = append(out, route{method, path})
+		out = append(out, route{method: method, path: path, raw: raw})
 		return nil
 	})
 	if err != nil {
@@ -127,7 +139,7 @@ func walkRoutes(t *testing.T, h http.Handler) []route {
 	return out
 }
 
-type route struct{ method, path string }
+type route struct{ method, path, raw string }
 
 // key is the form publicRoutes is written in: parameters back as they were.
 func (r route) key() string {
@@ -194,4 +206,99 @@ func TestPublicRoutesAreStillThere(t *testing.T) {
 			t.Errorf("publicRoutes lists %q, which the router does not serve", key)
 		}
 	}
+}
+
+// Audit C-07 and the Definition of Done ("every endpoint documented in
+// OpenAPI"): two call endpoints were missing from the spec, and nothing would
+// have noticed the third. The comparison ignores parameter NAMES ({callID} vs
+// {id}) and only insists that the endpoint is described at all.
+func TestEveryRouteIsDocumentedInOpenAPI(t *testing.T) {
+	documented := openapiOperations(t)
+	routes := walkRoutesRaw(t, fullRouter(t))
+
+	// Paths that are deliberately outside the documented API surface.
+	skip := map[string]bool{
+		"/health": true, "/ready": true, "/metrics": true,
+	}
+
+	missing := 0
+	for _, rt := range routes {
+		if skip[rt.raw] {
+			continue
+		}
+		// /ws is registered for every method by one handler; the upgrade is
+		// what the spec describes, and it is a GET.
+		if rt.raw == "/ws" && rt.method != http.MethodGet {
+			continue
+		}
+		key := strings.ToLower(rt.method) + " " + specPath(rt.raw)
+		if !documented[key] {
+			t.Errorf("%s %s is served but not in docs/openapi.yaml", rt.method, rt.raw)
+			missing++
+		}
+	}
+	if missing == 0 {
+		t.Logf("%d routes, all documented", len(routes))
+	}
+}
+
+// specPath turns a served path into the form openapi.yaml uses: without the
+// /api/v1 prefix (it is the spec's server URL) and with parameter names
+// reduced to {}, so a rename is not reported as a missing endpoint.
+func specPath(p string) string {
+	p = strings.TrimPrefix(p, "/api/v1")
+	// chi's walk prints a mounted subrouter's index as "/chats/"; the spec
+	// writes it as "/chats". The trailing slash is the same endpoint.
+	if len(p) > 1 {
+		p = strings.TrimSuffix(p, "/")
+	}
+	if p == "" {
+		p = "/"
+	}
+	var b strings.Builder
+	for {
+		open := strings.Index(p, "{")
+		if open < 0 {
+			b.WriteString(p)
+			return b.String()
+		}
+		closeAt := strings.Index(p[open:], "}")
+		if closeAt < 0 {
+			b.WriteString(p)
+			return b.String()
+		}
+		b.WriteString(p[:open])
+		b.WriteString("{}")
+		p = p[open+closeAt+1:]
+	}
+}
+
+// openapiOperations reads the spec and returns the set of "method path" it
+// describes, in the same normalised form as specPath.
+func openapiOperations(t *testing.T) map[string]bool {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "docs", "openapi.yaml"))
+	if err != nil {
+		t.Fatalf("read openapi.yaml: %v", err)
+	}
+	var spec struct {
+		Paths map[string]map[string]yaml.Node `yaml:"paths"`
+	}
+	if err := yaml.Unmarshal(raw, &spec); err != nil {
+		t.Fatalf("parse openapi.yaml: %v", err)
+	}
+	if len(spec.Paths) < 100 {
+		t.Fatalf("openapi.yaml describes only %d paths; the spec did not parse", len(spec.Paths))
+	}
+
+	methods := map[string]bool{"get": true, "post": true, "put": true, "patch": true, "delete": true, "head": true, "options": true}
+	out := map[string]bool{}
+	for path, ops := range spec.Paths {
+		for method := range ops {
+			if methods[strings.ToLower(method)] {
+				out[strings.ToLower(method)+" "+specPath(path)] = true
+			}
+		}
+	}
+	return out
 }

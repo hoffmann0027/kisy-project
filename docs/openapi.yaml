@@ -1680,11 +1680,11 @@ paths:
                 ciphertext: { type: string, format: byte, description: Base64 MLS ciphertext (max 64 KiB decoded). Requires alg. }
                 alg: { type: integer, description: E2EE scheme version; required with ciphertext. }
                 epoch: { type: integer, format: int64 }
-                contentKind: { type: integer, description: 1 text, 2 attachment, 3 system. }
+                contentKind: { type: integer, description: "1 text, 2 attachment, 3 system." }
                 forwardedFromSenderId: { type: string, format: uuid, description: Client-side (E2EE) forward attribution — original author id snapshot. }
                 forwardedFromSenderName: { type: string, description: Client-side (E2EE) forward attribution — original author name snapshot. }
                 ttlSeconds: { type: [integer, 'null'], description: Per-message disappearing timer (stage J); overrides the chat default. }
-                threadRootId: { type: [string, 'null'], format: uuid, description: Thread reply (stage K, groups only) — the root message id; root must be in the same chat and not a reply itself. }
+                threadRootId: { type: [string, 'null'], format: uuid, description: "Thread reply (stage K, groups only) — the root message id; root must be in the same chat and not a reply itself." }
       responses:
         '422': { $ref: '#/components/responses/E2EERequired' }
         '201':
@@ -2108,7 +2108,7 @@ paths:
                 sizeBytes: { type: integer, format: int64 }
                 kind: { type: string, enum: [file, image, voice, video] }
                 durationMs: { type: integer }
-                waveform: { type: string, format: byte, description: Peak envelope, max 1024 bytes decoded. }
+                waveform: { type: string, format: byte, description: "Peak envelope, max 1024 bytes decoded." }
                 width: { type: integer }
                 height: { type: integer }
       responses:
@@ -2855,6 +2855,11 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   /ws:
+    # The only endpoint outside the versioned API: the socket lives at the
+    # server root, not under /api/v1 (audit C-07).
+    servers:
+      - url: /
+        description: Server root
     get:
       tags: [websocket]
       summary: Upgrade to the real-time WebSocket connection
@@ -3276,6 +3281,51 @@ paths:
       responses:
         '200': { description: Calls, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /calls/pending:
+    get:
+      tags: [calls]
+      summary: The call ringing for the caller right now, if any
+      description: >
+        For a phone woken by a call push before its WebSocket is back: the
+        invitation arrives over the socket, and there is none yet. Answers
+        `{ "call": null }` rather than 404 — nobody calling is a normal
+        answer, not an error.
+      responses:
+        '200':
+          description: The pending call, or null
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          call:
+                            type: [object, 'null']
+                            properties:
+                              callId: { type: string, format: uuid }
+                              callerId: { type: string, format: uuid }
+                              callerName: { type: string }
+                              chatId: { type: string, format: uuid }
+                              offer: { type: string, description: SDP offer of the caller }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /calls/{callID}/reject:
+    post:
+      tags: [calls]
+      summary: Decline the incoming call
+      description: >
+        The REST twin of the `call.reject` socket frame, for the app that was
+        killed while ringing and reports the rejection at its next start.
+        Idempotent: rejecting an already-finished call is not an error.
+      parameters:
+        - { name: callID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Rejected, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { description: Invalid call id }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: This call is not the caller's to reject }
 
   /rating/board:
     get:
@@ -3750,7 +3800,7 @@ paths:
               properties:
                 deviceId: { type: string, format: uuid }
                 name: { type: string, maxLength: 128 }
-                ed25519Pub: { type: string, format: byte, description: 32-byte Ed25519 public key, base64. }
+                ed25519Pub: { type: string, format: byte, description: "32-byte Ed25519 public key, base64." }
                 signedBy: { type: [string, 'null'], format: uuid }
                 signature: { type: string, format: byte }
       responses:
@@ -3816,7 +3866,7 @@ paths:
                 keyPackages:
                   type: array
                   maxItems: 100
-                  items: { type: string, format: byte, description: Encoded MLS key package, base64 (max 8 KiB). }
+                  items: { type: string, format: byte, description: "Encoded MLS key package, base64 (max 8 KiB)." }
       responses:
         '201': { description: Packages stored }
         '400': { $ref: '#/components/responses/ValidationError' }
@@ -3890,7 +3940,7 @@ paths:
                 chatId: { type: string, format: uuid }
                 kind: { type: string, enum: [welcome, commit, proposal] }
                 senderDevice: { type: string, format: uuid }
-                payload: { type: string, format: byte, description: Encoded MLS message, base64 (max 256 KiB). }
+                payload: { type: string, format: byte, description: "Encoded MLS message, base64 (max 256 KiB)." }
                 epoch: { type: [integer, 'null'], format: int64 }
                 recipients:
                   type: object
@@ -3984,7 +4034,7 @@ paths:
               type: object
               required: [blob, kdfParams]
               properties:
-                blob: { type: string, format: byte, description: Ciphertext, base64 (max 16 MiB decoded). }
+                blob: { type: string, format: byte, description: "Ciphertext, base64 (max 16 MiB decoded)." }
                 kdfParams: { type: object }
       responses:
         '201': { description: Backup stored }
@@ -4031,8 +4081,6 @@ components:
       type: apiKey
       in: cookie
       name: kisy_refresh
-  security:
-    - accessCookie: []
 
   schemas:
     Envelope:
@@ -4177,7 +4225,7 @@ components:
       properties:
         sanction: { $ref: '#/components/schemas/Sanction' }
         activeWarns: { type: integer }
-        deleted: { type: boolean, description: This action deleted the group (a deletion, or the warning that reached the limit). }
+        deleted: { type: boolean, description: "This action deleted the group (a deletion, or the warning that reached the limit)." }
     ActiveSanctions:
       type: object
       properties:
@@ -4332,12 +4380,12 @@ components:
         deletedAt: { type: [string, 'null'], format: date-time }
         editedAt: { type: [string, 'null'], format: date-time }
         pinnedAt: { type: [string, 'null'], format: date-time }
-        readCount: { type: [integer, 'null'], description: For own group messages, recipients who have read it. }
-        readTotal: { type: [integer, 'null'], description: For own group messages, total recipients. }
+        readCount: { type: [integer, 'null'], description: "For own group messages, recipients who have read it." }
+        readTotal: { type: [integer, 'null'], description: "For own group messages, total recipients." }
         ciphertext: { type: [string, 'null'], format: byte, description: E2EE body (base64 MLS ciphertext); text is null when present. }
         alg: { type: [integer, 'null'], description: E2EE scheme version (1 = MLS X25519/ChaCha20-Poly1305/Ed25519). }
         epoch: { type: [integer, 'null'], format: int64, description: MLS epoch the message was sent in. }
-        contentKind: { type: [integer, 'null'], description: 1 text, 2 attachment, 3 system — without revealing content. }
+        contentKind: { type: [integer, 'null'], description: "1 text, 2 attachment, 3 system — without revealing content." }
         forwardedFrom:
           type: [object, 'null']
           description: Original-author snapshot for a forwarded message (never the source chat).
@@ -4464,7 +4512,7 @@ components:
         id: { type: string, format: uuid }
         userId: { type: string, format: uuid }
         name: { type: string }
-        ed25519Pub: { type: string, format: byte, description: Ed25519 identity public key, base64. }
+        ed25519Pub: { type: string, format: byte, description: "Ed25519 identity public key, base64." }
         signedBy: { type: [string, 'null'], format: uuid, description: Device that vouched for this one (cross-signing). }
         signature: { type: [string, 'null'], format: byte }
         createdAt: { type: string, format: date-time }
@@ -4475,10 +4523,10 @@ components:
         id: { type: string, format: uuid }
         chatType: { type: string, enum: [private, group] }
         chatId: { type: string, format: uuid }
-        kind: { type: integer, description: 1 welcome, 2 commit, 3 proposal. }
+        kind: { type: integer, description: "1 welcome, 2 commit, 3 proposal." }
         senderDevice: { type: [string, 'null'], format: uuid }
         recipientDevice: { type: [string, 'null'], format: uuid }
-        payload: { type: string, format: byte, description: Encoded MLS message, base64. }
+        payload: { type: string, format: byte, description: "Encoded MLS message, base64." }
         epoch: { type: [integer, 'null'], format: int64 }
         createdAt: { type: string, format: date-time }
     Favorite:
