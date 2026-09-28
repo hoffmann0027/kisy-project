@@ -13,7 +13,7 @@ interface Props {
 export function Logo({ size = 40, className }: Props) {
   return (
     <img
-      src="/logo.png?v=5"
+      src="/logo.png?v=6"
       width={size}
       height={size}
       className={className}

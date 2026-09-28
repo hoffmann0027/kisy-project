@@ -12,6 +12,8 @@ backend/tmp/
 
 # Node
 frontend/node_modules/
+# sharp ставится в design/ разово, для перегенерации иконок (design/README.md)
+design/node_modules/
 frontend/dist/
 frontend/.vite/
 frontend/coverage/

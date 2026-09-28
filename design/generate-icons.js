@@ -7,10 +7,13 @@ const SRC = path.join(ROOT, "design/logo-source.png");
 const PUB = path.join(ROOT, "frontend/public");
 const RES = path.join(ROOT, "frontend/android/app/src/main/res");
 
-// Measured from the source: the mark (bubble + K) occupies x 263..1016,
-// y 121..873. Centre it in a square with ~7% breathing room so the glow is
-// not clipped when the tile is masked to a circle or a squircle.
-const CX = 640, CY = 497, HALF = 405;
+// Measured from the source (28.09.2026 artwork): the mark — the bubble with
+// the K inside it — occupies x 234..1018, y 176..1001. The tile's own rounded
+// frame is NOT part of the mark: Android draws its own shape around the icon,
+// and a frame inside that shape reads as an icon inside an icon. The crop
+// therefore stops short of it, with a little room so the glow fades out
+// instead of ending at a cut.
+const CX = 626, CY = 588, HALF = 420;
 const CROP = { left: CX - HALF, top: CY - HALF, width: HALF * 2, height: HALF * 2 };
 
 const DARK = { r: 11, g: 12, b: 20, alpha: 1 }; // --bg of the default "orbit" theme
