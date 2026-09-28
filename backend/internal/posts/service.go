@@ -259,7 +259,7 @@ func (s *Service) ListCommunity(
 	if err != nil {
 		return Page{}, err
 	}
-	rows, err := s.repo.ListByCommunity(ctx, s.pool, communityID, before, limit+1)
+	rows, err := s.repo.ListByCommunity(ctx, s.pool, communityID, actor.UserID, before, limit+1)
 	if err != nil {
 		return Page{}, err
 	}

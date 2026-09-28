@@ -47,6 +47,13 @@ type Service struct {
 	// newChatGate runs before a conversation that does not exist yet is
 	// created — reopening an existing one is never refused. Nil: no gate.
 	newChatGate func(ctx context.Context, actor ActorMeta) error
+	// blocked reports whether either of the two has blocked the other.
+	blocked func(ctx context.Context, a, b uuid.UUID) (bool, error)
+}
+
+// SetBlockCheck wires the block lookup (internal/blocks).
+func (s *Service) SetBlockCheck(f func(ctx context.Context, a, b uuid.UUID) (bool, error)) {
+	s.blocked = f
 }
 
 // NewChatGate returns the gate in place, so a caller can wrap it. Never nil.
@@ -139,6 +146,19 @@ func (s *Service) OpenPrivateChat(ctx context.Context, targetID uuid.UUID, actor
 		// Do not leak whether the target exists; the caller maps this to a
 		// generic not-found.
 		return nil, ErrNotFound
+	}
+
+	// A block stops the conversation before it exists. Checked before the
+	// lookup below so the refusal is the same whether or not they have
+	// written to each other before.
+	if s.blocked != nil {
+		blocked, err := s.blocked(ctx, actor.UserID, targetID)
+		if err != nil {
+			return nil, err
+		}
+		if blocked {
+			return nil, ErrBlocked
+		}
 	}
 
 	if existing, err := s.repo.FindByPair(ctx, s.pool, actor.UserID, targetID); err == nil {

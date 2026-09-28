@@ -363,7 +363,7 @@ func (r *PostgresRepository) Search(ctx context.Context, q db.DBTX, actorID uuid
 	rows, err := q.Query(ctx, `SELECT`+userColumns+`
 		FROM users
 		WHERE is_active = true AND (role_id IS NULL OR role_id >= $1) AND id <> $2
-		  AND ($3 = '' OR username LIKE $3 || '%')
+		  AND ($3 = '' OR username LIKE $3 || '%')`+notBlockedUser("$2")+`
 		ORDER BY username ASC
 		LIMIT $4`, actorLevel, actorID, query, limit)
 	if err != nil {
@@ -396,7 +396,7 @@ func (r *PostgresRepository) searchByFullName(
 	rows, err := q.Query(ctx, `SELECT`+userColumns+`
 		FROM users
 		WHERE is_active = true AND id <> $1
-		  AND (username = $2 OR display_name_key = kisy_display_name_key($2))
+		  AND (username = $2 OR display_name_key = kisy_display_name_key($2))`+notBlockedUser("$1")+`
 		ORDER BY username ASC
 		LIMIT $3`, actorID, needle, limit)
 	if err != nil {
@@ -444,4 +444,16 @@ func (r *PostgresRepository) ResetLoginFailures(ctx context.Context, q db.DBTX, 
 		return fmt.Errorf("users: reset login failures: %w", err)
 	}
 	return nil
+}
+
+// notBlockedUser hides accounts the viewer blocked and accounts that blocked
+// the viewer: found by neither side, in either direction (audit E-02). The
+// argument is the SQL placeholder holding the viewer's id.
+func notBlockedUser(viewer string) string {
+	return `
+		AND NOT EXISTS (
+			SELECT 1 FROM user_blocks b
+			WHERE (b.blocker_id = ` + viewer + ` AND b.blocked_id = users.id)
+			   OR (b.blocked_id = ` + viewer + ` AND b.blocker_id = users.id)
+		)`
 }

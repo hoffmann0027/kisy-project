@@ -35,6 +35,7 @@ import type {
   Post,
   PostPage,
   FeedSort,
+  BlockedUser,
   PostPolicy,
   Quarantine,
   IceConfig,
@@ -98,6 +99,10 @@ export const authApi = {
 export const usersApi = {
   // quarantine comes with the account while a new one is still held back.
   me: () => apiClient.get<{ user: User; quarantine?: Quarantine }>("/users/me"),
+  // Blocking someone. One-sided and silent: the other side is never told.
+  blocks: () => apiClient.get<{ blocks: BlockedUser[] }>("/users/me/blocks"),
+  block: (userId: string) => apiClient.post<{ blocked: boolean }>(`/users/${userId}/block`),
+  unblock: (userId: string) => apiClient.del<{ blocked: boolean }>(`/users/${userId}/block`),
   // Deleting your own account: the password is re-checked server-side and the
   // word is typed out, because nothing about this can be undone.
   deleteAccount: (password: string, confirm: string) =>

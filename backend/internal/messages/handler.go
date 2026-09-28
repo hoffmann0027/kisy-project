@@ -483,6 +483,8 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "cannot forward to a broader audience")
 	case errors.Is(err, ErrForwardEncrypted):
 		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrValidationFailed, "encrypted messages are forwarded from the app")
+	case errors.Is(err, ErrBlocked):
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrBlockedByUser, "Пользователь ограничил переписку")
 	case errors.Is(err, ErrForbidden):
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "not permitted")
 	case errors.Is(err, ErrNotFound):

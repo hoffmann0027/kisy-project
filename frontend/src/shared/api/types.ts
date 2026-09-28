@@ -23,6 +23,14 @@ export interface Quarantine {
   maxUploadBytes: number;
 }
 
+/** Одна запись в списке заблокированных (E-02). */
+export interface BlockedUser {
+  userId: string;
+  createdAt: string;
+  /** Профиль, если сервер смог его отдать. */
+  user?: User;
+}
+
 export interface User {
   id: string;
   username: string;

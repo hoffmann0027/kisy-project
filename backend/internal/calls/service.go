@@ -39,6 +39,9 @@ type Service struct {
 	access  ChatAccess
 	profile ProfileLookup
 	rate    RateGuard
+	// blocked reports whether the two have blocked each other; a blocked pair
+	// never rings.
+	blocked func(ctx context.Context, a, b uuid.UUID) (bool, error)
 	audit   audit.Recorder
 	ice     ICESettings
 	log     *slog.Logger
@@ -68,6 +71,11 @@ func (s *Service) SetPusher(p CallPusher) { s.pusher = p }
 
 // SetProfileLookup wires caller-identity enrichment for the ringing UI.
 func (s *Service) SetProfileLookup(p ProfileLookup) { s.profile = p }
+
+// SetBlockCheck wires the block lookup (internal/blocks).
+func (s *Service) SetBlockCheck(f func(ctx context.Context, a, b uuid.UUID) (bool, error)) {
+	s.blocked = f
+}
 
 // SetRateGuard wires per-caller invite rate limiting.
 func (s *Service) SetRateGuard(g RateGuard) { s.rate = g }
@@ -110,6 +118,17 @@ func (s *Service) onInvite(ctx context.Context, actor Actor, data json.RawMessag
 	// as messaging). Reject cross-chat/unauthorized invites.
 	if err := s.ensurePair(ctx, p.ChatID, actor.UserID, p.ToUserID); err != nil {
 		return err
+	}
+	// A blocked pair does not ring. Refused like any other unauthorized
+	// invite: the caller learns nothing about who blocked whom.
+	if s.blocked != nil {
+		blocked, err := s.blocked(ctx, actor.UserID, p.ToUserID)
+		if err != nil {
+			return err
+		}
+		if blocked {
+			return ErrForbidden
+		}
 	}
 
 	if s.busyOnLiveCall(ctx, actor.UserID) {

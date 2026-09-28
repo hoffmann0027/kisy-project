@@ -301,7 +301,7 @@ func TestRestoreBringsEverythingBackAndLeavesOneWarningToGo(t *testing.T) {
 	if member, _ := e.groups.IsMember(ctx, c, e.reader); !member {
 		t.Fatal("members must come back with it")
 	}
-	wall, _ := repo.ListByCommunity(ctx, e.pool, c, time.Time{}, 10)
+	wall, _ := repo.ListByCommunity(ctx, e.pool, c, uuid.New(), time.Time{}, 10)
 	if len(wall) != 1 {
 		t.Fatal("posts must come back with it")
 	}

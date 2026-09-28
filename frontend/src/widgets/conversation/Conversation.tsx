@@ -11,6 +11,7 @@ import { ChatPanel } from "./ChatPanel";
 import { ForwardModal, type ForwardTarget } from "@features/forward/ForwardModal";
 import { MuteMenu } from "@features/notif-prefs/MuteMenu";
 import { DisappearMenu } from "@features/disappear/DisappearMenu";
+import { BlockButton } from "@features/blocks/BlockButton";
 import { useSetMessageExpiry } from "@entities/chat/disappearing";
 import { useBackHandler } from "@shared/lib/backStack";
 import type { Attachment, ChatMediaItem, ChatType, Message } from "@shared/api/types";
@@ -412,6 +413,9 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
         <div className={cn("conv__actions", actionsOpen && "conv__actions--open")}>
           <DisappearMenu chatType={chatType} chatId={chatId} />
           <MuteMenu chatType={chatType} chatId={chatId} />
+          {chatType === "private" && target.peerUserId && (
+            <BlockButton userId={target.peerUserId} name={target.title} />
+          )}
           <button
             className={cn("conv__panel-toggle", panelOpen && "conv__panel-toggle--active")}
             title="Медиа, файлы и ссылки"

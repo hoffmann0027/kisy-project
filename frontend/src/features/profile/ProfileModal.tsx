@@ -5,6 +5,7 @@ import { roleLabel } from "@shared/api/types";
 import { authApi, usersApi } from "@shared/api/endpoints";
 import { useAuthStore } from "@shared/store/auth";
 import { DeleteAccountDialog } from "./DeleteAccountDialog";
+import { BlockedList } from "@features/blocks/BlockedList";
 import { disablePush, enablePush, pushEnabled, pushSupported } from "@shared/lib/push";
 import { useNotificationSettings, useUpdateNotificationSettings } from "@entities/notif-prefs/queries";
 import type { GroupNotifyMode } from "@shared/api/endpoints";
@@ -182,6 +183,8 @@ export function ProfileModal({ open, onClose }: Props) {
       {permissionsOpen && <PermissionsModal open onClose={() => setPermissionsOpen(false)} />}
 
       <NotificationSettingsSection />
+
+      <BlockedList />
 
       <Button variant="danger" block onClick={() => void logout()}>
         Выйти из аккаунта

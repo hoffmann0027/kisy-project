@@ -503,3 +503,49 @@ input[type="radio"] {
   gap: var(--space-2);
   margin-top: var(--space-4);
 }
+
+/* Диалог блокировки: тот же язык, что у удаления аккаунта, — сначала
+   говорим, что изменится, и только потом кнопка. */
+.block-dialog__text {
+  margin: 0 0 var(--space-2);
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+.block-dialog__list {
+  margin: 0 0 var(--space-3);
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.block-dialog__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.blocked-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.blocked-list__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.blocked-list__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}

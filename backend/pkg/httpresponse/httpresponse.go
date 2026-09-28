@@ -48,6 +48,9 @@ const (
 	ErrDisplayNameInvalid = "DISPLAY_NAME_INVALID"
 	// Cloudflare Turnstile on sign-up: the token was missing or rejected (403),
 	// or the check could not be made (503).
+	// ErrBlockedByUser: one of the two has blocked the other (internal/blocks).
+	// The wording never says which side did it.
+	ErrBlockedByUser = "BLOCKED"
 	// ErrQuarantineActive: a freshly self-registered account may not do this
 	// yet (internal/quarantine).
 	ErrQuarantineActive   = "QUARANTINE_ACTIVE"

@@ -21,9 +21,10 @@ type Repository interface {
 	Get(ctx context.Context, q db.DBTX, id uuid.UUID) (*Post, error)
 	SoftDelete(ctx context.Context, q db.DBTX, id uuid.UUID, at time.Time) error
 
-	// ListByCommunity returns one community's wall, newest first. `before` is
+	// ListByCommunity returns one community's wall for viewerID, newest first.
+	// Posts of blocked accounts are left out. `before` is
 	// the created_at of the last post already shown (zero for the first page).
-	ListByCommunity(ctx context.Context, q db.DBTX, communityID uuid.UUID, before time.Time, limit int) ([]Post, error)
+	ListByCommunity(ctx context.Context, q db.DBTX, communityID, viewerID uuid.UUID, before time.Time, limit int) ([]Post, error)
 	// ListNewest returns the chronological feed across the public communities
 	// this viewer may see.
 	ListNewest(ctx context.Context, q db.DBTX, viewerID uuid.UUID, viewerLevel int, before time.Time, limit int) ([]Post, error)
@@ -75,6 +76,16 @@ const postColumns = `id, community_id, author_id, text, created_at, updated_at`
 // stay on its own wall, where its editors may keep publishing, and only the
 // shared feed leaves them out). Both are decided here, in SQL, so no reader's
 // client ever receives a muted post to hide.
+// notBlocked hides the posts of anyone the viewer blocked, and of anyone who
+// blocked the viewer: a block ends the relationship both ways, and the person
+// who blocked should not keep seeing what they blocked. $1 is the viewer.
+const notBlocked = `
+	AND NOT EXISTS (
+		SELECT 1 FROM user_blocks b
+		WHERE (b.blocker_id = $1 AND b.blocked_id = p.author_id)
+		   OR (b.blocked_id = $1 AND b.blocker_id = p.author_id)
+	)`
+
 const visibleCommunity = `
 	g.kind = 'community' AND g.is_public = true AND g.is_archived = false
 	AND g.deleted_at IS NULL
@@ -83,7 +94,7 @@ const visibleCommunity = `
 	AND NOT EXISTS (
 		SELECT 1 FROM feed_hidden_communities h
 		WHERE h.user_id = $1 AND h.group_id = g.id
-	)`
+	)` + notBlocked
 
 // mutedNow is true while the community g has a live mute: not revoked, and
 // either indefinite or not yet expired. Shared by the feed pages and the
@@ -159,14 +170,14 @@ func scanPosts(rows pgx.Rows) ([]Post, error) {
 }
 
 func (r *PostgresRepository) ListByCommunity(
-	ctx context.Context, q db.DBTX, communityID uuid.UUID, before time.Time, limit int,
+	ctx context.Context, q db.DBTX, communityID, viewerID uuid.UUID, before time.Time, limit int,
 ) ([]Post, error) {
 	rows, err := q.Query(ctx, `
-		SELECT `+postColumns+` FROM posts
-		WHERE community_id = $1 AND deleted_at IS NULL
-		  AND ($2::timestamptz IS NULL OR created_at < $2)
-		ORDER BY created_at DESC, id DESC
-		LIMIT $3`, communityID, nullTime(before), limit)
+		SELECT `+prefixed(postColumns, "p")+` FROM posts p
+		WHERE p.community_id = $2 AND p.deleted_at IS NULL
+		  AND ($3::timestamptz IS NULL OR p.created_at < $3)`+notBlocked+`
+		ORDER BY p.created_at DESC, p.id DESC
+		LIMIT $4`, viewerID, communityID, nullTime(before), limit)
 	if err != nil {
 		return nil, fmt.Errorf("posts: list by community: %w", err)
 	}

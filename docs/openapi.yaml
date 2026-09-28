@@ -510,6 +510,65 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /users/me/blocks:
+    get:
+      tags: [users]
+      summary: The people this account has blocked
+      responses:
+        '200':
+          description: Blocked accounts, newest first
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          blocks:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                userId: { type: string, format: uuid }
+                                createdAt: { type: string, format: date-time }
+                                user: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /users/{userID}/block:
+    parameters:
+      - name: userID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [users]
+      summary: Block this account
+      description: >
+        One-sided and silent: the blocked person is never told, and refusals
+        elsewhere never say which side did the blocking. While a block is in
+        place neither may write to or call the other, and neither appears in
+        the other's feed or people search (audit E-02).
+      responses:
+        '200':
+          description: Blocked (blocking twice is not an error)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      tags: [users]
+      summary: Lift the block
+      responses:
+        '200':
+          description: Block lifted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /users/directory:
     get:
       tags: [users]

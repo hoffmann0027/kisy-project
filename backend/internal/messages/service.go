@@ -123,10 +123,18 @@ type Service struct {
 	attachLink AttachmentLinker
 	attachLoad AttachmentLoader
 	ttl        DisappearTTL
+	// blocked reports whether the private chat's two sides have blocked each
+	// other; a blocked pair may not write, in either direction.
+	blocked func(ctx context.Context, chatID, senderID uuid.UUID) (bool, error)
 	// sendGate runs before a message is sent (REST or WebSocket) or forwarded;
 	// its error refuses the send. The per-account rate limit lives here, so
 	// both transports draw on one budget. Nil: no gate.
 	sendGate func(ctx context.Context, actor ActorMeta) error
+}
+
+// SetBlockCheck wires the block lookup for private chats (internal/blocks).
+func (s *Service) SetBlockCheck(f func(ctx context.Context, chatID, senderID uuid.UUID) (bool, error)) {
+	s.blocked = f
 }
 
 // SetSendGate wires the check every Send and Forward passes first.
@@ -215,12 +223,26 @@ func (s *Service) authorize(ctx context.Context, chatType string, chatID uuid.UU
 }
 
 // authorizeWrite checks the actor may POST to the target chat. For groups it
-// applies the post policy (GroupPost); private chats are unchanged.
+// applies the post policy (GroupPost); a private chat additionally stops when
+// one of its two has blocked the other — in either direction, because a block
+// ends the conversation rather than muting one side of it.
 func (s *Service) authorizeWrite(ctx context.Context, chatType string, chatID uuid.UUID, actor ActorMeta) error {
 	if chatType == ChatGroup && s.authz.GroupPost != nil {
 		return s.authz.GroupPost(ctx, chatID, actor.UserID, actor.RoleLevel)
 	}
-	return s.authorize(ctx, chatType, chatID, actor)
+	if err := s.authorize(ctx, chatType, chatID, actor); err != nil {
+		return err
+	}
+	if chatType == ChatPrivate && s.blocked != nil {
+		blocked, err := s.blocked(ctx, chatID, actor.UserID)
+		if err != nil {
+			return err
+		}
+		if blocked {
+			return ErrBlocked
+		}
+	}
+	return nil
 }
 
 // SendInput is validated by the handler. A message body is either Text

@@ -217,6 +217,9 @@ func newRouter(d routerDeps) http.Handler {
 
 			r.Route("/users", func(r chi.Router) {
 				m.usersHandler.Routes(r)
+				// Blocking lives under the person it is about:
+				// /users/{id}/block, /users/me/blocks.
+				m.blocksHandler.Routes(r)
 			})
 
 			r.Route("/invites", func(r chi.Router) {

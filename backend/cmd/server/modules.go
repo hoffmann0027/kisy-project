@@ -19,6 +19,7 @@ import (
 	"kisy-backend/internal/auth"
 	"kisy-backend/internal/auth/token"
 	"kisy-backend/internal/avatars"
+	"kisy-backend/internal/blocks"
 	"kisy-backend/internal/boards"
 	"kisy-backend/internal/bootstrap"
 	"kisy-backend/internal/calendar"
@@ -97,6 +98,7 @@ type modules struct {
 	wsHandler            *ws.Handler
 	hub                  *ws.Hub
 	limiter              *ratelimit.Limiter
+	blocksHandler        *blocks.Handler
 	accountLimits        *ratelimit.Accounts
 }
 
@@ -948,6 +950,19 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		return ws.Authenticated{UserID: claims.UserID, SessionID: claims.SessionID, RoleLevel: claims.RoleLevel}, true
 	}, cfg.WSAllowedOrigin, cfg.NativeAppOrigins...)
 
+	// Blocking someone: one service, applied wherever two accounts meet.
+	blocksSvc := blocks.NewService(pool, auditRec)
+	blocksHandler := blocks.NewHandler(blocksSvc, func(r *http.Request) (blocks.ActorMeta, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return blocks.ActorMeta{}, false
+		}
+		m := authHandler.ClientMeta(r)
+		return blocks.ActorMeta{UserID: claims.UserID, SessionID: claims.SessionID, IPHash: m.IPHash, RequestID: m.RequestID}, true
+	})
+	blocksHandler.SetProfileLoader(usersProfile)
+	wireBlocks(blocksSvc, chatsSvc, messagesSvc, callsSvc)
+
 	// Deleting your own account: the password is re-checked through the auth
 	// service, the sockets are closed once it is gone, and its files leave the
 	// object store with it.
@@ -1003,6 +1018,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		wsHandler:            wsHandler,
 		hub:                  hub,
 		limiter:              limiter,
+		blocksHandler:        blocksHandler,
 		accountLimits:        accountLimits,
 	}, nil
 }

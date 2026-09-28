@@ -73,6 +73,11 @@ func (h *Handler) open(w http.ResponseWriter, r *http.Request) {
 	if quarantine.Write(w, r, err) {
 		return
 	}
+	if errors.Is(err, ErrBlocked) {
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrBlockedByUser,
+			"Пользователь ограничил переписку")
+		return
+	}
 	switch {
 	case errors.Is(err, ErrSelfChat):
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "cannot open a chat with yourself")

@@ -10,8 +10,11 @@ import (
 )
 
 var (
-	ErrNotFound     = errors.New("messages: not found")
-	ErrForbidden    = errors.New("messages: not permitted")
+	ErrNotFound  = errors.New("messages: not found")
+	ErrForbidden = errors.New("messages: not permitted")
+	// ErrBlocked: the two sides of this private chat have blocked each other
+	// (internal/blocks). Never says which side did it.
+	ErrBlocked      = errors.New("messages: blocked")
 	ErrEmptyContent = errors.New("messages: message has no content")
 	ErrBadChatType  = errors.New("messages: unknown chat type")
 	// ErrForwardBroadens rejects a forward whose target audience is broader

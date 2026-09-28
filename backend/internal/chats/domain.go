@@ -10,6 +10,9 @@ import (
 )
 
 var (
+	// ErrBlocked: one of the two has blocked the other. The message the client
+	// shows never says which.
+	ErrBlocked        = errors.New("chats: blocked")
 	ErrNotFound       = errors.New("chats: not found")
 	ErrNotParticipant = errors.New("chats: actor is not a participant")
 	ErrCannotInitiate = errors.New("chats: clearance does not permit initiating this chat")

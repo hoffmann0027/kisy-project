@@ -1,0 +1,43 @@
+import { Avatar, Button, toast } from "@shared/ui";
+import { useBlocks, useSetBlocked } from "@entities/block/queries";
+
+// The list of people this account has blocked, in profile settings. Empty for
+// most people — so it says nothing at all rather than showing an empty box.
+
+export function BlockedList() {
+  const blocks = useBlocks();
+  const setBlocked = useSetBlocked();
+
+  if (blocks.length === 0) return null;
+
+  return (
+    <div className="profile-section">
+      <div className="profile-section__label">Заблокированные ({blocks.length})</div>
+      <ul className="blocked-list">
+        {blocks.map((b) => {
+          const name = b.user?.displayName ?? b.user?.username ?? "Пользователь";
+          return (
+            <li key={b.userId} className="blocked-list__row">
+              <Avatar name={name} url={b.user?.avatarUrl ?? null} size={32} />
+              <span className="blocked-list__name">{name}</span>
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  setBlocked.mutate(
+                    { userId: b.userId, blocked: false },
+                    {
+                      onSuccess: () => toast.success("Пользователь разблокирован"),
+                      onError: () => toast.error("Не удалось разблокировать"),
+                    },
+                  )
+                }
+              >
+                Разблокировать
+              </Button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
