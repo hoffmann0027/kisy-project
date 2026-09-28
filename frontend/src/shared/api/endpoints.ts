@@ -36,6 +36,7 @@ import type {
   PostPage,
   FeedSort,
   PostPolicy,
+  Quarantine,
   IceConfig,
   Invitation,
   LevelCondition,
@@ -95,7 +96,8 @@ export const authApi = {
 };
 
 export const usersApi = {
-  me: () => apiClient.get<{ user: User }>("/users/me"),
+  // quarantine comes with the account while a new one is still held back.
+  me: () => apiClient.get<{ user: User; quarantine?: Quarantine }>("/users/me"),
   updateUsername: (username: string) => apiClient.patch<{ user: User }>("/users/me", { username }),
   updateProfile: (fields: { displayName?: string; username?: string }) =>
     apiClient.patch<{ user: User }>("/users/me", fields),

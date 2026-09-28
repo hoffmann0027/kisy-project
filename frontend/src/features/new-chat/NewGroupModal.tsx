@@ -4,6 +4,7 @@ import { ROLE_LABELS, type Group, type GroupKind } from "@shared/api/types";
 import { useCreateGroup } from "@entities/group/queries";
 import { useAuthStore } from "@shared/store/auth";
 import { useCapabilities } from "@shared/lib/useCapabilities";
+import { heldBackNotice } from "@shared/lib/quarantine";
 
 interface Props {
   open: boolean;
@@ -21,12 +22,19 @@ export function NewGroupModal({ open, onClose, onCreated }: Props) {
   // Only ever consulted for an account that has a level (see below).
   const [minRoleLevel, setMinRoleLevel] = useState(myLevel ?? 10);
   const create = useCreateGroup();
+  // A brand-new account may not found a community yet (ordinary groups are
+  // unaffected — see internal/quarantine).
+  const heldCommunity = heldBackNotice(useAuthStore((s) => s.quarantine), "Создание сообществ откроется");
 
   // A user may only create a group whose minimum clearance is their own
   // level or weaker (numerically >= their level).
   const levelOptions = Object.entries(ROLE_LABELS).filter(([lvl]) => Number(lvl) >= (myLevel ?? 1));
 
   const submit = () => {
+    if (kind === "community" && heldCommunity) {
+      toast.error(heldCommunity);
+      return;
+    }
     if (name.trim().length < 1) {
       toast.error(kind === "community" ? "Введите название сообщества" : "Введите название группы");
       return;
@@ -71,6 +79,9 @@ export function NewGroupModal({ open, onClose, onCreated }: Props) {
             ? "Группа — общий чат: писать могут все участники."
             : "Сообщество — стена с постами: публикуют владельцы и редакторы, остальные читают и ставят реакции. Обсуждение можно включить позже в настройках."}
         </span>
+        {kind === "community" && heldCommunity && (
+          <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{heldCommunity}</span>
+        )}
       </div>
 
       <Input

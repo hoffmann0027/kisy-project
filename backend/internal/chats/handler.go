@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"kisy-backend/internal/platform/ratelimit"
+	"kisy-backend/internal/quarantine"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
 )
@@ -67,6 +68,9 @@ func (h *Handler) open(w http.ResponseWriter, r *http.Request) {
 
 	chat, err := h.svc.OpenPrivateChat(r.Context(), targetID, actor)
 	if ratelimit.WriteIfLimited(w, r, err) {
+		return
+	}
+	if quarantine.Write(w, r, err) {
 		return
 	}
 	switch {

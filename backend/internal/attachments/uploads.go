@@ -52,6 +52,10 @@ func (s *Service) InitUpload(ctx context.Context, uploader uuid.UUID, roleLevel 
 	if declaredBytes > s.limits.MaxBytesFor(roleLevel) {
 		return SessionDTO{}, ErrTooLarge
 	}
+	// Refused before any chunk travels, not at completion.
+	if err := s.quarantine.AllowUpload(ctx, uploader, declaredBytes); err != nil {
+		return SessionDTO{}, err
+	}
 	// Meta shape is validated now; kind/media cross-checks happen at
 	// complete, once the real MIME is known. Fail fast on garbage.
 	if err := meta.validateShape(); err != nil {

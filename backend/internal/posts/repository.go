@@ -33,7 +33,9 @@ type Repository interface {
 
 	// ScoreInputs returns what the popularity formula needs for every post in
 	// the scoring window (docs/spec/07-business-logic.md).
-	ScoreInputs(ctx context.Context, q db.DBTX, since time.Time) ([]ScoreInput, error)
+	// newAccountHold: reactions from basic accounts younger than this do not
+	// count towards popularity (internal/quarantine). Zero counts them all.
+	ScoreInputs(ctx context.Context, q db.DBTX, since time.Time, newAccountHold time.Duration) ([]ScoreInput, error)
 
 	MediaFor(ctx context.Context, q db.DBTX, postIDs []uuid.UUID) (map[uuid.UUID][]Media, error)
 	ReactionsFor(ctx context.Context, q db.DBTX, postIDs []uuid.UUID, viewerID uuid.UUID) (map[uuid.UUID][]ReactionSummary, error)
@@ -219,23 +221,30 @@ func (r *PostgresRepository) ByIDsVisible(
 	return ordered, nil
 }
 
-func (r *PostgresRepository) ScoreInputs(ctx context.Context, q db.DBTX, since time.Time) ([]ScoreInput, error) {
+func (r *PostgresRepository) ScoreInputs(ctx context.Context, q db.DBTX, since time.Time, newAccountHold time.Duration) ([]ScoreInput, error) {
 	// COUNT(DISTINCT user_id) counts people, which is what the formula is
 	// about (docs/spec/07-business-logic.md). Since migration 45 a person has
 	// at most one reaction per post, so this equals COUNT(rx.id) — kept
 	// DISTINCT so the ranking does not silently depend on that constraint.
 	rows, err := q.Query(ctx, `
 		SELECT p.id,
-		       COUNT(DISTINCT rx.user_id) AS reactors,
+		       COUNT(DISTINCT rx.user_id) FILTER (
+		           WHERE $2 <= 0
+		              OR ru.role_id IS NOT NULL
+		              OR ru.created_at <= now() - make_interval(secs => $2)
+		       ) AS reactors,
 		       EXTRACT(EPOCH FROM (now() - p.created_at)) AS age_seconds
 		FROM posts p
 		JOIN groups g ON g.id = p.community_id
 		LEFT JOIN reactions rx ON rx.post_id = p.id
+		-- A quarantined account's reaction is kept and shown, but weighs
+		-- nothing here: a pile of fresh accounts must not lift a post.
+		LEFT JOIN users ru ON ru.id = rx.user_id
 		WHERE p.deleted_at IS NULL
 		  AND g.kind = 'community' AND g.is_public = true AND g.is_archived = false
 		  AND g.deleted_at IS NULL AND NOT `+mutedNow+`
 		  AND p.created_at >= $1
-		GROUP BY p.id, p.created_at`, since)
+		GROUP BY p.id, p.created_at`, since, newAccountHold.Seconds())
 	if err != nil {
 		return nil, fmt.Errorf("posts: score inputs: %w", err)
 	}

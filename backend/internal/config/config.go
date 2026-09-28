@@ -105,6 +105,10 @@ type Config struct {
 	// AccountRates are the per-account rate limits (RATE_*).
 	AccountRates AccountRateConfig
 
+	// Quarantine holds a freshly self-registered account back for its first
+	// hours (NEW_ACCOUNT_QUARANTINE_HOURS, QUARANTINE_*).
+	Quarantine QuarantineConfig
+
 	// WebSocket caps: sockets per account and per client address (IPv6: /64),
 	// the oldest closed when a new one goes over; inbound frames per second per
 	// socket. Zero disables a cap.
@@ -451,11 +455,22 @@ func Load() (*Config, error) {
 		UploadsPerHourInvited:        rates["RATE_UPLOADS_PER_HOUR_INVITED"],
 	}
 
+	quarantineMB, err := getEnvInt("QUARANTINE_MAX_UPLOAD_MB", 2)
+	if err != nil {
+		return nil, err
+	}
+	if quarantineMB < 0 {
+		return nil, fmt.Errorf("config: QUARANTINE_MAX_UPLOAD_MB must not be negative")
+	}
+	cfg.Quarantine.MaxUploadBytes = int64(quarantineMB) << 20
+
 	for _, v := range []struct {
 		key string
 		def int
 		dst *int
 	}{
+		{"NEW_ACCOUNT_QUARANTINE_HOURS", 24, &cfg.Quarantine.Hours},
+		{"QUARANTINE_DM_LIMIT", 20, &cfg.Quarantine.NewChatsPerDay},
 		{"WS_MAX_CONNS_PER_USER", 3, &cfg.WSMaxConnsPerUser},
 		{"WS_MAX_CONNS_PER_IP", 10, &cfg.WSMaxConnsPerIP},
 		{"WS_MAX_FRAMES_PER_SEC", 30, &cfg.WSMaxFramesPerSec},
@@ -815,4 +830,13 @@ func loadTurnstile(env string) TurnstileConfig {
 		}
 	}
 	return t
+}
+
+// QuarantineConfig is the hold on a freshly self-registered account
+// (internal/quarantine). Hours 0 switches the quarantine off entirely; each
+// other zero switches off one cap. Invited accounts are never held.
+type QuarantineConfig struct {
+	Hours          int
+	NewChatsPerDay int
+	MaxUploadBytes int64
 }

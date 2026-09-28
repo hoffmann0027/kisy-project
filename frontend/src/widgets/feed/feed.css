@@ -251,3 +251,16 @@ button.post__origin {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Shown in place of the composer while a new account is still held back
+   (backend: internal/quarantine). */
+.post-compose__held {
+  margin: 0;
+  padding: 12px;
+  background: var(--chip-bg);
+  border: 1px solid var(--panel-brd);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  text-align: center;
+}

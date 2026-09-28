@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"kisy-backend/internal/access"
+	"kisy-backend/internal/quarantine"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
 )
@@ -254,6 +255,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}, actor)
 	if errors.Is(err, ErrLevelTooHigh) {
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "нельзя создать группу с уровнем доступа выше вашего")
+		return
+	}
+	if quarantine.Write(w, r, err) {
 		return
 	}
 	if err != nil {

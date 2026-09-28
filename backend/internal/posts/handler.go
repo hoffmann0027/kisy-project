@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/quarantine"
 	"kisy-backend/internal/quota"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
@@ -267,6 +268,9 @@ func (h *Handler) write(w http.ResponseWriter, r *http.Request, dto *DTO, err er
 }
 
 func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
+	if quarantine.Write(w, r, err) {
+		return
+	}
 	switch {
 	case errors.Is(err, ErrNotFound):
 		notFound(w, r)

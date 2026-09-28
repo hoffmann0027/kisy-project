@@ -11,6 +11,7 @@ import (
 	"kisy-backend/internal/access"
 	"kisy-backend/internal/audit"
 	"kisy-backend/internal/platform/db"
+	"kisy-backend/internal/quarantine"
 )
 
 // ActorMeta identifies the acting user for permission checks and auditing.
@@ -55,7 +56,12 @@ type Service struct {
 	profiles ProfileLoader
 	changed  ChangePublisher
 	decided  DecisionNotifier
+	// quarantine holds new accounts back from creating communities.
+	quarantine *quarantine.Checker
 }
+
+// SetQuarantine installs the new-account quarantine.
+func (s *Service) SetQuarantine(c *quarantine.Checker) { s.quarantine = c }
 
 func NewService(pool *pgxpool.Pool, repo Repository, rec audit.Recorder) *Service {
 	return &Service{pool: pool, repo: repo, audit: rec}
@@ -264,6 +270,12 @@ func (s *Service) Create(ctx context.Context, in CreateInput, actor ActorMeta) (
 	// asked for one: whatever it sends, the group it creates is open to
 	// everyone. Asking it to pick a level it does not have would be a form
 	// with no valid answer.
+	if in.Kind == KindCommunity {
+		if err := s.quarantine.AllowCommunity(ctx, actor.UserID); err != nil {
+			return nil, err
+		}
+	}
+
 	minLevel := in.MinRoleLevel
 	if !access.HasLevel(actor.RoleLevel) {
 		minLevel = access.NoLevel

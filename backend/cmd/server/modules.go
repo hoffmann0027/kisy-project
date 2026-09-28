@@ -948,6 +948,15 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		return ws.Authenticated{UserID: claims.UserID, SessionID: claims.SessionID, RoleLevel: claims.RoleLevel}, true
 	}, cfg.WSAllowedOrigin, cfg.NativeAppOrigins...)
 
+	wireQuarantine(cfg.Quarantine, pool, usersRepo, heldBack{
+		posts:       postsSvc,
+		groups:      groupsSvc,
+		attachments: attachmentsSvc,
+		notes:       notesSvc,
+		chats:       chatsSvc,
+		users:       usersHandler,
+	})
+
 	return &modules{
 		authHandler:          authHandler,
 		authMW:               authMW,

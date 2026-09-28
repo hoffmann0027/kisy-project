@@ -24,6 +24,7 @@ import (
 	"kisy-backend/internal/access"
 	"kisy-backend/internal/platform/blobstore"
 	"kisy-backend/internal/platform/db"
+	"kisy-backend/internal/quarantine"
 	"kisy-backend/internal/quota"
 )
 
@@ -369,7 +370,12 @@ type Service struct {
 	blobs blobstore.Store
 	// quota bounds what one account may keep in storage (audit A-07).
 	quota *quota.Checker
+	// quarantine caps the size of one file for a new account.
+	quarantine *quarantine.Checker
 }
+
+// SetQuarantine installs the new-account quarantine.
+func (s *Service) SetQuarantine(c *quarantine.Checker) { s.quarantine = c }
 
 func NewService(pool *pgxpool.Pool, repo Repository, limits Limits) *Service {
 	return &Service{pool: pool, repo: repo, limits: limits}
@@ -429,6 +435,9 @@ func (s *Service) Upload(ctx context.Context, fileName string, raw []byte, uploa
 	}
 	if int64(len(raw)) > s.limits.MaxBytesFor(roleLevel) {
 		return DTO{}, ErrTooLarge
+	}
+	if err := s.quarantine.AllowUpload(ctx, uploader, int64(len(raw))); err != nil {
+		return DTO{}, err
 	}
 	return s.store(ctx, fileName, raw, uploader, meta)
 }

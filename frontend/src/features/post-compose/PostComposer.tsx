@@ -3,6 +3,8 @@ import { Button, IconButton, toast } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import { userFacingError } from "@shared/api/envelope";
 import { useCreatePost } from "@entities/post/queries";
+import { useAuthStore } from "@shared/store/auth";
+import { fileTooLargeForNewAccount, heldBackNotice } from "@shared/lib/quarantine";
 
 // Writing a post: text plus up to ten files.
 //
@@ -17,9 +19,20 @@ export function PostComposer({ communityId }: { communityId: string }) {
   const [files, setFiles] = useState<File[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
   const create = useCreatePost();
+  // A brand-new account may not publish yet. Saying so here beats letting
+  // someone write a post and lose it to a refusal on submit.
+  const quarantine = useAuthStore((s) => s.quarantine);
+  const held = heldBackNotice(quarantine, "Публикация постов откроется");
 
   const pick = (list: FileList | null) => {
     if (!list) return;
+    const tooBig = Array.from(list)
+      .map((f) => fileTooLargeForNewAccount(quarantine, f))
+      .find(Boolean);
+    if (tooBig) {
+      toast.error(tooBig);
+      return;
+    }
     const picked = [...files, ...Array.from(list)].slice(0, MAX_FILES);
     if (picked.length < files.length + list.length) {
       toast.error(`Не больше ${MAX_FILES} файлов в одном посте`);
@@ -41,6 +54,10 @@ export function PostComposer({ communityId }: { communityId: string }) {
       },
     );
   };
+
+  if (held) {
+    return <p className="post-compose__held">{held}</p>;
+  }
 
   return (
     <div className="post-compose">

@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"kisy-backend/internal/platform/db"
+	"kisy-backend/internal/quarantine"
 	"kisy-backend/internal/quota"
 )
 
@@ -153,7 +154,12 @@ type Service struct {
 	repo    Repository
 	quota   *quota.Checker
 	maxFile int64
+	// quarantine caps the size of one file for a new account.
+	quarantine *quarantine.Checker
 }
+
+// SetQuarantine installs the new-account quarantine.
+func (s *Service) SetQuarantine(c *quarantine.Checker) { s.quarantine = c }
 
 // SetQuota installs the per-account storage quota (audit A-07).
 func (s *Service) SetQuota(q *quota.Checker) { s.quota = q }
@@ -193,6 +199,9 @@ func (s *Service) CreateFile(ctx context.Context, userID uuid.UUID, fileName, ca
 	}
 	if int64(len(raw)) > s.MaxFileBytes() {
 		return DTO{}, ErrTooLarge
+	}
+	if err := s.quarantine.AllowUpload(ctx, userID, int64(len(raw))); err != nil {
+		return DTO{}, err
 	}
 	caption = strings.TrimSpace(caption)
 	if len([]rune(caption)) > MaxTextLen {

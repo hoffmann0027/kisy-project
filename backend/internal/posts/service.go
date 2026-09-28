@@ -13,6 +13,7 @@ import (
 
 	"kisy-backend/internal/access"
 	"kisy-backend/internal/audit"
+	"kisy-backend/internal/quarantine"
 	"kisy-backend/internal/quota"
 )
 
@@ -81,7 +82,12 @@ type Service struct {
 	ranker      Ranker
 	quota       *quota.Checker
 	maxMedia    int64
+	// held back holds new accounts back from publishing at all.
+	quarantine *quarantine.Checker
 }
+
+// SetQuarantine installs the new-account quarantine.
+func (s *Service) SetQuarantine(c *quarantine.Checker) { s.quarantine = c }
 
 func NewService(pool *pgxpool.Pool, repo Repository, communities Communities, rec audit.Recorder) *Service {
 	return &Service{pool: pool, repo: repo, communities: communities, audit: rec}
@@ -128,6 +134,10 @@ func (s *Service) Create(ctx context.Context, in CreateInput, actor ActorMeta) (
 		if !validMediaKind(m.Kind) {
 			return nil, ErrEmpty
 		}
+	}
+
+	if err := s.quarantine.AllowPost(ctx, actor.UserID); err != nil {
+		return nil, err
 	}
 
 	community, err := s.communities.Resolve(ctx, in.CommunityID, actor)

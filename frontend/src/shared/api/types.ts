@@ -8,6 +8,21 @@
  */
 export type AccountKind = "basic" | "invited";
 
+/**
+ * The hold on a freshly self-registered account (backend: internal/quarantine).
+ * Present in the /users/me response only while it lasts.
+ */
+export interface Quarantine {
+  /** When the hold ends (ISO). */
+  until: string;
+  /** Hours left, rounded up — what the notices show. */
+  hoursLeft: number;
+  /** How many new conversations a day the account may start. */
+  newChatsPerDay: number;
+  /** Largest single file it may upload, in bytes. */
+  maxUploadBytes: number;
+}
+
 export interface User {
   id: string;
   username: string;

@@ -7,6 +7,8 @@ import type { Attachment, Message } from "@shared/api/types";
 import { userFacingError } from "@shared/api/envelope";
 import { fileTypeLabel, formatBytes, uploadFile } from "@entities/attachment/upload";
 import { useUploadLimit } from "@entities/attachment/queries";
+import { useAuthStore } from "@shared/store/auth";
+import { fileTooLargeForNewAccount } from "@shared/lib/quarantine";
 import { useVoiceRecorder } from "@features/voice-message/recorder";
 import { formatDuration, waveformToBase64 } from "@features/voice-message/waveform";
 import { SchedulePicker } from "@features/scheduled/SchedulePicker";
@@ -63,6 +65,8 @@ export function Composer({
   const [fmtOpen, setFmtOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const { data: limit } = useUploadLimit();
+  // A new account has a smaller file ceiling of its own (internal/quarantine).
+  const quarantine = useAuthStore((s) => s.quarantine);
   const recorder = useVoiceRecorder();
   const fileRef = useRef<HTMLInputElement>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
@@ -85,6 +89,13 @@ export function Composer({
     for (const file of Array.from(files)) {
       if (file.size > maxBytes) {
         toast.error(`«${file.name}» больше ${formatBytes(maxBytes)}`);
+        continue;
+      }
+      // A new account has a smaller ceiling of its own; refused here rather
+      // than after the bytes have travelled.
+      const held = fileTooLargeForNewAccount(quarantine, file);
+      if (held) {
+        toast.error(held);
         continue;
       }
       const key = crypto.randomUUID();

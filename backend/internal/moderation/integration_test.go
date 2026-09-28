@@ -205,7 +205,7 @@ func TestMutedCommunityIsLeftOutOfTheFeedUntilItExpires(t *testing.T) {
 		for _, p := range page {
 			inPage = inPage || p.CommunityID == id
 		}
-		inputs, err := repo.ScoreInputs(ctx, e.pool, time.Now().Add(-time.Hour))
+		inputs, err := repo.ScoreInputs(ctx, e.pool, time.Now().Add(-time.Hour), 0)
 		if err != nil {
 			t.Fatal(err)
 		}

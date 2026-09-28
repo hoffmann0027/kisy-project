@@ -307,6 +307,10 @@ paths:
     get:
       tags: [users]
       summary: Return the current user's profile
+      description: >
+        Carries the new-account quarantine while it lasts, so the screens can
+        say what is closed and for how long instead of offering a form that
+        will be refused.
       responses:
         '200':
           description: Current profile
@@ -320,6 +324,21 @@ paths:
                         type: object
                         properties:
                           user: { $ref: '#/components/schemas/User' }
+                          quarantine:
+                            type: object
+                            description: >
+                              Present only while a freshly self-registered
+                              account is held back (NEW_ACCOUNT_QUARANTINE_HOURS):
+                              no posts, no new communities, at most
+                              newChatsPerDay new conversations a day, no file
+                              over maxUploadBytes, and its reactions carry no
+                              weight in the feed ranking. Refusals come back as
+                              403 QUARANTINE_ACTIVE (413 for a file).
+                            properties:
+                              until: { type: string, format: date-time }
+                              hoursLeft: { type: integer }
+                              newChatsPerDay: { type: integer }
+                              maxUploadBytes: { type: integer, format: int64 }
         '401': { $ref: '#/components/responses/Unauthorized' }
     patch:
       tags: [users]

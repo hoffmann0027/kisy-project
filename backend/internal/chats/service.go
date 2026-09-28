@@ -49,6 +49,14 @@ type Service struct {
 	newChatGate func(ctx context.Context, actor ActorMeta) error
 }
 
+// NewChatGate returns the gate in place, so a caller can wrap it. Never nil.
+func (s *Service) NewChatGate() func(ctx context.Context, actor ActorMeta) error {
+	if s.newChatGate == nil {
+		return func(context.Context, ActorMeta) error { return nil }
+	}
+	return s.newChatGate
+}
+
 // SetNewChatGate wires the check a new private conversation must pass.
 func (s *Service) SetNewChatGate(g func(ctx context.Context, actor ActorMeta) error) {
 	s.newChatGate = g
@@ -222,4 +230,10 @@ func (s *Service) IsParticipant(ctx context.Context, chatID, userID uuid.UUID) (
 		return false, err
 	}
 	return chat.HasParticipant(userID), nil
+}
+
+// StartedSince counts the conversations the account opened since a moment —
+// what the new-account quarantine caps per day.
+func (s *Service) StartedSince(ctx context.Context, userID uuid.UUID, since time.Time) (int, error) {
+	return s.repo.CountStartedSince(ctx, s.pool, userID, since)
 }

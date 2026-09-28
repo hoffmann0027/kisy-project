@@ -48,6 +48,9 @@ const (
 	ErrDisplayNameInvalid = "DISPLAY_NAME_INVALID"
 	// Cloudflare Turnstile on sign-up: the token was missing or rejected (403),
 	// or the check could not be made (503).
+	// ErrQuarantineActive: a freshly self-registered account may not do this
+	// yet (internal/quarantine).
+	ErrQuarantineActive   = "QUARANTINE_ACTIVE"
 	ErrCaptchaFailed      = "CAPTCHA_FAILED"
 	ErrCaptchaUnavailable = "CAPTCHA_UNAVAILABLE"
 )

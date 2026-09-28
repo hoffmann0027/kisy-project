@@ -76,7 +76,7 @@ func (s *Service) RecomputeRanking(ctx context.Context) (int, error) {
 	if s.ranker == nil {
 		return 0, nil
 	}
-	inputs, err := s.repo.ScoreInputs(ctx, s.pool, time.Now().Add(-RankingWindow))
+	inputs, err := s.repo.ScoreInputs(ctx, s.pool, time.Now().Add(-RankingWindow), s.quarantine.Policy().Duration)
 	if err != nil {
 		return 0, err
 	}

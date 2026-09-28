@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -17,6 +18,7 @@ type Repository interface {
 	GetByID(ctx context.Context, q db.DBTX, id uuid.UUID) (*PrivateChat, error)
 	FindByPair(ctx context.Context, q db.DBTX, userA, userB uuid.UUID) (*PrivateChat, error)
 	ListForUser(ctx context.Context, q db.DBTX, userID uuid.UUID) ([]PrivateChat, error)
+	CountStartedSince(ctx context.Context, q db.DBTX, userID uuid.UUID, since time.Time) (int, error)
 }
 
 type PostgresRepository struct{}
@@ -81,4 +83,17 @@ func (r *PostgresRepository) ListForUser(ctx context.Context, q db.DBTX, userID 
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// CountStartedSince counts the conversations this account opened since the
+// given moment — how many new people it wrote to (the quarantine cap).
+func (r *PostgresRepository) CountStartedSince(ctx context.Context, q db.DBTX, userID uuid.UUID, since time.Time) (int, error) {
+	var n int
+	err := q.QueryRow(ctx, `
+		SELECT count(*) FROM private_chats
+		WHERE initiated_by = $1 AND created_at >= $2`, userID, since).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("chats: count started: %w", err)
+	}
+	return n, nil
 }

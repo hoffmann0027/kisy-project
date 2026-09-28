@@ -11,8 +11,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/quarantine"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
+	"log/slog"
 )
 
 var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9_]{3,32}$`)
@@ -44,6 +46,14 @@ type Handler struct {
 	avatars  AvatarStore
 	identity func(*http.Request) (Identity, bool)
 	meta     func(*http.Request) ActorMeta
+	// quarantine reports the hold on a new account (nil: not wired).
+	quarantine func(ctx context.Context, userID uuid.UUID) (*quarantine.Status, error)
+}
+
+// SetQuarantine wires the new-account quarantine status reported by /users/me,
+// so the screens can say what is closed and for how long.
+func (h *Handler) SetQuarantine(f func(ctx context.Context, userID uuid.UUID) (*quarantine.Status, error)) {
+	h.quarantine = f
 }
 
 func NewHandler(svc *Service, avatars AvatarStore, identity func(*http.Request) (Identity, bool), meta func(*http.Request) ActorMeta) *Handler {
@@ -99,7 +109,16 @@ func (h *Handler) getMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpresponse.OK(w, r, http.StatusOK, map[string]any{"user": u.ToDTO()})
+	body := map[string]any{"user": u.ToDTO()}
+	if h.quarantine != nil {
+		status, qErr := h.quarantine(r.Context(), id.UserID)
+		if qErr != nil {
+			slog.ErrorContext(r.Context(), "users: quarantine status", "error", qErr)
+		} else if status != nil {
+			body["quarantine"] = status
+		}
+	}
+	httpresponse.OK(w, r, http.StatusOK, body)
 }
 
 type patchMeRequest struct {

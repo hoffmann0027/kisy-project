@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { authApi, usersApi } from "@shared/api/endpoints";
 import { isAuthFailure } from "@shared/api/envelope";
 import { forgetNativePushDevice } from "@shared/lib/nativePush";
-import type { User } from "@shared/api/types";
+import type { Quarantine, User } from "@shared/api/types";
 
 type Status = "loading" | "authenticated" | "anonymous" | "offline";
 
@@ -47,6 +47,12 @@ function claimPage(userId: string): boolean {
 interface AuthState {
   user: User | null;
   status: Status;
+  /**
+   * The hold on this account while it is new (null once it is over, and for
+   * every invited account). The server enforces it; the screens read this to
+   * say what is closed and for how long.
+   */
+  quarantine: Quarantine | null;
   /** Fetches the current session on app start (cookie-based). */
   bootstrap: () => Promise<void>;
   login: (username: string, password: string) => Promise<void>;
@@ -58,6 +64,7 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   status: "loading",
+  quarantine: null,
 
   /**
    * Restores the session on app start.
@@ -72,9 +79,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ status: "loading" });
     for (let attempt = 0; ; attempt++) {
       try {
-        const { user } = await usersApi.me();
+        const { user, quarantine } = await usersApi.me();
         if (!claimPage(user.id)) return;
-        set({ user, status: "authenticated" });
+        set({ user, quarantine: quarantine ?? null, status: "authenticated" });
         return;
       } catch (err) {
         if (isAuthFailure(err)) {
