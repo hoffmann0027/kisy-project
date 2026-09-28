@@ -36,22 +36,28 @@ type Repository interface {
 	ProjectExists(ctx context.Context, q db.DBTX, id uuid.UUID) (bool, error)
 	CreateTask(ctx context.Context, q db.DBTX, projectID uuid.UUID, title string) (uuid.UUID, error)
 
-	GetTask(ctx context.Context, q db.DBTX, id uuid.UUID) (TaskRow, error)
+	// GetTask returns a task only if the caller's clearance can see its
+	// project; otherwise ErrNotFound, which is also what a missing task gives
+	// — the existence of a hidden project is not something to leak.
+	GetTask(ctx context.Context, q db.DBTX, id uuid.UUID, actorLevel int) (TaskRow, error)
 	// ProjectTasksAllDone reports whether a project has at least one task and
 	// every task is done — the trigger to complete the project.
 	ProjectTasksAllDone(ctx context.Context, q db.DBTX, projectID uuid.UUID) (allDone bool, total int, err error)
 	// CompleteProject marks the project done and removes its tasks.
 	CompleteProject(ctx context.Context, q db.DBTX, projectID uuid.UUID) error
 	// ReturnTask sends a task back to the backlog (unassigned, progress 0).
-	ReturnTask(ctx context.Context, q db.DBTX, taskID uuid.UUID) error
+	// actorLevel is the caller's clearance: a task of a project they cannot
+	// see is not theirs to touch (audit A-12).
+	ReturnTask(ctx context.Context, q db.DBTX, taskID uuid.UUID, actorLevel int) error
 	// DeleteTask removes a task outright (CEO override).
 	DeleteTask(ctx context.Context, q db.DBTX, taskID uuid.UUID) error
 	// Assign claims a backlog task for the user (self-assignment). Returns
-	// ErrAlreadyClaimed if the task is not an unassigned backlog task.
-	Assign(ctx context.Context, q db.DBTX, taskID, userID uuid.UUID) error
+	// ErrAlreadyClaimed if the task is not an unassigned backlog task, or if
+	// its project is above the user's clearance (audit A-12).
+	Assign(ctx context.Context, q db.DBTX, taskID, userID uuid.UUID, actorLevel int) error
 	// SetProgress updates progress for the assignee only, flipping status to
 	// done at 100. Returns ErrForbidden if the user is not the assignee.
-	SetProgress(ctx context.Context, q db.DBTX, taskID, userID uuid.UUID, progress int) error
+	SetProgress(ctx context.Context, q db.DBTX, taskID, userID uuid.UUID, progress, actorLevel int) error
 
 	AddFinance(ctx context.Context, q db.DBTX, projectID uuid.UUID, taskID *uuid.UUID, income, expense int64, note *string, createdBy uuid.UUID) error
 	// ListFinance returns ledger entries (scoped to accessible projects) joined
@@ -245,9 +251,40 @@ func (r *PostgresRepository) CreateTask(ctx context.Context, q db.DBTX, projectI
 	return id, nil
 }
 
-func (r *PostgresRepository) GetTask(ctx context.Context, q db.DBTX, id uuid.UUID) (TaskRow, error) {
+// A task belongs to a project, and a project has a clearance threshold: a
+// user of level L sees it while L <= min_level. Assigning yourself a task,
+// moving its progress and returning it are all "touching the project", so they
+// carry the same rule as reading it — before this they carried none at all
+// (audit A-12). Written once here and used by every statement that changes a
+// task.
+const taskVisible = `
+	WHERE EXISTS (
+		SELECT 1 FROM rating_projects p
+		WHERE p.id = t.project_id AND p.min_level >= $2
+	)`
+
+// projectVisible is the same condition as an AND, for a statement that already
+// has a WHERE and holds the level in $3; projectVisibleAt takes the
+// placeholder for statements that number their parameters differently.
+const projectVisible = `
+	AND EXISTS (
+		SELECT 1 FROM rating_projects p
+		WHERE p.id = t.project_id AND p.min_level >= $3
+	)`
+
+func projectVisibleAt(placeholder string) string {
+	return `
+	AND EXISTS (
+		SELECT 1 FROM rating_projects p
+		WHERE p.id = t.project_id AND p.min_level >= ` + placeholder + `
+	)`
+}
+
+func (r *PostgresRepository) GetTask(ctx context.Context, q db.DBTX, id uuid.UUID, actorLevel int) (TaskRow, error) {
 	var t TaskRow
-	err := q.QueryRow(ctx, `SELECT id, project_id, assignee_id, status, progress FROM rating_tasks WHERE id = $1`, id).
+	err := q.QueryRow(ctx, `
+		SELECT t.id, t.project_id, t.assignee_id, t.status, t.progress
+		FROM rating_tasks t`+taskVisible+` AND t.id = $1`, id, actorLevel).
 		Scan(&t.ID, &t.ProjectID, &t.AssigneeID, &t.Status, &t.Progress)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TaskRow{}, ErrNotFound
@@ -258,12 +295,12 @@ func (r *PostgresRepository) GetTask(ctx context.Context, q db.DBTX, id uuid.UUI
 	return t, nil
 }
 
-func (r *PostgresRepository) Assign(ctx context.Context, q db.DBTX, taskID, userID uuid.UUID) error {
+func (r *PostgresRepository) Assign(ctx context.Context, q db.DBTX, taskID, userID uuid.UUID, actorLevel int) error {
 	tag, err := q.Exec(ctx, `
-		UPDATE rating_tasks
+		UPDATE rating_tasks AS t
 		SET assignee_id = $2, status = 'in_progress', updated_at = now()
-		WHERE id = $1 AND assignee_id IS NULL AND status = 'backlog'`,
-		taskID, userID)
+		WHERE t.id = $1 AND t.assignee_id IS NULL AND t.status = 'backlog'`+projectVisible,
+		taskID, userID, actorLevel)
 	if err != nil {
 		return fmt.Errorf("rating: assign: %w", err)
 	}
@@ -294,10 +331,11 @@ func (r *PostgresRepository) CompleteProject(ctx context.Context, q db.DBTX, pro
 	return nil
 }
 
-func (r *PostgresRepository) ReturnTask(ctx context.Context, q db.DBTX, taskID uuid.UUID) error {
+func (r *PostgresRepository) ReturnTask(ctx context.Context, q db.DBTX, taskID uuid.UUID, actorLevel int) error {
 	_, err := q.Exec(ctx, `
-		UPDATE rating_tasks SET assignee_id = NULL, progress = 0, status = 'backlog', updated_at = now()
-		WHERE id = $1`, taskID)
+		UPDATE rating_tasks AS t
+		SET assignee_id = NULL, progress = 0, status = 'backlog', updated_at = now()
+		WHERE t.id = $1`+projectVisibleAt("$2"), taskID, actorLevel)
 	if err != nil {
 		return fmt.Errorf("rating: return task: %w", err)
 	}
@@ -315,14 +353,14 @@ func (r *PostgresRepository) DeleteTask(ctx context.Context, q db.DBTX, taskID u
 	return nil
 }
 
-func (r *PostgresRepository) SetProgress(ctx context.Context, q db.DBTX, taskID, userID uuid.UUID, progress int) error {
+func (r *PostgresRepository) SetProgress(ctx context.Context, q db.DBTX, taskID, userID uuid.UUID, progress, actorLevel int) error {
 	tag, err := q.Exec(ctx, `
-		UPDATE rating_tasks
+		UPDATE rating_tasks AS t
 		SET progress = $3,
 		    status = CASE WHEN $3 >= 100 THEN 'done' ELSE 'in_progress' END,
 		    updated_at = now()
-		WHERE id = $1 AND assignee_id = $2 AND status <> 'backlog'`,
-		taskID, userID, progress)
+		WHERE t.id = $1 AND t.assignee_id = $2 AND t.status <> 'backlog'`+projectVisibleAt("$4"),
+		taskID, userID, progress, actorLevel)
 	if err != nil {
 		return fmt.Errorf("rating: set progress: %w", err)
 	}

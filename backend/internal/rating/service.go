@@ -175,7 +175,7 @@ func (s *Service) CreateTask(ctx context.Context, projectID uuid.UUID, title str
 // "in progress". A user may only assign themselves — the handler passes the
 // actor's own id, so there is no way to assign anyone else.
 func (s *Service) AssignSelf(ctx context.Context, taskID uuid.UUID, actor Actor) error {
-	err := s.repo.Assign(ctx, s.pool, taskID, actor.UserID)
+	err := s.repo.Assign(ctx, s.pool, taskID, actor.UserID, actor.RoleLevel)
 	if err == nil {
 		s.notify()
 	}
@@ -190,7 +190,7 @@ func (s *Service) SetProgress(ctx context.Context, taskID uuid.UUID, progress in
 	if progress < 0 || progress > 100 {
 		return ErrValidation
 	}
-	task, err := s.repo.GetTask(ctx, s.pool, taskID)
+	task, err := s.repo.GetTask(ctx, s.pool, taskID, actor.RoleLevel)
 	if err != nil {
 		return err
 	}
@@ -201,7 +201,7 @@ func (s *Service) SetProgress(ctx context.Context, taskID uuid.UUID, progress in
 	}
 	defer tx.Rollback(ctx)
 
-	if err := s.repo.SetProgress(ctx, tx, taskID, actor.UserID, progress); err != nil {
+	if err := s.repo.SetProgress(ctx, tx, taskID, actor.UserID, progress, actor.RoleLevel); err != nil {
 		return err // ErrForbidden if not the assignee
 	}
 	if progress >= 100 {
@@ -225,7 +225,7 @@ func (s *Service) SetProgress(ctx context.Context, taskID uuid.UUID, progress in
 // ReturnTask sends an in-progress task back to the backlog. The current
 // assignee or the CEO may do this.
 func (s *Service) ReturnTask(ctx context.Context, taskID uuid.UUID, actor Actor) error {
-	task, err := s.repo.GetTask(ctx, s.pool, taskID)
+	task, err := s.repo.GetTask(ctx, s.pool, taskID, actor.RoleLevel)
 	if err != nil {
 		return err
 	}
@@ -233,7 +233,7 @@ func (s *Service) ReturnTask(ctx context.Context, taskID uuid.UUID, actor Actor)
 	if !isAssignee && !actor.isCEO() {
 		return ErrForbidden
 	}
-	err = s.repo.ReturnTask(ctx, s.pool, taskID)
+	err = s.repo.ReturnTask(ctx, s.pool, taskID, actor.RoleLevel)
 	if err == nil {
 		s.notify()
 	}
