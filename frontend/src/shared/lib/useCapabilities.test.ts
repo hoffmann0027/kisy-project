@@ -20,7 +20,6 @@ describe("an account that came through an invitation", () => {
       canVoteLevels: true,
       canSeeConditions: true,
       canAdmin: true,
-      feedPlacement: "hub",
     });
   });
 
@@ -36,7 +35,6 @@ describe("an account that came through an invitation", () => {
     expect(bottom.canSeeRating).toBe(false);
     expect(bottom.isInvited).toBe(true);
     expect(bottom.canSeeConditions).toBe(true);
-    expect(bottom.feedPlacement).toBe("hub");
   });
 });
 
@@ -52,8 +50,8 @@ describe("an account that registered without an invitation", () => {
     });
   });
 
-  it("gets the feed in the tab bar, where the rating board would be", () => {
-    expect(capabilitiesOf(basic).feedPlacement).toBe("tab");
+  it("gets the feed where the rating board would be (see nav.test.ts)", () => {
+    expect(capabilitiesOf(basic).canSeeRating).toBe(false);
   });
 });
 

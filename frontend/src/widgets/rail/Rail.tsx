@@ -1,10 +1,10 @@
-import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@shared/lib/cn";
-import { Avatar, Badge, Button, Logo, Modal } from "@shared/ui";
+import { Avatar, Badge, Logo } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import { useAuthStore } from "@shared/store/auth";
 import { useCapabilities } from "@shared/lib/useCapabilities";
+import { communitiesDestination, ratingOrFeed } from "@shared/lib/nav";
 import { useNotifications } from "@entities/notification/queries";
 import { useChats } from "@entities/chat/queries";
 
@@ -25,20 +25,19 @@ export function Rail({ onProfile }: Props) {
   const { data: chats } = useChats();
   const unread = notif?.unreadCount ?? 0;
   const chatUnread = chats?.reduce((sum, c) => sum + c.unreadCount, 0) ?? 0;
-  const [noClan, setNoClan] = useState(false);
   const caps = useCapabilities();
 
   if (!user) return null;
 
-  const onRating = pathname.startsWith("/rating");
+  // Rating for an account that has a board, the feed for one that has not —
+  // decided in shared/lib/nav.ts so the rail and the tab bar cannot disagree
+  // (audit D-11). The rail used to offer level 10 a Рейтинг button whose only
+  // answer was "you are not in a clan".
+  const third = ratingOrFeed(caps);
   // Groups now live under the "Сообщества" (communities) section; a group route
   // therefore highlights Сообщества, not Чаты.
-  const onCommunities = pathname.startsWith("/communities") || pathname.startsWith("/group/");
-  const onChats = !onRating && !onCommunities;
-  // The rail follows the same rule as the tab bar (docs/spec/02-frontend-ux.md):
-  // one door per destination, and the same destinations on both.
-  const onFeed = pathname.startsWith("/feed");
-  const openRating = () => (caps.canSeeRating ? navigate("/rating") : setNoClan(true));
+  const onCommunities = communitiesDestination.match(pathname);
+  const onChats = !third.match(pathname) && !onCommunities && !pathname.startsWith("/hub");
 
   return (
     <nav className="rail">
@@ -46,15 +45,13 @@ export function Rail({ onProfile }: Props) {
         <Logo size={34} />
       </div>
       <div className="rail__nav">
-        {caps.isInvited ? (
-          <button className={cn("rail__item", onRating && "rail__item--active")} title="Рейтинг" onClick={openRating}>
-            <Icon.Trophy />
-          </button>
-        ) : (
-          <button className={cn("rail__item", onFeed && "rail__item--active")} title="Лента" onClick={() => navigate("/feed")}>
-            <Icon.Board />
-          </button>
-        )}
+        <button
+          className={cn("rail__item", third.match(pathname) && "rail__item--active")}
+          title={third.label}
+          onClick={() => navigate(third.to)}
+        >
+          <third.icon />
+        </button>
         <button className={cn("rail__item", onChats && "rail__item--active")} title="Чаты" onClick={() => navigate("/")}>
           <Icon.Chat />
           {chatUnread > 0 && (
@@ -89,13 +86,6 @@ export function Rail({ onProfile }: Props) {
       <button className="rail__item" title="Выйти" onClick={() => void logout()}>
         <Icon.Logout />
       </button>
-
-      <Modal open={noClan} title="Рейтинг" onClose={() => setNoClan(false)}>
-        <p style={{ margin: 0, color: "var(--color-text-secondary)" }}>Вы не состоите в клане.</p>
-        <Button variant="secondary" onClick={() => setNoClan(false)}>
-          Понятно
-        </Button>
-      </Modal>
     </nav>
   );
 }

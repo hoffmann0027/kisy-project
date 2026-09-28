@@ -27,13 +27,13 @@ export interface Capabilities {
   canVoteLevels: boolean;
   canSeeConditions: boolean;
   canAdmin: boolean;
-  /**
-   * Where the feed lives. A basic account has no rating board, so the feed
-   * takes that place in the tab bar; an invited one keeps the rating there and
-   * reaches the feed from the hub.
-   */
-  feedPlacement: "tab" | "hub";
 }
+
+// Where the feed lives used to be decided here as well (feedPlacement), by a
+// different test than the one the rail used — which is how an invited account
+// at level 10 got the feed twice on the phone and not at all on the desktop.
+// That decision now belongs to shared/lib/nav.ts, next to the destinations
+// themselves (audit D-11).
 
 const anonymous: Capabilities = {
   isInvited: false,
@@ -42,7 +42,6 @@ const anonymous: Capabilities = {
   canVoteLevels: false,
   canSeeConditions: false,
   canAdmin: false,
-  feedPlacement: "tab",
 };
 
 export function capabilitiesOf(user: { accountKind?: string; roleLevel?: number | null } | null): Capabilities {
@@ -61,7 +60,6 @@ export function capabilitiesOf(user: { accountKind?: string; roleLevel?: number 
     canVoteLevels: isInvited,
     canSeeConditions: isInvited,
     canAdmin: isInvited && level === 1,
-    feedPlacement: isInvited ? "hub" : "tab",
   };
 }
 

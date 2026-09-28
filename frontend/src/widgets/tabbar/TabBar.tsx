@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@shared/lib/cn";
 import { Icon } from "@shared/ui/icons";
 import { useCapabilities } from "@shared/lib/useCapabilities";
+import { communitiesDestination, messagesDestination, ratingOrFeed } from "@shared/lib/nav";
 import "./tabbar.css";
 
 // Bottom navigation for the phone layout (design_handoff_kisy_mobile §6): a
@@ -33,38 +34,11 @@ export function TabBar({ onProfile }: Props) {
   const caps = useCapabilities();
 
   const slots: Slot[] = [
-    {
-      key: "messages",
-      label: "Сообщения",
-      icon: Icon.Chat,
-      to: "/",
-      match: (p) => p === "/" || p.startsWith("/chat/"),
-    },
-    {
-      key: "communities",
-      label: "Сообщества",
-      icon: Icon.Community,
-      to: "/communities",
-      match: (p) => p.startsWith("/communities") || p.startsWith("/group/"),
-    },
-    // The third tab is whichever of the two this account actually has. An
-    // account outside the role hierarchy has no rating board — the feed takes
-    // the place rather than leaving a gap or a button that answers 403.
-    caps.canSeeRating
-      ? {
-          key: "rating",
-          label: "Рейтинг",
-          icon: Icon.Trophy,
-          to: "/rating",
-          match: (p) => p.startsWith("/rating"),
-        }
-      : {
-          key: "feed",
-          label: "Лента",
-          icon: Icon.Board,
-          to: "/feed",
-          match: (p) => p.startsWith("/feed"),
-        },
+    messagesDestination,
+    communitiesDestination,
+    // The third tab is whichever of the two this account actually has, decided
+    // in shared/lib/nav.ts together with the desktop rail (audit D-11).
+    ratingOrFeed(caps),
     {
       key: "profile",
       label: "Профиль",

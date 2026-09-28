@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Icon } from "@shared/ui/icons";
 import { useNotifications } from "@entities/notification/queries";
 import { useCapabilities } from "@shared/lib/useCapabilities";
+import { feedLivesInHub } from "@shared/lib/nav";
 import { NotificationsModal } from "@features/notifications/NotificationsModal";
 import { NotesModal } from "@features/notes/NotesModal";
 import { VotingModal } from "@features/voting/VotingModal";
@@ -41,9 +42,9 @@ export function HubPage() {
       ? [{ key: "voting" as const, title: "Голосования", hint: "Опросы команды", icon: Icon.Vote, tint: "orange" }]
       : []),
     // The feed's one door. An account without a rating board reaches it from
-    // the tab bar instead, and then it must not also sit here — one
-    // destination, one door (docs/spec/02-frontend-ux.md).
-    ...(caps.feedPlacement === "hub"
+    // the tab bar and the rail instead, and then it must not also sit here —
+    // one destination, one door (docs/spec/02-frontend-ux.md, audit D-11).
+    ...(feedLivesInHub(caps)
       ? [
           {
             key: "feed" as const,
