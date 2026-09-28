@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"kisy-backend/internal/audit"
+	"kisy-backend/internal/platform/blobstore"
 )
 
 // ProfileBroadcaster pushes a user's updated public profile to an audience of
@@ -22,6 +23,11 @@ type Service struct {
 	repo      Repository
 	audit     audit.Recorder
 	broadcast ProfileBroadcaster
+	// blobs, when set, holds the bytes of uploads; a deleted account's
+	// objects are removed from it (deletion.go).
+	blobs blobstore.Store
+	// onDeleted runs after an account is deleted: closing its sockets.
+	onDeleted func(ctx context.Context, userID uuid.UUID)
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository, rec audit.Recorder) *Service {

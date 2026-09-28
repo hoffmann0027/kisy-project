@@ -340,6 +340,61 @@ paths:
                               newChatsPerDay: { type: integer }
                               maxUploadBytes: { type: integer, format: int64 }
         '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      tags: [users]
+      summary: Delete the current user's own account
+      description: >
+        Erases the account at its owner's request (Google Play "Account
+        deletion", GDPR). The password is re-checked here even though the
+        session is valid, and the word УДАЛИТЬ is typed out: this cannot be
+        undone and there is no grace period.
+
+        What goes: password, sessions, E2EE keys, push tokens, files, notes,
+        settings, reactions, votes, and the text of the private messages this
+        account sent (on the other side too). What stays: its messages in
+        groups and its community posts, shown as "Удалённый аккаунт", and the
+        security journal. Groups and communities it owned pass to the next
+        person in charge, or are deleted when there is nobody left. The login
+        is retired and never reissued.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password, confirm]
+              properties:
+                password: { type: string }
+                confirm:
+                  type: string
+                  enum: [УДАЛИТЬ]
+      responses:
+        '200':
+          description: Account deleted; the session cookies are expired
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          deleted: { type: boolean }
+                          groupsTransferred: { type: integer }
+                          groupsDeleted: { type: integer }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401':
+          description: Wrong password (AUTH_INVALID_CREDENTIALS) or no session
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '403':
+          description: The CEO account cannot delete itself
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+
     patch:
       tags: [users]
       summary: Update the current user's display name and/or username

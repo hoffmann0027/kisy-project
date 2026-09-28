@@ -98,6 +98,13 @@ export const authApi = {
 export const usersApi = {
   // quarantine comes with the account while a new one is still held back.
   me: () => apiClient.get<{ user: User; quarantine?: Quarantine }>("/users/me"),
+  // Deleting your own account: the password is re-checked server-side and the
+  // word is typed out, because nothing about this can be undone.
+  deleteAccount: (password: string, confirm: string) =>
+    apiClient.del<{ deleted: boolean; groupsTransferred: number; groupsDeleted: number }>("/users/me", {
+      password,
+      confirm,
+    }),
   updateUsername: (username: string) => apiClient.patch<{ user: User }>("/users/me", { username }),
   updateProfile: (fields: { displayName?: string; username?: string }) =>
     apiClient.patch<{ user: User }>("/users/me", fields),

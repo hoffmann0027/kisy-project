@@ -15,6 +15,7 @@ import (
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
 	"log/slog"
+	"strings"
 )
 
 var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9_]{3,32}$`)
@@ -48,6 +49,21 @@ type Handler struct {
 	meta     func(*http.Request) ActorMeta
 	// quarantine reports the hold on a new account (nil: not wired).
 	quarantine func(ctx context.Context, userID uuid.UUID) (*quarantine.Status, error)
+	// verifyPassword re-checks the account's password before it is deleted;
+	// endSession expires the auth cookies afterwards. Both nil: DELETE /me
+	// refuses, rather than deleting without re-authentication.
+	verifyPassword func(ctx context.Context, userID uuid.UUID, plaintext string) (bool, error)
+	endSession     func(w http.ResponseWriter)
+}
+
+// SetAccountDeletion wires what DELETE /users/me needs: re-checking the
+// password, and clearing this browser's session once the account is gone.
+func (h *Handler) SetAccountDeletion(
+	verify func(ctx context.Context, userID uuid.UUID, plaintext string) (bool, error),
+	endSession func(w http.ResponseWriter),
+) {
+	h.verifyPassword = verify
+	h.endSession = endSession
 }
 
 // SetQuarantine wires the new-account quarantine status reported by /users/me,
@@ -63,6 +79,7 @@ func NewHandler(svc *Service, avatars AvatarStore, identity func(*http.Request) 
 func (h *Handler) Routes(r chi.Router) {
 	r.Get("/me", h.getMe)
 	r.Patch("/me", h.patchMe)
+	r.Delete("/me", h.deleteMe)
 	r.Post("/me/avatar", h.uploadAvatar)
 	r.Get("/directory", h.directory)
 }
@@ -119,6 +136,77 @@ func (h *Handler) getMe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	httpresponse.OK(w, r, http.StatusOK, body)
+}
+
+// DeleteConfirmation is the word the owner types to delete their account.
+// A second, deliberate action beside the password: the password is proof of
+// who is asking, this is proof that they meant it.
+const DeleteConfirmation = "УДАЛИТЬ"
+
+type deleteMeRequest struct {
+	Password string `json:"password"`
+	Confirm  string `json:"confirm"`
+}
+
+// deleteMe erases the caller's own account (audit E-01). What survives, and
+// why, is in docs/design-account-deletion.md.
+func (h *Handler) deleteMe(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.identity(r)
+	if !ok {
+		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
+		return
+	}
+	if h.verifyPassword == nil {
+		// Nothing wired to re-check the password: refuse rather than delete an
+		// account on the strength of a session cookie alone.
+		httpresponse.Fail(w, r, http.StatusServiceUnavailable, httpresponse.ErrInternal, "account deletion is unavailable")
+		return
+	}
+
+	var req deleteMeRequest
+	if err := httpjson.Decode(w, r, &req); err != nil {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "malformed JSON body")
+		return
+	}
+	if strings.TrimSpace(req.Confirm) != DeleteConfirmation {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed,
+			"подтвердите удаление словом "+DeleteConfirmation)
+		return
+	}
+
+	okPassword, err := h.verifyPassword(r.Context(), id.UserID, req.Password)
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
+		return
+	}
+	if !okPassword {
+		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidCredentials, "неверный пароль")
+		return
+	}
+
+	report, err := h.svc.DeleteOwn(r.Context(), id.UserID, h.meta(r))
+	switch {
+	case errors.Is(err, ErrLastCEO):
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied,
+			"аккаунт владельца удалить нельзя: сначала передайте управление")
+		return
+	case errors.Is(err, ErrNotFound):
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "user not found")
+		return
+	case err != nil:
+		slog.ErrorContext(r.Context(), "users: delete own account", "error", err)
+		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
+		return
+	}
+
+	if h.endSession != nil {
+		h.endSession(w)
+	}
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{
+		"deleted":           true,
+		"groupsTransferred": report.GroupsTransferred,
+		"groupsDeleted":     report.GroupsDeleted,
+	})
 }
 
 type patchMeRequest struct {

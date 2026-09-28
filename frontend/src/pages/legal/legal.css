@@ -1,0 +1,83 @@
+/* Публичные страницы: политика конфиденциальности и удаление аккаунта.
+   Одна колонка, крупный межстрочный интервал — это текст, который читают
+   целиком, а не интерфейс. */
+
+.legal-screen {
+  min-height: 100%;
+  display: flex;
+  justify-content: center;
+  padding: var(--space-5);
+}
+
+.legal-card {
+  width: 100%;
+  max-width: 720px;
+  padding: var(--space-6);
+}
+
+.legal-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: var(--space-6);
+  text-align: center;
+}
+
+.legal-logo {
+  display: block;
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-2);
+}
+
+.legal-title {
+  font-size: 24px;
+  font-weight: 680;
+  margin: 0;
+  letter-spacing: -0.5px;
+}
+
+.legal-subtitle {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+.legal-section {
+  margin-bottom: var(--space-5);
+}
+
+.legal-section__title {
+  font-size: 17px;
+  font-weight: 620;
+  margin: 0 0 var(--space-2);
+}
+
+.legal-text,
+.legal-item {
+  margin: 0 0 10px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+}
+
+.legal-item {
+  padding-left: var(--space-3);
+  color: var(--color-text-secondary);
+}
+
+.legal-foot {
+  margin-top: var(--space-6);
+  text-align: center;
+}
+
+/* Ландшафтный телефон — тоже телефон (docs/mobile.md M5). */
+@media (max-width: 760px), (max-height: 500px) {
+  .legal-card {
+    padding: var(--space-4);
+  }
+  .legal-text,
+  .legal-item {
+    font-size: 15px;
+  }
+}

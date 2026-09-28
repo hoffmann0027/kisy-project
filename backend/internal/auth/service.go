@@ -226,6 +226,17 @@ func (s *Service) Register(ctx context.Context, inviteToken, username, rawDispla
 		return nil, err
 	}
 
+	// A login that belonged to a deleted account is never reissued: old
+	// mentions and links still name it, and they must not resolve to someone
+	// new (E-01).
+	retired, err := users.UsernameRetired(ctx, s.pool, username)
+	if err != nil {
+		return nil, err
+	}
+	if retired {
+		return nil, users.ErrUsernameTaken
+	}
+
 	// No token offered: an ordinary account, outside the role hierarchy.
 	//
 	// A token that was offered and turned out to be bad is a different story
@@ -536,4 +547,19 @@ func (s *Service) ChangePassword(ctx context.Context, userID, currentSessionID u
 	// revocation is still invisible to the handshake.
 	s.kick.KickUser(userID, currentSessionID)
 	return nil
+}
+
+// VerifyPassword reports whether the plaintext is this account's password. It
+// backs the re-authentication that account deletion asks for: a session alone
+// is not enough to destroy the account it belongs to.
+func (s *Service) VerifyPassword(ctx context.Context, userID uuid.UUID, plaintext string) (bool, error) {
+	u, err := s.users.GetByID(ctx, s.pool, userID)
+	if err != nil {
+		return false, err
+	}
+	ok, err := password.Verify(plaintext, u.PasswordHash)
+	if err != nil {
+		return false, err
+	}
+	return ok, nil
 }

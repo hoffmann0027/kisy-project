@@ -4,6 +4,7 @@ import { Button, Input, Modal, VerifiedName, toast } from "@shared/ui";
 import { roleLabel } from "@shared/api/types";
 import { authApi, usersApi } from "@shared/api/endpoints";
 import { useAuthStore } from "@shared/store/auth";
+import { DeleteAccountDialog } from "./DeleteAccountDialog";
 import { disablePush, enablePush, pushEnabled, pushSupported } from "@shared/lib/push";
 import { useNotificationSettings, useUpdateNotificationSettings } from "@entities/notif-prefs/queries";
 import type { GroupNotifyMode } from "@shared/api/endpoints";
@@ -29,6 +30,7 @@ export function ProfileModal({ open, onClose }: Props) {
   const [pushOn, setPushOn] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
   const [permissionsOpen, setPermissionsOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   useEffect(() => {
     if (open && pushSupported()) void pushEnabled().then(setPushOn);
@@ -184,6 +186,18 @@ export function ProfileModal({ open, onClose }: Props) {
       <Button variant="danger" block onClick={() => void logout()}>
         Выйти из аккаунта
       </Button>
+
+      {/* Удаление аккаунта — отдельно от выхода и тише его: это не то, что
+          нажимают по ошибке. Ссылка на политику рядом, как требует Play. */}
+      <div className="profile-legal">
+        <button type="button" className="profile-legal__danger" onClick={() => setDeleteOpen(true)}>
+          Удалить аккаунт
+        </button>
+        <a className="auth-link" href="/privacy" target="_blank" rel="noreferrer">
+          Политика конфиденциальности
+        </a>
+      </div>
+      {deleteOpen && <DeleteAccountDialog open onClose={() => setDeleteOpen(false)} />}
     </Modal>
   );
 }

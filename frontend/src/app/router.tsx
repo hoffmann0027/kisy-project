@@ -8,6 +8,7 @@ import { CallProvider } from "@features/call/CallProvider";
 import { PermissionsOnboarding } from "@features/permissions/PermissionsOnboarding";
 import { TabBar } from "@widgets/tabbar/TabBar";
 import { RouteFallback } from "./RouteFallback";
+import { AccountDeletionPage, PrivacyPage } from "@pages/legal/LegalPage";
 import { lazy, Suspense, useState } from "react";
 
 // Everything below the messenger is loaded on demand. They are whole screens
@@ -71,6 +72,10 @@ export const router = createBrowserRouter([
       </RedirectIfAuth>
     ),
   },
+  // Open to everyone, signed in or not: Google Play points at these two by
+  // URL, and someone who deleted the app must still be able to read them.
+  { path: "/privacy", element: <PrivacyPage /> },
+  { path: "/account-deletion", element: <AccountDeletionPage /> },
   {
     element: <AuthedLayout />,
     children: [

@@ -360,6 +360,11 @@ func (h *Handler) setAuthCookies(w http.ResponseWriter, t TokenPair) {
 	})
 }
 
+// ClearSessionCookies expires the auth cookies. Exported for the one caller
+// outside this package that ends a session without going through /logout:
+// deleting your own account.
+func (h *Handler) ClearSessionCookies(w http.ResponseWriter) { h.clearAuthCookies(w) }
+
 func (h *Handler) clearAuthCookies(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- expiring cookie, Secure=true in production
 		Name: AccessCookieName, Value: "", Path: "/", MaxAge: -1,

@@ -453,3 +453,53 @@ input[type="radio"] {
     animation: none;
   }
 }
+
+/* Удаление аккаунта: вход тише кнопки «Выйти», рядом ссылка на политику
+   (её требует Google Play в самом приложении, не только в листинге). */
+.profile-legal {
+  margin-top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.profile-legal__danger {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  color: var(--color-danger);
+}
+.profile-legal__danger:hover {
+  text-decoration: underline;
+}
+
+.delete-account__lead {
+  margin: 0 0 var(--space-3);
+  font-size: 14px;
+  color: var(--color-danger);
+}
+
+.delete-account__group {
+  margin: var(--space-3) 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.delete-account__list {
+  margin: 0 0 var(--space-2);
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.delete-account__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
