@@ -602,6 +602,24 @@ func loadDBPool() (DBPoolConfig, error) {
 	}, nil
 }
 
+// checkedSecrets maps every variable whose value is compared against
+// knownCompromisedDigests to its effective value. Separate from the loop that
+// uses it so a test can assert that no burned secret is listed in the digest
+// table but left out of the comparison — dropping a line from either side used
+// to be invisible to CI (audit D-08).
+func (c *Config) checkedSecrets() map[string]string {
+	return map[string]string{
+		"JWT_ACCESS_SECRET":      c.JWTAccessSecret,
+		"JWT_REFRESH_SECRET":     c.JWTRefreshSecret,
+		"POSTGRES_PASSWORD":      c.Postgres.Password,
+		"REDIS_PASSWORD":         c.Redis.Password,
+		"IP_HASH_SALT":           c.IPHashSalt,
+		"TURN_SECRET":            c.ICE.TURNSecret,
+		"BOOTSTRAP_CEO_PASSWORD": c.BootstrapCEOPassword,
+		"VAPID_PRIVATE_KEY":      c.VAPIDPrivateKey,
+	}
+}
+
 func sha256Hex(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
@@ -642,20 +660,13 @@ func (c *Config) validateProduction() error {
 	}
 
 	// Secrets that ever left the trusted environment are burned: refuse them.
-	for name, val := range map[string]string{
-		"JWT_ACCESS_SECRET":      c.JWTAccessSecret,
-		"JWT_REFRESH_SECRET":     c.JWTRefreshSecret,
-		"POSTGRES_PASSWORD":      c.Postgres.Password,
-		"REDIS_PASSWORD":         c.Redis.Password,
-		"IP_HASH_SALT":           c.IPHashSalt,
-		"TURN_SECRET":            c.ICE.TURNSecret,
-		"BOOTSTRAP_CEO_PASSWORD": c.BootstrapCEOPassword,
-		"VAPID_PRIVATE_KEY":      c.VAPIDPrivateKey,
-	} {
+	for name, val := range c.checkedSecrets() {
 		if val == "" {
 			continue
 		}
-		if origin, burned := knownCompromisedDigests[sha256Hex(val)]; burned {
+		// Trimmed: a dashboard that appended a newline to a pasted value must
+		// not smuggle a burned secret past the digest comparison (audit D-08).
+		if origin, burned := knownCompromisedDigests[sha256Hex(strings.TrimSpace(val))]; burned {
 			problems = append(problems, fmt.Sprintf("%s is a known-compromised value (%s) — rotate it", name, origin))
 		}
 	}
