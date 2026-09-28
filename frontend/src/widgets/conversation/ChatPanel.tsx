@@ -3,6 +3,7 @@
 // thumbnail opens the media viewer over the tab's items.
 import { useState } from "react";
 import { cn } from "@shared/lib/cn";
+import { handleDownloadClick } from "@shared/lib/mediaSrc";
 import { Button } from "@shared/ui";
 import { ApiImage } from "@shared/ui/ApiImage";
 import { Icon } from "@shared/ui/icons";
@@ -101,6 +102,7 @@ export function ChatPanel({ chatType, chatId, onClose, onOpenMedia }: Props) {
                   className="cpanel__file"
                   href={it.attachment.url}
                   download={it.attachment.fileName}
+                  onClick={(e) => handleDownloadClick(e, it.attachment.url, it.attachment.fileName)}
                 >
                   <span className="cpanel__file-type">{fileTypeLabel(it.attachment.fileName)}</span>
                   <span className="cpanel__file-body">

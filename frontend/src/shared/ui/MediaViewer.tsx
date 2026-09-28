@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@shared/lib/cn";
 import { useBackHandler } from "@shared/lib/backStack";
+import { handleDownloadClick } from "@shared/lib/mediaSrc";
 import { ApiImage } from "./ApiImage";
 
 export interface MediaViewerItem {
@@ -85,7 +86,13 @@ export function MediaViewer({ items, index, onClose, onIndexChange }: Props) {
         <span className="mviewer__count">
           {index + 1} / {items.length}
         </span>
-        <a className="mviewer__btn" href={item.url} download={item.fileName} title="Скачать">
+        <a
+          className="mviewer__btn"
+          href={item.url}
+          download={item.fileName}
+          title="Скачать"
+          onClick={(e) => handleDownloadClick(e, item.url, item.fileName)}
+        >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" strokeLinecap="round" />
           </svg>

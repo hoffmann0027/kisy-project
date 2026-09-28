@@ -141,7 +141,7 @@ function ResetPasswordModal({ user, onClose }: { user: User | null; onClose: () 
         type="text"
         value={pw}
         onChange={(e) => setPw(e.target.value)}
-        placeholder={PASSWORD_RULE_TEXT}
+        hint={PASSWORD_RULE_TEXT}
         error={pw ? (problem ?? undefined) : undefined}
       />
       <Button block disabled={!!problem} loading={reset.isPending} onClick={() => user && reset.mutate(user.id)}>

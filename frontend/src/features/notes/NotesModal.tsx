@@ -3,6 +3,8 @@ import "./notes.css";
 import { Button, Modal, Spinner, toast } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import { formatRelative } from "@shared/lib/format";
+import { handleDownloadClick } from "@shared/lib/mediaSrc";
+import { ApiImage } from "@shared/ui/ApiImage";
 import type { Note } from "@shared/api/types";
 import { userFacingError } from "@shared/api/envelope";
 import { useNoteMutations, useNotes } from "@entities/note/queries";
@@ -128,9 +130,18 @@ function NoteCard({ note, onDelete }: { note: Note; onDelete: () => void }) {
       <div className="notes__item-main">
         {note.text && <div className="notes__text">{note.text}</div>}
         {note.hasFile && note.fileUrl && (
-          <a className="notes__file" href={note.fileUrl} target="_blank" rel="noopener noreferrer" download>
+          <a
+            className="notes__file"
+            href={note.fileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            download={note.fileName ?? ""}
+            onClick={(e) => handleDownloadClick(e, note.fileUrl!, note.fileName ?? undefined)}
+          >
             {isImage ? (
-              <img className="notes__thumb" src={note.fileUrl} alt={note.fileName ?? "файл"} />
+              // ApiImage, not <img>: inside the app shell the API needs a
+              // token, and a bare tag showed a broken thumbnail (audit D-16).
+              <ApiImage className="notes__thumb" src={note.fileUrl} alt={note.fileName ?? "файл"} />
             ) : (
               <span className="notes__file-icon">
                 <Icon.Paperclip size={16} />

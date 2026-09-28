@@ -1,6 +1,7 @@
 import { memo, useState } from "react";
 import { cn } from "@shared/lib/cn";
 import { formatTime } from "@shared/lib/format";
+import { handleDownloadClick } from "@shared/lib/mediaSrc";
 import { ApiImage } from "@shared/ui/ApiImage";
 import { Icon } from "@shared/ui/icons";
 import { ReportDialog } from "@features/reports/ReportDialog";
@@ -289,7 +290,15 @@ export const MessageBubble = memo(function MessageBubble({
                   <ApiImage src={a.url} alt={a.fileName} loading="lazy" />
                 </button>
               ) : (
-                <a key={a.id} href={a.url} target="_blank" rel="noreferrer" className="bubble__att-file" download={a.fileName}>
+                <a
+                  key={a.id}
+                  href={a.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="bubble__att-file"
+                  download={a.fileName}
+                  onClick={(e) => handleDownloadClick(e, a.url, a.fileName)}
+                >
                   <Icon.Paperclip size={16} />
                   <span className="bubble__att-name">{a.fileName}</span>
                 </a>

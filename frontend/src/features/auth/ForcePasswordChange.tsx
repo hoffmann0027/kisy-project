@@ -70,7 +70,8 @@ export function ForcePasswordChange() {
             autoFocus
           />
           <Input
-            label={`Новый пароль (${PASSWORD_RULE_TEXT})`}
+            label="Новый пароль"
+            hint={PASSWORD_RULE_TEXT}
             type="password"
             autoComplete="new-password"
             value={newPassword}

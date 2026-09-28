@@ -4,10 +4,12 @@ import { cn } from "@shared/lib/cn";
 interface Props extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
+  /** The rule for this field, shown under it until an error replaces it. */
+  hint?: string;
 }
 
 export const Input = forwardRef<HTMLInputElement, Props>(function Input(
-  { label, error, className, id, ...rest },
+  { label, error, hint, className, id, ...rest },
   ref,
 ) {
   // The label was tied to the input only when a caller passed an id, and
@@ -18,6 +20,7 @@ export const Input = forwardRef<HTMLInputElement, Props>(function Input(
   const generated = useId();
   const inputId = id ?? generated;
   const errorId = `${inputId}-error`;
+  const hintId = `${inputId}-hint`;
 
   return (
     <div className="ui-field">
@@ -30,14 +33,20 @@ export const Input = forwardRef<HTMLInputElement, Props>(function Input(
         ref={ref}
         id={inputId}
         aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
+        aria-describedby={error ? errorId : hint ? hintId : undefined}
         className={cn("ui-input", error && "ui-input--error", className)}
         {...rest}
       />
-      {error && (
+      {error ? (
         <span className="ui-field__error" id={errorId}>
           {error}
         </span>
+      ) : (
+        hint && (
+          <span className="ui-field__hint" id={hintId}>
+            {hint}
+          </span>
+        )
       )}
     </div>
   );

@@ -106,3 +106,49 @@ export async function resolveMediaSrc(url: string): Promise<string> {
 export function isObjectUrl(url: string): boolean {
   return url.startsWith("blob:");
 }
+
+/**
+ * Saves an API-served file (attachment, note attachment, image from the
+ * viewer).
+ *
+ * In a browser `<a href="/api/…" download>` is already right and this is never
+ * called. In the Capacitor shell that markup is a dead link twice over: the
+ * relative URL resolves to the WebView's own origin, where no API exists, and
+ * an anchor sends neither the Authorization header nor a cross-site cookie. The
+ * tap did nothing at all, with no error (audit D-16).
+ *
+ * So the bytes are fetched with the session's token and handed to the anchor as
+ * a blob: URL, which is same-origin to the WebView.
+ */
+export async function downloadAsset(url: string, fileName?: string): Promise<void> {
+  const resolved = await resolveMediaSrc(url);
+  const a = document.createElement("a");
+  a.href = resolved;
+  a.download = fileName ?? "";
+  a.rel = "noreferrer";
+  // Firefox and some WebViews ignore a click on an element outside the
+  // document.
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // The blob pins its bytes until revoked, but revoking before the platform
+  // has read them cancels the save, so the release waits a moment.
+  if (isObjectUrl(resolved)) window.setTimeout(() => URL.revokeObjectURL(resolved), 60_000);
+}
+
+/**
+ * Click handler for a download link: lets the browser do its own thing and
+ * takes over only where an anchor cannot work (native, API-served URL).
+ *
+ * Keeping the real href means middle-click and "save link as" still behave on
+ * the web — the fix is native-only by design.
+ */
+export function handleDownloadClick(
+  event: { preventDefault: () => void },
+  url: string,
+  fileName?: string,
+): void {
+  if (!isNative() || !isApiAsset(url)) return;
+  event.preventDefault();
+  void downloadAsset(url, fileName);
+}

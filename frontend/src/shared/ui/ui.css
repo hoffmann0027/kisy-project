@@ -119,6 +119,11 @@
   color: var(--color-danger);
 }
 
+.ui-field__hint {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
 /* Avatar */
 .ui-avatar {
   display: inline-flex;

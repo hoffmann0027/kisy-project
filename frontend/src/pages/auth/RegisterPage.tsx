@@ -151,7 +151,8 @@ export function RegisterPage() {
           {...register("displayName")}
         />
         <Input
-          label={`Пароль (${PASSWORD_RULE_TEXT})`}
+          label="Пароль"
+          hint={PASSWORD_RULE_TEXT}
           type="password"
           autoComplete="new-password"
           error={errors.password?.message}
