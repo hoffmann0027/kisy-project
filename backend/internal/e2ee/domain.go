@@ -18,6 +18,9 @@ var (
 	ErrNotFound   = errors.New("e2ee: not found")
 	ErrForbidden  = errors.New("e2ee: forbidden")
 	ErrValidation = errors.New("e2ee: validation failed")
+	// ErrStaleEpoch: a commit that does not move the chat forward — someone
+	// else committed first. The sender catches up and tries again (audit B-02).
+	ErrStaleEpoch = errors.New("e2ee: stale epoch")
 	// ErrRateLimited: too many key-package claims against one user.
 	ErrRateLimited = errors.New("e2ee: too many key package claims")
 )

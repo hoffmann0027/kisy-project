@@ -48,6 +48,9 @@ const (
 	ErrDisplayNameInvalid = "DISPLAY_NAME_INVALID"
 	// Cloudflare Turnstile on sign-up: the token was missing or rejected (403),
 	// or the check could not be made (503).
+	// ErrEpochConflict: an MLS commit that does not move the chat forward —
+	// another device committed first (audit B-02).
+	ErrEpochConflict = "EPOCH_CONFLICT"
 	// ErrBlockedByUser: one of the two has blocked the other (internal/blocks).
 	// The wording never says which side did it.
 	ErrBlockedByUser = "BLOCKED"

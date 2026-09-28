@@ -281,6 +281,24 @@ func (s *Service) PublishHandshake(ctx context.Context, actor Actor, in PublishH
 		return nil
 	}
 
+	// A commit moves the chat to a new epoch, and only one device may do that
+	// at a time. Two of them committing at the same moment used to be accepted
+	// both, and the group forked: two states, neither able to read the other
+	// (audit B-02). The server cannot read the commit, but it can see that this
+	// epoch is already taken and tell the loser to catch up.
+	//
+	// A commit without an epoch is from a client that predates this and is
+	// accepted as before; the app has sent one since the feature existed.
+	if in.Kind == KindCommit && in.Epoch != nil {
+		moved, err := s.repo.AdvanceEpoch(ctx, s.pool, in.ChatType, in.ChatID, *in.Epoch)
+		if err != nil {
+			return err
+		}
+		if !moved {
+			return ErrStaleEpoch
+		}
+	}
+
 	m := &GroupMessage{
 		ChatType:     in.ChatType,
 		ChatID:       in.ChatID,

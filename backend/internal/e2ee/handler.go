@@ -440,6 +440,11 @@ func fail(w http.ResponseWriter, r *http.Request, err error) {
 		notFound(w, r)
 	case errors.Is(err, ErrForbidden):
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "not permitted")
+	case errors.Is(err, ErrStaleEpoch):
+		// Not the caller's fault and not a refusal: someone else committed
+		// first. The app re-reads the chat's handshake and commits again.
+		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrEpochConflict,
+			"chat moved on: re-read the handshake and commit again")
 	case errors.Is(err, ErrValidation):
 		badRequest(w, r, "invalid request")
 	case errors.Is(err, ErrRateLimited):

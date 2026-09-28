@@ -3901,6 +3901,15 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: >
+            EPOCH_CONFLICT — this commit does not move the chat forward:
+            another device committed the same epoch first. The sender re-reads
+            the chat's handshake and commits again. Without this the group
+            forked into two states that could not read each other (audit B-02).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
   /e2ee/handshake/{chatType}/{chatID}:
     get:
       tags: [e2ee]

@@ -14,6 +14,11 @@ import (
 
 // Repository is the persistence port for the E2EE directory and mailbox.
 type Repository interface {
+	// AdvanceEpoch records that a chat moved to epoch, and reports whether it
+	// actually moved: false means someone else already committed this epoch or
+	// a later one, so the caller's commit is stale (audit B-02).
+	AdvanceEpoch(ctx context.Context, q db.DBTX, chatType string, chatID uuid.UUID, epoch int64) (bool, error)
+
 	UpsertDevice(ctx context.Context, q db.DBTX, d *Device) error
 	GetDevice(ctx context.Context, q db.DBTX, id uuid.UUID) (*Device, error)
 	ListDevices(ctx context.Context, q db.DBTX, userID uuid.UUID) ([]Device, error)
@@ -290,4 +295,24 @@ func (r *PostgresRepository) DeleteBackup(ctx context.Context, q db.DBTX, userID
 		return ErrNotFound
 	}
 	return nil
+}
+
+// AdvanceEpoch moves the chat's epoch forward, and only forward. The whole
+// check is one statement so two devices committing at the same moment cannot
+// both see "the epoch is free": the second one's WHERE finds the first one's
+// row already updated and changes nothing.
+func (r *PostgresRepository) AdvanceEpoch(
+	ctx context.Context, q db.DBTX, chatType string, chatID uuid.UUID, epoch int64,
+) (bool, error) {
+	tag, err := q.Exec(ctx, `
+		INSERT INTO e2ee_group_epochs (chat_type, chat_id, epoch)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (chat_type, chat_id) DO UPDATE
+		SET epoch = EXCLUDED.epoch, updated_at = now()
+		WHERE e2ee_group_epochs.epoch < EXCLUDED.epoch`,
+		chatType, chatID, epoch)
+	if err != nil {
+		return false, fmt.Errorf("e2ee: advance epoch: %w", err)
+	}
+	return tag.RowsAffected() > 0, nil
 }

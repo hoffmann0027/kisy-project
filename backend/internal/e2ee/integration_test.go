@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"testing"
@@ -246,5 +247,64 @@ func TestEncryptedMessageRoundtrip(t *testing.T) {
 	}
 	if _, ok := wire["ciphertext"].(string); !ok {
 		t.Fatalf("wire ciphertext must be a base64 string")
+	}
+}
+
+// Audit B-02: two devices of one chat can commit at the same moment. Until the
+// server tracked epochs it accepted both, and the group forked — two states,
+// neither able to read the other. Now the first commit of an epoch wins and the
+// second is told to catch up.
+func TestTwoDevicesCannotCommitTheSameEpoch(t *testing.T) {
+	h := setup(t)
+	alice, bob := e2ee.Actor{UserID: h.a}, e2ee.Actor{UserID: h.b}
+	deviceA := registerDevice(t, h, h.a)
+	deviceB := registerDevice(t, h, h.b)
+
+	commit := func(actor e2ee.Actor, device uuid.UUID, epoch int64) error {
+		return h.svc.PublishHandshake(h.ctx, actor, e2ee.PublishHandshakeInput{
+			ChatType: "private", ChatID: h.chat, Kind: e2ee.KindCommit,
+			SenderDevice: device, Payload: []byte("commit-bytes"), Epoch: &epoch,
+		})
+	}
+
+	if err := commit(alice, deviceA, 5); err != nil {
+		t.Fatalf("the first commit of epoch 5: %v", err)
+	}
+	// Bob's device raced with the same epoch: it lost.
+	if err := commit(bob, deviceB, 5); !errors.Is(err, e2ee.ErrStaleEpoch) {
+		t.Fatalf("the second commit of epoch 5: %v, want ErrStaleEpoch", err)
+	}
+	// An older epoch is stale too — a device that was offline and woke up.
+	if err := commit(bob, deviceB, 3); !errors.Is(err, e2ee.ErrStaleEpoch) {
+		t.Fatalf("a commit of an older epoch: %v, want ErrStaleEpoch", err)
+	}
+	// Catching up and committing the next epoch works.
+	if err := commit(bob, deviceB, 6); err != nil {
+		t.Fatalf("the next epoch after catching up: %v", err)
+	}
+
+	// The refused commits left nothing behind: the chat's handshake carries
+	// exactly the two that were accepted.
+	msgs, err := h.svc.ListChatHandshake(h.ctx, alice, "private", h.chat, uuid.Nil, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commits := 0
+	for _, m := range msgs {
+		if m.Kind == e2ee.KindCommit {
+			commits++
+		}
+	}
+	if commits != 2 {
+		t.Fatalf("commits stored = %d, want 2", commits)
+	}
+
+	// Another chat keeps its own epoch line.
+	// A proposal does not move the epoch and is never refused for it.
+	if err := h.svc.PublishHandshake(h.ctx, alice, e2ee.PublishHandshakeInput{
+		ChatType: "private", ChatID: h.chat, Kind: e2ee.KindProposal,
+		SenderDevice: deviceA, Payload: []byte("proposal-bytes"),
+	}); err != nil {
+		t.Fatalf("a proposal carries no epoch and must not be refused: %v", err)
 	}
 }
