@@ -91,17 +91,3 @@ func TestSameOriginRequestUntouched(t *testing.T) {
 		t.Fatal("same-origin response must not carry CORS headers")
 	}
 }
-
-func contains(haystack, needle string) bool {
-	return len(haystack) > 0 && len(needle) > 0 && (haystack == needle ||
-		len(haystack) >= len(needle) && (indexOf(haystack, needle) >= 0))
-}
-
-func indexOf(h, n string) int {
-	for i := 0; i+len(n) <= len(h); i++ {
-		if h[i:i+len(n)] == n {
-			return i
-		}
-	}
-	return -1
-}

@@ -13,18 +13,12 @@ import { useChats } from "@entities/chat/queries";
 import { useGroups } from "@entities/group/queries";
 import { usePresenceStore } from "@shared/store/presence";
 
-// Dialogs are loaded the first time they are opened. Nine of them sat in the
-// entry chunk, parsed on every cold start, for screens most sessions never
-// touch.
+// Dialogs are loaded the first time they are opened, rather than sitting in the
+// entry chunk to be parsed on every cold start. Six more used to be declared
+// here and never opened — their working copies live in the Hub (audit C-08).
 const NewChatModal = lazy(() => import("@features/new-chat/NewChatModal").then((m) => ({ default: m.NewChatModal })));
 const NewGroupModal = lazy(() => import("@features/new-chat/NewGroupModal").then((m) => ({ default: m.NewGroupModal })));
 const ProfileModal = lazy(() => import("@features/profile/ProfileModal").then((m) => ({ default: m.ProfileModal })));
-const NotificationsModal = lazy(() => import("@features/notifications/NotificationsModal").then((m) => ({ default: m.NotificationsModal })));
-const FeedbackModal = lazy(() => import("@features/feedback/FeedbackModal").then((m) => ({ default: m.FeedbackModal })));
-const NotesModal = lazy(() => import("@features/notes/NotesModal").then((m) => ({ default: m.NotesModal })));
-const ConditionsModal = lazy(() => import("@features/conditions/ConditionsModal").then((m) => ({ default: m.ConditionsModal })));
-const VotingModal = lazy(() => import("@features/voting/VotingModal").then((m) => ({ default: m.VotingModal })));
-const CallHistoryModal = lazy(() => import("@features/call/CallHistoryModal").then((m) => ({ default: m.CallHistoryModal })));
 
 export function MessengerPage() {
   const navigate = useNavigate();
@@ -41,12 +35,6 @@ export function MessengerPage() {
   const [newChat, setNewChat] = useState(false);
   const [newGroup, setNewGroup] = useState(false);
   const [profile, setProfile] = useState(false);
-  const [notifications, setNotifications] = useState(false);
-  const [feedback, setFeedback] = useState(false);
-  const [notes, setNotes] = useState(false);
-  const [conditions, setConditions] = useState(false);
-  const [voting, setVoting] = useState(false);
-  const [callHistory, setCallHistory] = useState(false);
   // Phone layout: the side drawer opened from the header avatar.
   const [drawer, setDrawer] = useState(false);
 
@@ -107,12 +95,6 @@ export function MessengerPage() {
       {newChat && <NewChatModal open onClose={() => setNewChat(false)} onOpened={selectChat} />}
       {newGroup && <NewGroupModal open onClose={() => setNewGroup(false)} onCreated={selectGroup} />}
       {profile && <ProfileModal open onClose={() => setProfile(false)} />}
-      {notifications && <NotificationsModal open onClose={() => setNotifications(false)} />}
-      {feedback && <FeedbackModal open onClose={() => setFeedback(false)} />}
-      {notes && <NotesModal open onClose={() => setNotes(false)} />}
-      {conditions && <ConditionsModal open onClose={() => setConditions(false)} />}
-      {voting && <VotingModal open onClose={() => setVoting(false)} />}
-      {callHistory && <CallHistoryModal open onClose={() => setCallHistory(false)} />}
       </Suspense>
 
       <AppDrawer open={drawer} onClose={() => setDrawer(false)} />

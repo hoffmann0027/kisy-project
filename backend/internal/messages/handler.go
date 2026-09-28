@@ -454,14 +454,6 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	httpresponse.OK(w, r, http.StatusOK, map[string]any{"deleted": true})
 }
 
-func (h *Handler) writeResult(w http.ResponseWriter, r *http.Request, m *Message, err error, okStatus int) {
-	if err != nil {
-		h.writeError(w, r, err)
-		return
-	}
-	httpresponse.OK(w, r, okStatus, map[string]any{"message": m.ToDTO()})
-}
-
 // writeError maps domain errors to the API contract. Access failures and
 // missing/hidden chats collapse to 404 so a caller cannot probe for the
 // existence of resources above their clearance.

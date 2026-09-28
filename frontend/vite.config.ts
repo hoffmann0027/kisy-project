@@ -33,7 +33,6 @@ export default defineConfig(({ mode }) => {
           manualChunks: {
             sodium: ["libsodium-wrappers-sumo"],
             mls: ["ts-mls"],
-            noble: ["@noble/curves", "@noble/hashes", "@noble/ciphers"],
             query: ["@tanstack/react-query"],
           },
         },

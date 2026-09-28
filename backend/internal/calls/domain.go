@@ -48,12 +48,6 @@ const (
 // RingTimeout is how long an unanswered call rings before it is marked missed.
 const RingTimeout = 45 * time.Second
 
-// inviteRateMax invites allowed per inviteRateWindow per caller.
-const (
-	inviteRateMax    = 10
-	inviteRateWindow = time.Minute
-)
-
 var (
 	ErrForbidden   = errors.New("calls: not permitted")
 	ErrValidation  = errors.New("calls: invalid signaling payload")

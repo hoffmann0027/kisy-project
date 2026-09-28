@@ -2,7 +2,9 @@ const sharp = require("sharp");
 const fs = require("fs");
 const path = require("path");
 
-const ROOT = "C:/Users/hamza/Desktop/ProjectS/Claude/messenger_kisy/kisy-project";
+// The repository root, wherever it was cloned. It used to be one developer's
+// absolute Windows path, so the script ran on exactly one machine (audit C-10).
+const ROOT = path.resolve(__dirname, "..");
 const SRC = path.join(ROOT, "design/logo-source.png");
 const PUB = path.join(ROOT, "frontend/public");
 const RES = path.join(ROOT, "frontend/android/app/src/main/res");

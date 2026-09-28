@@ -296,18 +296,6 @@
   background: var(--acc-soft);
   color: var(--acc);
 }
-.rating-diff--easy {
-  background: rgba(34, 195, 166, 0.16);
-  color: #38d9b0;
-}
-.rating-diff--medium {
-  background: var(--acc-soft);
-  color: var(--acc);
-}
-.rating-diff--hard {
-  background: rgba(246, 90, 123, 0.16);
-  color: #f6829b;
-}
 
 .rating-tasks {
   display: flex;

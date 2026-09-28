@@ -82,17 +82,6 @@ func (s *Service) Directory(ctx context.Context, actorID uuid.UUID, actorLevel i
 	return dtos, nil
 }
 
-// PublicProfile returns a user's public DTO, or (zero,false) if the user
-// does not exist or is inactive. Used to enrich chat listings with the
-// other participant's identity.
-func (s *Service) PublicProfile(ctx context.Context, id uuid.UUID) (DTO, bool) {
-	u, err := s.repo.GetByID(ctx, s.pool, id)
-	if err != nil {
-		return DTO{}, false
-	}
-	return u.ToDTO(), true
-}
-
 // TouchLastSeen records the user's last-active time. It is best-effort
 // (called from the WebSocket disconnect path) so errors are swallowed.
 func (s *Service) TouchLastSeen(ctx context.Context, userID uuid.UUID) {

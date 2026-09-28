@@ -45,12 +45,6 @@ type Config struct {
 	UseSSL    bool
 }
 
-// Enabled reports whether object storage is configured. With it empty the
-// caller keeps using the database-backed path.
-func (c Config) Enabled() bool {
-	return c.Endpoint != "" && c.Bucket != ""
-}
-
 type s3Store struct {
 	client *minio.Client
 	bucket string

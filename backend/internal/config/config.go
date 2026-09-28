@@ -198,16 +198,11 @@ type AccountRateConfig struct {
 }
 
 // LeadershipMaxLevel is the strongest clearance band for upload limits:
-// levels 1..3 (CEO, deputies, department heads) get the larger allowance.
+// levels 1..3 (CEO, deputies, department heads) get the larger allowance. The
+// ceiling itself is applied by attachments.Limits.MaxBytesFor; the duplicate
+// that used to live here also mis-handled a basic account, whose level is 0 and
+// therefore read as leadership (audit C-04).
 const LeadershipMaxLevel = 3
-
-// MaxBytesFor returns the upload ceiling for a clearance level.
-func (u UploadConfig) MaxBytesFor(roleLevel int) int64 {
-	if roleLevel <= LeadershipMaxLevel {
-		return u.MaxBytesLeadership
-	}
-	return u.MaxBytesStaff
-}
 
 // BlobConfig points at the S3-compatible object store that holds uploaded file
 // bytes (attachments, avatars). Leave Endpoint/Bucket empty to keep storing

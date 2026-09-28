@@ -7,9 +7,6 @@
   height: 100%;
   overflow: hidden;
 }
-.msgr--with-panel {
-  grid-template-columns: 60px 336px 1fr 300px;
-}
 
 /* --- Nav rail (satin-metal key panel) --- */
 .rail {
@@ -967,37 +964,8 @@
   border-radius: 2px;
 }
 
-/* --- context panel --- */
-.ctx-panel {
-  border: 1px solid var(--panel-brd);
-  border-radius: var(--radius-xl);
-  background: var(--side-bg);
-  backdrop-filter: blur(var(--blur-glass));
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: var(--space-6) var(--space-4);
-  gap: var(--space-3);
-  overflow-y: auto;
-}
-.ctx-panel__name {
-  font-size: 19px;
-  font-weight: 640;
-}
-.ctx-panel__role {
-  color: var(--color-text-secondary);
-  font-size: 14px;
-}
-.ctx-row {
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  padding: 12px 0;
-  border-top: 1px solid var(--color-border);
-  font-size: 14px;
-}
-.ctx-row__label { color: var(--color-text-secondary); }
+/* The context panel (.ctx-panel/.ctx-row) was removed with its markup; the
+   details it showed live in the chat panel widget (audit C-09). */
 
 /* --- new chat / user picker --- */
 .user-row {
@@ -1040,8 +1008,7 @@
 
 /* --- Mobile layout (single column, bottom nav) --- */
 @media (max-width: 760px), (max-height: 500px) {
-  .msgr,
-  .msgr--with-panel {
+  .msgr {
     grid-template-columns: 1fr;
     grid-template-rows: 1fr;
     height: 100dvh;
@@ -1098,9 +1065,6 @@
   .msgr--chat-open .chatlist { display: none; }
   .msgr--chat-open .conv { display: flex; }
   .msgr--chat-open .ui-empty { display: none; }
-
-  /* The supplementary context panel is not shown on narrow screens. */
-  .ctx-panel { display: none; }
 
   .conv__back { display: flex; }
 
@@ -2196,8 +2160,7 @@
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
-  .msgr,
-  .msgr--with-panel {
+  .msgr {
     padding: 0;
     gap: 0;
   }
