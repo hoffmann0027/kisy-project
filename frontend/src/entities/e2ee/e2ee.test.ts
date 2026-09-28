@@ -412,7 +412,9 @@ describe("E2EE private chat orchestration", () => {
     server.listCalls = 0;
     expect(await catchUpChat(bob, chatId)).toBe(0);
     expect(server.listCalls).toBe(1);
-  });
+    // 80 messages through real MLS: seconds of honest crypto, and the default
+    // 5s budget ran out whenever the whole suite competed for the CPU.
+  }, 30_000);
 
   // Without the catch-up the same backlog loses its older half — this is the
   // bug, pinned so it cannot come back unnoticed.
@@ -440,7 +442,7 @@ describe("E2EE private chat orchestration", () => {
     // Now the oldest is beyond the key window and stays unreadable.
     const oldest = await hydrateMessage(bob, all[0]);
     expect(oldest.undecryptable).toBe(true);
-  });
+  }, 30_000);
 
   it("refuses, with a reason, when the peer has never set up encryption", async () => {
     const alice = await makeSession("user-alice");
