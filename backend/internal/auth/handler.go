@@ -222,7 +222,13 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 
 	res, err := h.svc.Refresh(r.Context(), sessionID, plain, h.ClientMeta(r))
 	if err != nil {
-		h.clearAuthCookies(w)
+		// Only a token the server has actually refused justifies wiping the
+		// cookies. Clearing them on any error turned a retryable database
+		// failure into a forced logout: the next attempt arrived with no
+		// refresh token at all (audit B-09).
+		if errors.Is(err, ErrInvalidRefresh) {
+			h.clearAuthCookies(w)
+		}
 		h.writeAuthError(w, r, err)
 		return
 	}

@@ -64,7 +64,18 @@ func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 		}
 
 		sess, err := m.sessions.GetByID(r.Context(), m.pool, claims.SessionID)
-		if err != nil || !sess.Active(time.Now().UTC()) || sess.UserID != claims.UserID {
+		switch {
+		case errors.Is(err, ErrSessionNotFound):
+			httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "session is no longer active")
+			return
+		case err != nil:
+			// The session may be perfectly valid — we just could not look it up.
+			// Answering 401 here signed web users out on every database hiccup
+			// and hid the outage from the error-rate alert, because the spike
+			// landed in 401 instead of 5xx (audit B-09).
+			httpresponse.Fail(w, r, http.StatusServiceUnavailable, httpresponse.ErrInternal, "session store unavailable")
+			return
+		case !sess.Active(time.Now().UTC()) || sess.UserID != claims.UserID:
 			httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "session is no longer active")
 			return
 		}
