@@ -5,6 +5,7 @@ import {
   adoptOutgoingPlaintext,
   cacheOutgoingPlaintext,
   cachePlaintext,
+  catchUpChat,
   e2eeSession,
   hydrateMessages,
   type EncryptedBody,
@@ -52,8 +53,14 @@ export function useMessages(chatType: ChatType, chatId: string | null) {
     queryKey: chatId ? messageKeys.list(chatType, chatId) : ["messages", "none"],
     enabled: !!chatId,
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) =>
-      messagesApi.list(chatType, chatId as string, pageParam).then(hydratePage),
+    queryFn: async ({ pageParam }) => {
+      // Before the first page is shown, decrypt in the order things were
+      // sent: paging newest-first spends the keys of everything older, and
+      // those messages could then never be read again (audit B-03).
+      const s = e2eeSession();
+      if (s && chatType === "private" && !pageParam) await catchUpChat(s, chatId as string);
+      return hydratePage(await messagesApi.list(chatType, chatId as string, pageParam));
+    },
     getNextPageParam: (last: MessagePage) => (last.hasMore ? last.nextCursor : undefined),
   });
 }

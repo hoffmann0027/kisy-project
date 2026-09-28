@@ -15,6 +15,7 @@ export {
   dropScheduledPlaintext,
   processWelcomes,
   addDeviceToChat,
+  catchUpChat,
   processChatHandshake,
   type EncryptedBody,
 } from "./chats";

@@ -16,7 +16,7 @@ import {
   KISY_E2EE_ALG,
   type ChatState,
 } from "@shared/crypto";
-import { e2eeApi } from "@shared/api/endpoints";
+import { e2eeApi, messagesApi } from "@shared/api/endpoints";
 import { ApiError } from "@shared/api/envelope";
 import type { ChatType, Message } from "@shared/api/types";
 import { dropKeyPackage, localKeyPackages, type E2EESession } from "./session";
@@ -575,23 +575,96 @@ async function decryptOnce(
   ciphertextB64: string,
   expiresAt?: string | null,
 ): Promise<string | null> {
+  return withChatLock(chatId, () => decryptUnlocked(s, chatId, messageId, ciphertextB64, expiresAt));
+}
+
+/** decryptOnce for a caller that already holds the chat's lock. */
+async function decryptUnlocked(
+  s: E2EESession,
+  chatId: string,
+  messageId: string,
+  ciphertextB64: string,
+  expiresAt?: string | null,
+): Promise<string | null> {
+  const state = await loadState(s, chatId);
+  if (!state) return null;
+  const sodium = await getSodium();
+  try {
+    const result = await processIncoming(
+      state,
+      sodium.from_base64(ciphertextB64, sodium.base64_variants.ORIGINAL),
+    );
+    await saveState(s, chatId, result.state);
+    if (result.kind !== "message") return null;
+    const text = utf8dec.decode(result.plaintext);
+    await cachePlaintext(s, messageId, text, expiresAt);
+    return text;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * How many messages one catch-up pass will walk back through. The first visit
+ * to a years-old chat must not turn into a minute of waiting; anything older
+ * than this stays on the ordinary path (audit B-03).
+ */
+export const MAX_CATCH_UP_MESSAGES = 400;
+
+/** Where the catch-up cursor lives: the last message decrypted in order. */
+const catchUpKey = (chatId: string) => `dec/${chatId}`;
+
+/**
+ * Decrypt everything this device missed, in the order it was sent (audit
+ * B-03).
+ *
+ * MLS hands out a message key once and keeps only a few skipped generations.
+ * History is paged newest-first, so decrypting the newest page first threw
+ * away the keys of everything older — the second page could never be read
+ * again. This walks back to the last message decrypted in order, then
+ * decrypts forward, so no generation is skipped.
+ *
+ * Returns how many messages it decrypted. Cheap when there is nothing to do:
+ * one page request that immediately finds the cursor.
+ */
+export async function catchUpChat(s: E2EESession, chatId: string): Promise<number> {
   return withChatLock(chatId, async () => {
-    const state = await loadState(s, chatId);
-    if (!state) return null;
-    const sodium = await getSodium();
-    try {
-      const result = await processIncoming(
-        state,
-        sodium.from_base64(ciphertextB64, sodium.base64_variants.ORIGINAL),
-      );
-      await saveState(s, chatId, result.state);
-      if (result.kind !== "message") return null;
-      const text = utf8dec.decode(result.plaintext);
-      await cachePlaintext(s, messageId, text, expiresAt);
-      return text;
-    } catch {
-      return null;
+    if (!(await loadState(s, chatId))) return 0; // not in this chat's group (yet)
+
+    const cursorRaw = await s.store.get(catchUpKey(chatId));
+    const cursor = cursorRaw ? utf8dec.decode(cursorRaw) : null;
+
+    // Walk back page by page until the cursor, or until the ceiling.
+    const pending: Message[] = [];
+    let pageCursor: string | undefined;
+    let reachedCursor = false;
+    while (pending.length < MAX_CATCH_UP_MESSAGES && !reachedCursor) {
+      const page = await messagesApi.list("private", chatId, pageCursor, 50);
+      if (page.items.length === 0) break;
+      for (const m of page.items) {
+        if (m.id === cursor) {
+          reachedCursor = true;
+          break;
+        }
+        pending.push(m);
+      }
+      if (!page.nextCursor) break;
+      pageCursor = page.nextCursor;
     }
+    if (pending.length === 0) return 0;
+
+    // Oldest first: this is the whole point.
+    pending.reverse();
+    let decrypted = 0;
+    let newest: string | null = null;
+    for (const m of pending) {
+      newest = m.id;
+      if (!m.ciphertext || m.isDeleted) continue;
+      if ((await cachedPlaintext(s, m.id)) !== null) continue;
+      if ((await decryptUnlocked(s, chatId, m.id, m.ciphertext, m.expiresAt)) !== null) decrypted++;
+    }
+    if (newest) await s.store.put(catchUpKey(chatId), utf8(newest));
+    return decrypted;
   });
 }
 

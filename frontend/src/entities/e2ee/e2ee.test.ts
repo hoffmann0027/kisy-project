@@ -20,6 +20,10 @@ interface FakeServer {
   }[];
   handshake: { id: string; chatType: ChatType; chatId: string; kind: number; senderDevice: string; payload: string; epoch: number | null; createdAt: string }[];
   deviceOwners: Map<string, string>; // deviceId → userId
+  /** Messages of a chat, oldest first — the fake history (audit B-03). */
+  messages: Map<string, Message[]>;
+  /** How many history pages were requested, to show the cursor saves them. */
+  listCalls: number;
   /** Current MLS epoch per chat, as the real server keeps it (audit B-02). */
   epochs: Map<string, number>;
 }
@@ -30,12 +34,25 @@ const server: FakeServer = {
   handshake: [],
   deviceOwners: new Map(),
   epochs: new Map(),
+  messages: new Map(),
+  listCalls: 0,
 };
 
 let nextId = 0;
 const genId = () => `srv-${++nextId}`;
 
 vi.mock("@shared/api/endpoints", () => ({
+  // History paged newest-first, exactly like the real endpoint.
+  messagesApi: {
+    async list(_chatType: ChatType, chatId: string, cursor?: string, limit = 50) {
+      server.listCalls++;
+      const all = [...(server.messages.get(chatId) ?? [])].reverse(); // newest first
+      const start = cursor ? all.findIndex((m) => m.id === cursor) + 1 : 0;
+      const items = all.slice(start, start + limit);
+      const nextCursor = items.length > 0 ? items[items.length - 1].id : null;
+      return { items, nextCursor, hasMore: start + items.length < all.length };
+    },
+  },
   e2eeApi: {
     async claimKeyPackages(userId: string, excludeDevice?: string) {
       const pool = server.keyPackages.get(userId) ?? [];
@@ -140,6 +157,7 @@ import type { E2EESession } from "./session";
 import { topUpKeyPackages } from "./session";
 import {
   addDeviceToChat,
+  catchUpChat,
   adoptOutgoingPlaintext,
   cacheOutgoingPlaintext,
   cachePlaintext,
@@ -201,6 +219,8 @@ describe("E2EE private chat orchestration", () => {
     server.handshake.length = 0;
     server.deviceOwners.clear();
     server.epochs.clear();
+    server.messages.clear();
+    server.listCalls = 0;
     resetChatStatesForTests();
   });
 
@@ -348,6 +368,78 @@ describe("E2EE private chat orchestration", () => {
     ];
     expect(first).toBe(true);
     expect(second).toBe(false);
+  });
+
+  // Audit B-03: a phone that was offline for a day opens the chat and gets the
+  // newest page first. Decrypting it skips every older generation, MLS drops
+  // those keys, and the older page can then never be read — the messages are
+  // lost while their ciphertext sits right there. Catching up in send order
+  // before showing anything is what prevents it.
+  it("reads a long backlog when it catches up in order first", async () => {
+    const alice = await makeSession("user-alice");
+    const bob = await makeSession("user-bob");
+    await publishPool(bob, 3);
+    const chatId = "chat-backlog";
+
+    // Alice writes 80 messages — two pages of history — while bob is away.
+    // (The library keeps keys for 10 skipped generations, so a newest-first
+    // read loses almost all of it.)
+    const sent: { id: string; text: string }[] = [];
+    for (let i = 1; i <= 80; i++) {
+      const text = `сообщение ${i}`;
+      const enc = await encryptForChat(alice, chatId, "user-bob", text);
+      const dto = messageDTO(`m${i}`, chatId, "user-alice", enc.ciphertext);
+      (server.messages.get(chatId) ?? server.messages.set(chatId, []).get(chatId)!).push(dto);
+      sent.push({ id: dto.id, text });
+    }
+    // Bob joins only now: the welcome was waiting all along.
+    await processWelcomes(bob);
+
+    const decrypted = await catchUpChat(bob, chatId);
+    expect(decrypted).toBe(80);
+
+    // Every message reads, including the oldest — the case that used to be
+    // lost for good.
+    const stored = server.messages.get(chatId)!;
+    for (const m of [sent[0], sent[9], sent[79]]) {
+      const dto = stored.find((x) => x.id === m.id)!;
+      const view = await hydrateMessage(bob, dto);
+      expect(view.text).toBe(m.text);
+    }
+
+    // A second catch-up finds nothing to do — and stops at the cursor after
+    // one page instead of walking the whole history again.
+    server.listCalls = 0;
+    expect(await catchUpChat(bob, chatId)).toBe(0);
+    expect(server.listCalls).toBe(1);
+  });
+
+  // Without the catch-up the same backlog loses its older half — this is the
+  // bug, pinned so it cannot come back unnoticed.
+  it("loses the older messages when pages are read newest-first", async () => {
+    const alice = await makeSession("user-alice");
+    const bob = await makeSession("user-bob");
+    await publishPool(bob, 3);
+    const chatId = "chat-backlog-2";
+
+    const sent: { id: string; text: string }[] = [];
+    for (let i = 1; i <= 30; i++) {
+      const text = `сообщение ${i}`;
+      const enc = await encryptForChat(alice, chatId, "user-bob", text);
+      sent.push({ id: `n${i}`, text });
+      server.messages.set(chatId, [
+        ...(server.messages.get(chatId) ?? []),
+        messageDTO(`n${i}`, chatId, "user-alice", enc.ciphertext),
+      ]);
+    }
+    await processWelcomes(bob);
+
+    // Read the newest ten first, as an unpatched client would.
+    const all = server.messages.get(chatId)!;
+    for (const m of [...all].reverse().slice(0, 10)) await hydrateMessage(bob, m);
+    // Now the oldest is beyond the key window and stays unreadable.
+    const oldest = await hydrateMessage(bob, all[0]);
+    expect(oldest.undecryptable).toBe(true);
   });
 
   it("refuses, with a reason, when the peer has never set up encryption", async () => {
