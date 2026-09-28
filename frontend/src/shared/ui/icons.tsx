@@ -18,6 +18,8 @@ export const Icon = {
   Bell: ({ size }: IconProps) => svg(<><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></>, size),
   BellOff: ({ size }: IconProps) => svg(<><path d="M13.73 21a2 2 0 0 1-3.46 0" /><path d="M18.63 13A17.89 17.89 0 0 1 18 8" /><path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14" /><path d="M18 8a6 6 0 0 0-9.33-5" /><path d="m1 1 22 22" /></>, size),
   Shield: ({ size }: IconProps) => svg(<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />, size),
+  // Жалоба (E-02): флажок.
+  Flag: ({ size }: IconProps) => svg(<><path d="M4 21V4" /><path d="M4 4h12l-2 4 2 4H4" /></>, size),
   // Блокировка пользователя (E-02): перечёркнутый круг.
   Ban: ({ size }: IconProps) => svg(<><circle cx="12" cy="12" r="9" /><path d="m5.6 5.6 12.8 12.8" /></>, size),
   Logout: ({ size }: IconProps) => svg(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>, size),

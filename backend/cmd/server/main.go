@@ -318,8 +318,12 @@ func newRouter(d routerDeps) http.Handler {
 				m.pushHandler.Routes(r)
 			})
 
+			// Reporting: open to any signed-in account (the queue is CEO-only,
+			// mounted with /admin below).
+			m.reportsHandler.Routes(r)
+
 			// CEO only; the gates travel with the routes (admin.Mount).
-			admin.Mount(r, m.authMW, m.adminHandler, m.moderationHandler.AdminRoutes)
+			admin.Mount(r, m.authMW, m.adminHandler, m.moderationHandler.AdminRoutes, m.reportsHandler.AdminRoutes)
 
 			r.Route("/groups", func(r chi.Router) {
 				// Reads are visibility-filtered; creation is open to any

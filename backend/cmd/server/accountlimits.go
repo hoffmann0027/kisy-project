@@ -29,6 +29,7 @@ func accountPolicy(c config.AccountRateConfig) ratelimit.AccountPolicy {
 		ratelimit.ScopeSearch:      perMinute(c.SearchesPerMinuteBasic, c.SearchesPerMinuteInvited),
 		ratelimit.ScopeLinkPreview: perMinute(c.LinkPreviewsPerMinuteBasic, c.LinkPreviewsPerMinuteInvited),
 		ratelimit.ScopeUploads:     perHour(c.UploadsPerHourBasic, c.UploadsPerHourInvited),
+		ratelimit.ScopeReports:     perHour(c.ReportsPerHourBasic, c.ReportsPerHourInvited),
 	}
 }
 
@@ -52,6 +53,8 @@ var accountLimitedRoutes = []struct {
 	scope  string
 }{
 	{http.MethodGet, regexp.MustCompile(`^/api/v1/search/?$`), ratelimit.ScopeSearch},
+	// A flood of reports is its own kind of abuse.
+	{http.MethodPost, regexp.MustCompile(`^/api/v1/reports$`), ratelimit.ScopeReports},
 	{http.MethodPost, regexp.MustCompile(`^/api/v1/link-preview$`), ratelimit.ScopeLinkPreview},
 	// A group or community is a new chat too.
 	{http.MethodPost, regexp.MustCompile(`^/api/v1/groups/?$`), ratelimit.ScopeNewChats},

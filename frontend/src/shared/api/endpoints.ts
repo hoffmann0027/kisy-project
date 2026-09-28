@@ -36,6 +36,10 @@ import type {
   PostPage,
   FeedSort,
   BlockedUser,
+  Report,
+  ReportCounts,
+  ReportReason,
+  ReportTargetKind,
   PostPolicy,
   Quarantine,
   IceConfig,
@@ -584,6 +588,17 @@ export const conditionsApi = {
   list: () => apiClient.get<{ conditions: LevelCondition[] }>("/conditions"),
   next: () => apiClient.get<{ condition: LevelCondition | null }>("/conditions/next"),
   set: (level: number, body: string) => apiClient.put<{ ok: boolean }>(`/conditions/${level}`, { body }),
+};
+
+// Жалобы: подать может любой, очередь видит только CEO.
+export const reportsApi = {
+  create: (report: { targetKind: ReportTargetKind; targetId: string; reason: ReportReason; comment?: string }) =>
+    apiClient.post<{ reportId: string; accepted: boolean }>("/reports", report),
+  queue: (status: "open" | "resolved" | "rejected" = "open") =>
+    apiClient.get<{ reports: Report[] }>(`/admin/reports?status=${status}`),
+  counts: () => apiClient.get<{ counts: ReportCounts }>("/admin/reports/summary"),
+  resolve: (reportId: string, rejected: boolean) =>
+    apiClient.post<{ resolved: boolean }>(`/admin/reports/${reportId}/resolve`, { rejected }),
 };
 
 export const adminApi = {

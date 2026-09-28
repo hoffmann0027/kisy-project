@@ -21,6 +21,7 @@ const (
 	ScopeSearch      = "acct-search"
 	ScopeLinkPreview = "acct-link-preview"
 	ScopeUploads     = "acct-uploads"
+	ScopeReports     = "acct-reports"
 )
 
 // Rule is one budget: Max hits per Window. Max 0 means unlimited.

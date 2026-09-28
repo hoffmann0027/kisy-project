@@ -510,6 +510,100 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /reports:
+    post:
+      tags: [moderation]
+      summary: Report content or a person
+      description: >
+        Open to any signed-in account, rate-limited per account
+        (RATE_REPORTS_PER_HOUR_*). One report per person per thing: pressing
+        twice replaces the first rather than counting twice.
+
+        A report about a private message carries its id only — the text is
+        end-to-end encrypted and the queue shows it as unreadable. Five
+        different people reporting one post take it out of the feed until the
+        CEO decides; the author keeps seeing their own post. The response never
+        says whether this was the fifth (audit E-02).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetKind, targetId, reason]
+              properties:
+                targetKind: { type: string, enum: [user, message, post, community] }
+                targetId: { type: string, format: uuid }
+                reason: { type: string, enum: [spam, abuse, fraud, illegal, other] }
+                comment: { type: string, maxLength: 2000 }
+      responses:
+        '201':
+          description: Report accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /admin/reports:
+    get:
+      tags: [admin]
+      summary: The report queue (CEO only)
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [open, resolved, rejected], default: open }
+      responses:
+        '200':
+          description: Reports, newest first, with per-target and per-author counts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/reports/summary:
+    get:
+      tags: [admin]
+      summary: How many reports are open, closed, and how many posts they hide
+      responses:
+        '200':
+          description: Counts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/reports/{reportID}/resolve:
+    parameters:
+      - name: reportID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [admin]
+      summary: Close a report (CEO only)
+      description: >
+        rejected=true means there was nothing to act on. The action itself —
+        deleting a post, sanctioning an account — is taken through the existing
+        moderation endpoints; this records that the queue entry is done with.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rejected: { type: boolean }
+      responses:
+        '200':
+          description: Closed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /users/me/blocks:
     get:
       tags: [users]

@@ -3,6 +3,7 @@ import { cn } from "@shared/lib/cn";
 import { formatTime } from "@shared/lib/format";
 import { ApiImage } from "@shared/ui/ApiImage";
 import { Icon } from "@shared/ui/icons";
+import { ReportDialog } from "@features/reports/ReportDialog";
 import { EmojiPicker } from "@shared/ui";
 import { VoiceBubble } from "@features/voice-message/VoiceBubble";
 import { renderRichText, firstUrl } from "@shared/lib/richText";
@@ -98,6 +99,7 @@ export const MessageBubble = memo(function MessageBubble({
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [timerOpen, setTimerOpen] = useState(false);
   const [draft, setDraft] = useState(message.text ?? "");
   const previewUrl = message.text ? firstUrl(message.text) : null;
@@ -251,7 +253,17 @@ export const MessageBubble = memo(function MessageBubble({
               <Icon.Trash size={15} />
             </button>
           )}
+          {/* Жалоба — только на чужое сообщение: на своё жаловаться незачем,
+              и сервер такую жалобу всё равно отклонит. */}
+          {!mine && (
+            <button className="bubble__action" onClick={() => setReportOpen(true)} title="Пожаловаться">
+              <Icon.Flag size={15} />
+            </button>
+          )}
         </div>
+        {reportOpen && (
+          <ReportDialog targetKind="message" targetId={message.id} onClose={() => setReportOpen(false)} />
+        )}
 
         {message.forwardedFrom && (
           <div className="bubble__forwarded">Переслано от {message.forwardedFrom.senderName || "пользователя"}</div>

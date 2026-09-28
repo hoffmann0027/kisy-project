@@ -296,3 +296,104 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* Очередь жалоб (E-02). */
+.admin__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.admin__hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.admin__filters {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.admin__empty {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+.reports {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.reports__row {
+  border: 1px solid var(--panel-brd);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  background: var(--chip-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reports__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.reports__kind {
+  font-weight: 620;
+}
+
+.reports__reason {
+  color: var(--color-accent);
+}
+
+.reports__time {
+  margin-left: auto;
+  color: var(--color-text-tertiary);
+}
+
+.reports__content {
+  margin: 0;
+  font-size: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.reports__content--hidden {
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+
+.reports__comment {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.reports__meta {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.reports__flag {
+  color: var(--color-danger);
+}
+
+.reports__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}

@@ -189,6 +189,8 @@ type AccountRateConfig struct {
 	LinkPreviewsPerMinuteInvited int
 	UploadsPerHourBasic          int
 	UploadsPerHourInvited        int
+	ReportsPerHourBasic          int
+	ReportsPerHourInvited        int
 }
 
 // LeadershipMaxLevel is the strongest clearance band for upload limits:
@@ -431,6 +433,7 @@ func Load() (*Config, error) {
 		"RATE_SEARCH_PER_MIN_BASIC": 20, "RATE_SEARCH_PER_MIN_INVITED": 60,
 		"RATE_LINK_PREVIEWS_PER_MIN_BASIC": 10, "RATE_LINK_PREVIEWS_PER_MIN_INVITED": 30,
 		"RATE_UPLOADS_PER_HOUR_BASIC": 30, "RATE_UPLOADS_PER_HOUR_INVITED": 300,
+		"RATE_REPORTS_PER_HOUR_BASIC": 10, "RATE_REPORTS_PER_HOUR_INVITED": 30,
 	}
 	for key, def := range rates {
 		v, err := getEnvInt(key, def)
@@ -453,6 +456,8 @@ func Load() (*Config, error) {
 		LinkPreviewsPerMinuteInvited: rates["RATE_LINK_PREVIEWS_PER_MIN_INVITED"],
 		UploadsPerHourBasic:          rates["RATE_UPLOADS_PER_HOUR_BASIC"],
 		UploadsPerHourInvited:        rates["RATE_UPLOADS_PER_HOUR_INVITED"],
+		ReportsPerHourBasic:          rates["RATE_REPORTS_PER_HOUR_BASIC"],
+		ReportsPerHourInvited:        rates["RATE_REPORTS_PER_HOUR_INVITED"],
 	}
 
 	quarantineMB, err := getEnvInt("QUARANTINE_MAX_UPLOAD_MB", 2)

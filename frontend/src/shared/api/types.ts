@@ -23,6 +23,39 @@ export interface Quarantine {
   maxUploadBytes: number;
 }
 
+/** На что можно пожаловаться и почему (E-02). */
+export type ReportTargetKind = "user" | "message" | "post" | "community";
+export type ReportReason = "spam" | "abuse" | "fraud" | "illegal" | "other";
+
+/** Жалоба в очереди CEO. */
+export interface Report {
+  id: string;
+  reporterId: string;
+  targetKind: ReportTargetKind;
+  targetId: string;
+  targetOwner: string | null;
+  reason: ReportReason;
+  comment?: string;
+  status: "open" | "resolved" | "rejected";
+  createdAt: string;
+  /** Сколько открытых жалоб у этого объекта всего. */
+  sameTarget: number;
+  /** Сколько открытых жалоб у автора объекта. */
+  againstOwner: number;
+  /** Текст, если сервер вообще может его прочитать. */
+  content: string | null;
+  /** false — содержимое есть, но оно зашифровано (личное сообщение). */
+  readable: boolean;
+}
+
+export interface ReportCounts {
+  open: number;
+  resolved: number;
+  rejected: number;
+  /** Посты, скрытые из ленты жалобами до решения CEO. */
+  hidden: number;
+}
+
 /** Одна запись в списке заблокированных (E-02). */
 export interface BlockedUser {
   userId: string;

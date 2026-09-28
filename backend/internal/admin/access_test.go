@@ -13,6 +13,7 @@ import (
 	"kisy-backend/internal/auth"
 	"kisy-backend/internal/auth/token"
 	"kisy-backend/internal/moderation"
+	"kisy-backend/internal/reports"
 )
 
 // Every route under /admin is the CEO's alone — including every sanction
@@ -33,9 +34,12 @@ func routerAs(claims *token.AccessClaims) http.Handler {
 	moderationRoutes := moderation.NewHandler(nil, func(*http.Request) (moderation.ActorMeta, bool) {
 		return moderation.ActorMeta{UserID: claims.UserID, RoleLevel: claims.RoleLevel}, true
 	}).AdminRoutes
+	reportRoutes := reports.NewHandler(nil, func(*http.Request) (reports.ActorMeta, bool) {
+		return reports.ActorMeta{UserID: claims.UserID}, true
+	}).AdminRoutes
 	admin.Mount(r, auth.NewMiddleware(nil, nil, nil), admin.NewHandler(nil, nil, func(*http.Request) (admin.ActorMeta, bool) {
 		return admin.ActorMeta{UserID: claims.UserID}, true
-	}), moderationRoutes)
+	}), moderationRoutes, reportRoutes)
 	return r
 }
 
@@ -52,7 +56,8 @@ func adminRoutes(t *testing.T) []route {
 		if strings.HasPrefix(path, "/admin") {
 			// Fill path parameters with something that parses, so a handler
 			// reached by mistake would get far enough to show it.
-			path = strings.NewReplacer("{userID}", uuid.NewString(), "{groupID}", uuid.NewString(), "{sanctionID}", uuid.NewString()).Replace(path)
+			path = strings.NewReplacer("{userID}", uuid.NewString(), "{groupID}", uuid.NewString(),
+				"{sanctionID}", uuid.NewString(), "{reportID}", uuid.NewString()).Replace(path)
 			out = append(out, route{method, path})
 		}
 		return nil

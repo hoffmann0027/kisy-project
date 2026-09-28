@@ -51,6 +51,7 @@ import (
 	"kisy-backend/internal/rating"
 	"kisy-backend/internal/reactions"
 	"kisy-backend/internal/readstate"
+	"kisy-backend/internal/reports"
 	"kisy-backend/internal/scheduled"
 	"kisy-backend/internal/search"
 	"kisy-backend/internal/users"
@@ -99,6 +100,7 @@ type modules struct {
 	hub                  *ws.Hub
 	limiter              *ratelimit.Limiter
 	blocksHandler        *blocks.Handler
+	reportsHandler       *reports.Handler
 	accountLimits        *ratelimit.Accounts
 }
 
@@ -961,6 +963,18 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		return blocks.ActorMeta{UserID: claims.UserID, SessionID: claims.SessionID, IPHash: m.IPHash, RequestID: m.RequestID}, true
 	})
 	blocksHandler.SetProfileLoader(usersProfile)
+
+	// Reporting content and people; the queue lives under /admin.
+	reportsSvc := reports.NewService(pool, auditRec)
+	wireReports(reportsSvc, pool)
+	reportsHandler := reports.NewHandler(reportsSvc, func(r *http.Request) (reports.ActorMeta, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return reports.ActorMeta{}, false
+		}
+		m := authHandler.ClientMeta(r)
+		return reports.ActorMeta{UserID: claims.UserID, SessionID: claims.SessionID, IPHash: m.IPHash, RequestID: m.RequestID}, true
+	})
 	wireBlocks(blocksSvc, chatsSvc, messagesSvc, callsSvc)
 
 	// Deleting your own account: the password is re-checked through the auth
@@ -1019,6 +1033,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		hub:                  hub,
 		limiter:              limiter,
 		blocksHandler:        blocksHandler,
+		reportsHandler:       reportsHandler,
 		accountLimits:        accountLimits,
 	}, nil
 }

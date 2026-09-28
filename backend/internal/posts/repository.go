@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"kisy-backend/internal/platform/db"
+	"kisy-backend/internal/reports"
+	"strconv"
 )
 
 // Repository is the persistence port for posts, their media and their
@@ -86,7 +88,21 @@ const notBlocked = `
 		   OR (b.blocked_id = $1 AND b.blocker_id = p.author_id)
 	)`
 
-const visibleCommunity = `
+// notMassReported hides a post that five different people have reported and
+// nobody has judged yet (internal/reports.AutoHideThreshold). One report hides
+// nothing; the author still sees their own post, so a group cannot silence
+// someone quietly. $1 is the viewer.
+var notMassReported = `
+	AND (
+		p.author_id = $1
+		OR (SELECT count(*) FROM reports r
+		    WHERE r.target_kind = 'post' AND r.target_id = p.id AND r.status = 'open') < ` +
+	strconv.Itoa(reports.AutoHideThreshold) + `
+	)`
+
+// visibleCommunity is a var only because notMassReported embeds a number
+// from another package (reports.AutoHideThreshold).
+var visibleCommunity = `
 	g.kind = 'community' AND g.is_public = true AND g.is_archived = false
 	AND g.deleted_at IS NULL
 	AND NOT ` + mutedNow + `
@@ -94,7 +110,7 @@ const visibleCommunity = `
 	AND NOT EXISTS (
 		SELECT 1 FROM feed_hidden_communities h
 		WHERE h.user_id = $1 AND h.group_id = g.id
-	)` + notBlocked
+	)` + notBlocked + notMassReported
 
 // mutedNow is true while the community g has a live mute: not revoked, and
 // either indefinite or not yet expired. Shared by the feed pages and the
@@ -175,7 +191,7 @@ func (r *PostgresRepository) ListByCommunity(
 	rows, err := q.Query(ctx, `
 		SELECT `+prefixed(postColumns, "p")+` FROM posts p
 		WHERE p.community_id = $2 AND p.deleted_at IS NULL
-		  AND ($3::timestamptz IS NULL OR p.created_at < $3)`+notBlocked+`
+		  AND ($3::timestamptz IS NULL OR p.created_at < $3)`+notBlocked+notMassReported+`
 		ORDER BY p.created_at DESC, p.id DESC
 		LIMIT $4`, viewerID, communityID, nullTime(before), limit)
 	if err != nil {
@@ -255,6 +271,10 @@ func (r *PostgresRepository) ScoreInputs(ctx context.Context, q db.DBTX, since t
 		  AND g.kind = 'community' AND g.is_public = true AND g.is_archived = false
 		  AND g.deleted_at IS NULL AND NOT `+mutedNow+`
 		  AND p.created_at >= $1
+		  -- A post the crowd has reported does not sit in the ranking either.
+		  AND (SELECT count(*) FROM reports rp
+		       WHERE rp.target_kind = 'post' AND rp.target_id = p.id AND rp.status = 'open') < `+
+		strconv.Itoa(reports.AutoHideThreshold)+`
 		GROUP BY p.id, p.created_at`, since, newAccountHold.Seconds())
 	if err != nil {
 		return nil, fmt.Errorf("posts: score inputs: %w", err)
