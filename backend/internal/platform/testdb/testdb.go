@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,13 +23,17 @@ import (
 )
 
 // New creates a fresh migrated database and returns a pool connected to it.
-// The database is dropped on test cleanup. The suite is skipped when
-// TEST_DATABASE_URL is not set.
+// The database is dropped on test cleanup. Without TEST_DATABASE_URL the
+// suite is skipped on a developer's machine and FAILS in CI — see
+// missingURLIsFatal.
 func New(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
 	adminURL := os.Getenv("TEST_DATABASE_URL")
 	if adminURL == "" {
+		if missingURLIsFatal(os.Getenv("CI")) {
+			t.Fatal("testdb: TEST_DATABASE_URL is not set in CI — the integration suite would report success without running")
+		}
 		t.Skip("TEST_DATABASE_URL not set; skipping integration test")
 	}
 
@@ -99,4 +104,21 @@ func migrationsDir(t *testing.T) string {
 	}
 	t.Fatalf("testdb: could not locate migrations directory")
 	return ""
+}
+
+// missingURLIsFatal decides what an unset TEST_DATABASE_URL means, from the
+// value of the CI environment variable (GitHub Actions sets CI=true).
+//
+// On a developer's machine skipping is right: `go test ./...` should stay
+// green without a database. In CI it is the opposite — a skip there means the
+// whole integration suite quietly reported success without running a single
+// query, which is how the HIGH findings of the September audit lived in code
+// that "had tests" (audit D-12).
+func missingURLIsFatal(ci string) bool {
+	switch strings.ToLower(strings.TrimSpace(ci)) {
+	case "", "0", "false":
+		return false
+	default:
+		return true
+	}
 }
