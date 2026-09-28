@@ -17,6 +17,7 @@ import {
   type ChatState,
 } from "@shared/crypto";
 import { e2eeApi } from "@shared/api/endpoints";
+import { ApiError } from "@shared/api/envelope";
 import type { ChatType, Message } from "@shared/api/types";
 import { dropKeyPackage, localKeyPackages, type E2EESession } from "./session";
 
@@ -281,33 +282,46 @@ export async function processWelcomes(s: E2EESession): Promise<string[]> {
   const joined: string[] = [];
 
   for (const w of welcomes) {
-    const joinedChat = await withChatLock(w.chatId, async () => {
-      // A state can already exist if both sides initiated simultaneously; the
-      // existing state wins and the stray welcome is acknowledged away
-      // (rare race, documented in docs/e2ee-design.md).
-      if (await loadState(s, w.chatId)) return false;
-      const payload = sodium.from_base64(w.payload, sodium.base64_variants.ORIGINAL);
-      let lastError: unknown = null;
-      for (const { n, pkg } of pool) {
-        try {
-          const state = await joinChat(payload, pkg);
-          await saveState(s, w.chatId, state);
-          await dropKeyPackage(s, n);
-          return true;
-        } catch (err) {
-          // Welcome was addressed to a different key package — try the next.
-          lastError = err;
-        }
-      }
-      console.warn(`E2EE: welcome ${w.id} for chat ${w.chatId} did not open with any local key package`, lastError);
-      return false;
-    });
+    const joinedChat = await withChatLock(w.chatId, () => joinFromWelcome(s, w, pool, sodium));
     // Always ack: either joined, redundant, or permanently unopenable
     // (its key package is gone) — re-delivery would never succeed.
     await e2eeApi.ackWelcome(w.id, s.identity.deviceId).catch(() => {});
     if (joinedChat) joined.push(w.chatId);
   }
   return joined;
+}
+
+/**
+ * Join the chat one Welcome invites this device into. Assumes the caller
+ * holds the chat's lock — processWelcomes takes it per welcome, and
+ * initiateChat already holds it when it adopts the winner's group after
+ * losing the race to create the chat (audit B-02).
+ */
+async function joinFromWelcome(
+  s: E2EESession,
+  w: { id: string; chatId: string; payload: string },
+  pool: Awaited<ReturnType<typeof localKeyPackages>>,
+  sodium: Awaited<ReturnType<typeof getSodium>>,
+): Promise<boolean> {
+  // A state can already exist when this device created the chat itself and
+  // the server accepted its commit: then ours is the real group and the
+  // stray welcome is acknowledged away.
+  if (await loadState(s, w.chatId)) return false;
+  const payload = sodium.from_base64(w.payload, sodium.base64_variants.ORIGINAL);
+  let lastError: unknown = null;
+  for (const { n, pkg } of pool) {
+    try {
+      const state = await joinChat(payload, pkg);
+      await saveState(s, w.chatId, state);
+      await dropKeyPackage(s, n);
+      return true;
+    } catch (err) {
+      // Welcome was addressed to a different key package — try the next.
+      lastError = err;
+    }
+  }
+  console.warn(`E2EE: welcome ${w.id} for chat ${w.chatId} did not open with any local key package`, lastError);
+  return false;
 }
 
 // --- handshake feed: apply commits from other members/devices ---
@@ -373,6 +387,33 @@ async function initiateChat(s: E2EESession, chatId: string, peerUserId: string):
   const commit = await addMembers(state, packages);
   state = commit.state;
 
+  // The commit goes first, and it is what claims the chat's first epoch. Both
+  // sides can decide to create the same chat at the same second — each with
+  // its own group, each unreadable to the other (audit B-02). The server
+  // accepts one of the two and answers the loser with EPOCH_CONFLICT; that
+  // answer, not a rule invented on the client, decides whose group is real.
+  //
+  // (Both sides derive the same group id from the chat id, so "the smaller id
+  // wins" — the first idea — could not tell them apart at all.)
+  try {
+    await e2eeApi.publishHandshake({
+      chatType: "private",
+      chatId,
+      kind: "commit",
+      senderDevice: s.identity.deviceId,
+      payload: toB64(commit.commit),
+      epoch: Number(commit.epoch),
+    });
+  } catch (err) {
+    if (!isEpochConflict(err)) throw err;
+    // We lost: the group we just built stays unsaved and unused — saving it
+    // is exactly how the two sides used to end up with a state each. The
+    // other side's Welcome is already on its way; take it.
+    const adopted = await adoptPeerChat(s, chatId);
+    if (adopted) return adopted;
+    throw new UserFacingError(CHAT_BEING_CREATED);
+  }
+
   if (commit.welcome) {
     await e2eeApi.publishHandshake({
       chatType: "private",
@@ -384,19 +425,34 @@ async function initiateChat(s: E2EESession, chatId: string, peerUserId: string):
       recipients,
     });
   }
-  // The commit is published for completeness/epoch tracking; other members
-  // join from the Welcome and skip frames authored by this device.
-  await e2eeApi.publishHandshake({
-    chatType: "private",
-    chatId,
-    kind: "commit",
-    senderDevice: s.identity.deviceId,
-    payload: toB64(commit.commit),
-    epoch: Number(commit.epoch),
-  });
 
   await saveState(s, chatId, state);
   return state;
+}
+
+/** The server answered "someone else moved this chat first" (409). */
+function isEpochConflict(err: unknown): boolean {
+  return err instanceof ApiError && err.code === "EPOCH_CONFLICT";
+}
+
+/**
+ * Join the group the other side created, after losing the race to create one.
+ * Returns their state once its Welcome has arrived; null while it has not —
+ * the two commits were simultaneous, so the Welcome may be seconds behind.
+ */
+async function adoptPeerChat(s: E2EESession, chatId: string): Promise<ChatState | null> {
+  const sodium = await getSodium();
+  const { welcomes } = await e2eeApi.listWelcomes(s.identity.deviceId);
+  const mine = welcomes.filter((w) => w.chatId === chatId);
+  if (mine.length === 0) return null;
+
+  const pool = await localKeyPackages(s);
+  for (const w of mine) {
+    const joined = await joinFromWelcome(s, w, pool, sodium);
+    await e2eeApi.ackWelcome(w.id, s.identity.deviceId).catch(() => {});
+    if (joined) break;
+  }
+  return loadState(s, chatId);
 }
 
 // --- public API: encrypt / decrypt ---
@@ -407,6 +463,8 @@ export interface EncryptedBody {
   epoch: number;
 }
 
+export const CHAT_BEING_CREATED =
+  "Чат уже создаётся на другом устройстве — подождите пару секунд и отправьте снова.";
 export const PEER_NO_DEVICES =
   "Собеседник ещё не входил в KISY с поддержкой шифрования — сообщение не отправлено.";
 export const PEER_KEYS_EXHAUSTED =

@@ -20,6 +20,8 @@ interface FakeServer {
   }[];
   handshake: { id: string; chatType: ChatType; chatId: string; kind: number; senderDevice: string; payload: string; epoch: number | null; createdAt: string }[];
   deviceOwners: Map<string, string>; // deviceId → userId
+  /** Current MLS epoch per chat, as the real server keeps it (audit B-02). */
+  epochs: Map<string, number>;
 }
 
 const server: FakeServer = {
@@ -27,6 +29,7 @@ const server: FakeServer = {
   welcomes: [],
   handshake: [],
   deviceOwners: new Map(),
+  epochs: new Map(),
 };
 
 let nextId = 0;
@@ -57,6 +60,15 @@ vi.mock("@shared/api/endpoints", () => ({
       epoch?: number;
       recipients?: Record<string, string>;
     }) {
+      // The epoch gate of the real delivery service: a commit is accepted
+      // only while it moves the chat forward (backend internal/e2ee).
+      if (body.kind === "commit" && body.epoch !== undefined) {
+        const current = server.epochs.get(body.chatId);
+        if (current !== undefined && body.epoch <= current) {
+          throw new ApiError("EPOCH_CONFLICT", "chat moved on", "req", 409);
+        }
+        server.epochs.set(body.chatId, body.epoch);
+      }
       if (body.kind === "welcome") {
         for (const deviceId of Object.keys(body.recipients ?? {})) {
           server.welcomes.push({
@@ -121,6 +133,7 @@ vi.mock("@shared/api/endpoints", () => ({
 }));
 
 // Imports below the mock so they see the fake endpoints.
+import { ApiError } from "@shared/api/envelope";
 import { MemoryKeyStore, loadOrCreateIdentity } from "@shared/crypto";
 import { UserFacingError } from "@shared/lib/errors";
 import type { E2EESession } from "./session";
@@ -186,6 +199,7 @@ describe("E2EE private chat orchestration", () => {
     server.welcomes.length = 0;
     server.handshake.length = 0;
     server.deviceOwners.clear();
+    server.epochs.clear();
     resetChatStatesForTests();
   });
 
@@ -231,6 +245,55 @@ describe("E2EE private chat orchestration", () => {
 
   // Audit A-10: no key packages is not a reason to send in the clear. The
   // caller gets a UserFacingError naming the actual problem.
+  // Audit B-02: both sides can decide to start the same chat at the same
+  // moment. Each used to build its own group, and neither could read the
+  // other — for good. The server accepts one of the two commits; the loser
+  // must drop what it built and take the winner's group instead.
+  it("the side that loses the race to create a chat joins the winner's group", async () => {
+    const alice = await makeSession("user-alice");
+    const bob = await makeSession("user-bob");
+    await publishPool(alice, 3);
+    await publishPool(bob, 3);
+    const chatId = "chat-race";
+
+    // Alice gets there first: her commit claims the chat's first epoch and
+    // her Welcome is waiting for bob.
+    const fromAlice = await encryptForChat(alice, chatId, "user-bob", "я первая");
+    expect(server.epochs.get(chatId)).toBeDefined();
+
+    // Bob, who was composing at the same time, now sends. His own group is
+    // refused by the server and he ends up inside alice's.
+    const fromBob = await encryptForChat(bob, chatId, "user-alice", "а я второй");
+
+    // The proof that there is one group and not two: each reads the other.
+    const bobReadsAlice = await hydrateMessage(bob, messageDTO("m1", chatId, "user-alice", fromAlice.ciphertext));
+    expect(bobReadsAlice.text).toBe("я первая");
+    const aliceReadsBob = await hydrateMessage(alice, messageDTO("m2", chatId, "user-bob", fromBob.ciphertext));
+    expect(aliceReadsBob.text).toBe("а я второй");
+
+    // And only one group was ever announced to the chat.
+    const commits = server.handshake.filter((h) => h.chatId === chatId && h.kind === 2);
+    expect(commits).toHaveLength(1);
+  });
+
+  // The two commits can be simultaneous enough that the winner's Welcome has
+  // not been written yet. Then there is nothing to join, and the honest
+  // answer is "wait a moment" — not a second group.
+  it("says to wait when the winner's welcome has not arrived yet", async () => {
+    const bob = await makeSession("user-bob");
+    const alice = await makeSession("user-alice");
+    await publishPool(alice, 3);
+    const chatId = "chat-race-2";
+    // Somebody else already claimed the chat's first epoch, and no Welcome
+    // for bob exists yet.
+    server.epochs.set(chatId, 1);
+
+    await expect(encryptForChat(bob, chatId, "user-alice", "привет")).rejects.toThrow(UserFacingError);
+    // Nothing of bob's survived: no commit, no welcome, no state.
+    expect(server.handshake.filter((h) => h.chatId === chatId)).toHaveLength(0);
+    expect(server.welcomes.filter((w) => w.chatId === chatId)).toHaveLength(0);
+  });
+
   it("refuses, with a reason, when the peer has never set up encryption", async () => {
     const alice = await makeSession("user-alice");
     const refusal = encryptForChat(alice, "chat-2", "user-no-devices", "привет");
