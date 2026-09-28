@@ -251,3 +251,54 @@ func TestBlockingYourselfIsRefusedAndBlockingTwiceIsFine(t *testing.T) {
 		t.Fatalf("list = %+v", list)
 	}
 }
+
+// A block also ends what the two show each other under other people's posts:
+// seeing a heart from the person you blocked is what blocking was meant to end.
+func TestBlockedAccountsReactionsAreNotShown(t *testing.T) {
+	f := newBlockFixture(t)
+	actor := groups.ActorMeta{UserID: f.me, RoleLevel: 5}
+	g, err := f.groups.Create(f.ctx, groups.CreateInput{Name: "Wall " + uuid.NewString()[:6], Kind: groups.KindCommunity, IsPublic: true}, actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	post, err := f.posts.Create(f.ctx, posts.CreateInput{CommunityID: g.ID, Text: "пост"}, posts.ActorMeta{UserID: f.me, RoleLevel: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(f.ctx,
+		`INSERT INTO reactions (post_id, user_id, emoji) VALUES ($1, $2, '👍')`, post.ID, f.them); err != nil {
+		t.Fatal(err)
+	}
+
+	reactionsOn := func(viewer uuid.UUID) int {
+		t.Helper()
+		page, err := f.posts.ListCommunity(f.ctx, g.ID, "", 10, posts.ActorMeta{UserID: viewer, RoleLevel: 5})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range page.Posts {
+			if p.ID == post.ID {
+				total := 0
+				for _, r := range p.Reactions {
+					total += r.Count
+				}
+				return total
+			}
+		}
+		t.Fatal("the post is not on its own wall")
+		return 0
+	}
+
+	if reactionsOn(f.me) != 1 {
+		t.Fatal("precondition: the reaction is visible before the block")
+	}
+	f.block(t, f.me, f.them)
+	if n := reactionsOn(f.me); n != 0 {
+		t.Fatalf("a blocked account's reaction is still shown: %d", n)
+	}
+	// Everyone else keeps seeing it — a block is between two people.
+	third := testdb.SeedUser(t, f.pool, "third_"+uuid.NewString()[:8], 5)
+	if n := reactionsOn(third); n != 1 {
+		t.Fatalf("the reaction disappeared for an unrelated viewer: %d", n)
+	}
+}

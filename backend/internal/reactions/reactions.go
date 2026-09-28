@@ -62,10 +62,18 @@ func (r *PostgresRepository) Remove(ctx context.Context, q db.DBTX, messageID, u
 }
 
 func (r *PostgresRepository) SummariesFor(ctx context.Context, q db.DBTX, messageIDs []uuid.UUID, viewerID uuid.UUID) (map[uuid.UUID][]messages.ReactionSummary, error) {
+	// Reactions of a blocked account are not shown to the viewer, in either
+	// direction — the same rule as the feed (audit E-02). In a group chat the
+	// two can still share a room; the block ends what they show each other.
 	rows, err := q.Query(ctx, `
 		SELECT message_id, emoji, count(*) AS n, bool_or(user_id = $2) AS reacted
-		FROM reactions
+		FROM reactions rx
 		WHERE message_id = ANY($1)
+		  AND NOT EXISTS (
+		    SELECT 1 FROM user_blocks b
+		    WHERE (b.blocker_id = $2 AND b.blocked_id = rx.user_id)
+		       OR (b.blocked_id = $2 AND b.blocker_id = rx.user_id)
+		  )
 		GROUP BY message_id, emoji
 		ORDER BY n DESC, emoji ASC`,
 		messageIDs, viewerID)

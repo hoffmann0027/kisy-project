@@ -326,10 +326,18 @@ func (r *PostgresRepository) ReactionsFor(
 	if len(postIDs) == 0 {
 		return map[uuid.UUID][]ReactionSummary{}, nil
 	}
+	// A blocked account's reaction is not shown to the viewer, in either
+	// direction: seeing "кто-то, кого вы заблокировали, поставил сердечко"
+	// is exactly what blocking was supposed to end (audit E-02).
 	rows, err := q.Query(ctx, `
 		SELECT post_id, emoji, COUNT(*)::int, bool_or(user_id = $2)
-		FROM reactions
+		FROM reactions rx
 		WHERE post_id = ANY($1)
+		  AND NOT EXISTS (
+		    SELECT 1 FROM user_blocks b
+		    WHERE (b.blocker_id = $2 AND b.blocked_id = rx.user_id)
+		       OR (b.blocked_id = $2 AND b.blocker_id = rx.user_id)
+		  )
 		GROUP BY post_id, emoji
 		ORDER BY post_id, COUNT(*) DESC, emoji`, postIDs, viewerID)
 	if err != nil {
