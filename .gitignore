@@ -48,3 +48,8 @@ backups/
 # App signing keys never enter the repository (docs/android.md).
 *.jks
 *.keystore
+
+# Security audits stay local: this repository is public, and the reports list
+# vulnerabilities that are still open. Committed once by accident (28.09.2026),
+# removed from main the same minute — ignored here so it cannot happen again.
+docs/audit/
