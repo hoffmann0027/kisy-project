@@ -4,6 +4,7 @@ import { Button, Input, Modal, VerifiedName, toast } from "@shared/ui";
 import { roleLabel } from "@shared/api/types";
 import { authApi, usersApi } from "@shared/api/endpoints";
 import { useAuthStore } from "@shared/store/auth";
+import { PASSWORD_RULE_TEXT, passwordProblem } from "@shared/lib/password";
 import { DeleteAccountDialog } from "./DeleteAccountDialog";
 import { BlockedList } from "@features/blocks/BlockedList";
 import { disablePush, enablePush, pushEnabled, pushSupported } from "@shared/lib/push";
@@ -150,7 +151,13 @@ export function ProfileModal({ open, onClose }: Props) {
           value={currentPassword}
           onChange={(e) => setCurrentPassword(e.target.value)}
         />
-        <Input label="Новый пароль" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+        <Input
+          label="Новый пароль"
+          hint={PASSWORD_RULE_TEXT}
+          type="password"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+        />
         <Button variant="secondary" onClick={changePassword} loading={busy}>
           Изменить пароль
         </Button>
