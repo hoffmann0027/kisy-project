@@ -91,12 +91,15 @@ const notBlocked = `
 // notMassReported hides a post that five different people have reported and
 // nobody has judged yet (internal/reports.AutoHideThreshold). One report hides
 // nothing; the author still sees their own post, so a group cannot silence
-// someone quietly. $1 is the viewer.
+// someone quietly. Reports from accounts still in their new-account quarantine
+// do not count (migration 56): otherwise five fresh sign-ups could hide any
+// post. $1 is the viewer.
 var notMassReported = `
 	AND (
 		p.author_id = $1
 		OR (SELECT count(*) FROM reports r
-		    WHERE r.target_kind = 'post' AND r.target_id = p.id AND r.status = 'open') < ` +
+		    WHERE r.target_kind = 'post' AND r.target_id = p.id AND r.status = 'open'
+		      AND r.counts_toward_hide) < ` +
 	strconv.Itoa(reports.AutoHideThreshold) + `
 	)`
 

@@ -69,6 +69,10 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "unknown target or reason")
 	case errors.Is(err, ErrSelf):
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "нельзя пожаловаться на себя")
+	case errors.Is(err, ErrNotFound):
+		// Nothing there — or nothing this account may see. Deliberately one
+		// answer for both.
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "not found")
 	case err != nil:
 		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
 	default:

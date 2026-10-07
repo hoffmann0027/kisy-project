@@ -87,11 +87,22 @@ type Report struct {
 // and messages.
 type OwnerResolver func(ctx context.Context, kind string, id uuid.UUID) (owner uuid.UUID, found bool, err error)
 
+// VisibilityChecker says whether the reporter can see the thing being
+// reported at all. Injected for the same reason as OwnerResolver.
+type VisibilityChecker func(ctx context.Context, reporterID uuid.UUID, kind string, id uuid.UUID) (bool, error)
+
+// WeightFunc says whether this reporter's reports move the automatic hiding of
+// a post (AutoHideThreshold). False for an account still in its new-account
+// quarantine: its report still reaches the queue, it just does not count.
+type WeightFunc func(ctx context.Context, reporterID uuid.UUID) (bool, error)
+
 type Service struct {
 	pool    *pgxpool.Pool
 	audit   audit.Recorder
 	owner   OwnerResolver
 	content ContentLoader
+	visible VisibilityChecker
+	weight  WeightFunc
 }
 
 func NewService(pool *pgxpool.Pool, rec audit.Recorder) *Service {
@@ -100,6 +111,15 @@ func NewService(pool *pgxpool.Pool, rec audit.Recorder) *Service {
 
 // SetOwnerResolver wires the lookup of who authored a reported thing.
 func (s *Service) SetOwnerResolver(f OwnerResolver) { s.owner = f }
+
+// SetVisibility wires the check that a reporter can see what they report.
+// Without it every report is refused: a report on something you cannot see
+// is a way to probe for it, and — for a post — a vote toward hiding it.
+func (s *Service) SetVisibility(f VisibilityChecker) { s.visible = f }
+
+// SetWeight wires which reporters count toward hiding a post automatically.
+// Unset, every report counts.
+func (s *Service) SetWeight(f WeightFunc) { s.weight = f }
 
 // ActorMeta is who is reporting.
 type ActorMeta struct {
@@ -140,6 +160,28 @@ func (s *Service) Create(ctx context.Context, actor ActorMeta, in Input) (uuid.U
 		comment = string([]rune(comment)[:MaxCommentLength])
 	}
 
+	// Only what you can see can be reported. Anything else answers exactly as
+	// a target that does not exist, so the endpoint tells nothing about posts
+	// in closed communities or messages in other people's chats — and five
+	// strangers cannot hide a post they were never shown.
+	if s.visible == nil {
+		return uuid.Nil, ErrNotFound
+	}
+	visible, err := s.visible(ctx, actor.UserID, in.TargetKind, in.TargetID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if !visible {
+		return uuid.Nil, ErrNotFound
+	}
+
+	counts := true
+	if s.weight != nil {
+		if counts, err = s.weight(ctx, actor.UserID); err != nil {
+			return uuid.Nil, err
+		}
+	}
+
 	var owner *uuid.UUID
 	if in.TargetKind == TargetUser {
 		id := in.TargetID
@@ -165,12 +207,13 @@ func (s *Service) Create(ctx context.Context, actor ActorMeta, in Input) (uuid.U
 
 	var id uuid.UUID
 	err = tx.QueryRow(ctx, `
-		INSERT INTO reports (reporter_id, target_kind, target_id, target_owner, reason, comment)
-		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''))
+		INSERT INTO reports (reporter_id, target_kind, target_id, target_owner, reason, comment, counts_toward_hide)
+		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7)
 		ON CONFLICT (reporter_id, target_kind, target_id) DO UPDATE
-		  SET reason = EXCLUDED.reason, comment = EXCLUDED.comment
+		  SET reason = EXCLUDED.reason, comment = EXCLUDED.comment,
+		      counts_toward_hide = EXCLUDED.counts_toward_hide
 		RETURNING id`,
-		actor.UserID, in.TargetKind, in.TargetID, owner, in.Reason, comment).Scan(&id)
+		actor.UserID, in.TargetKind, in.TargetID, owner, in.Reason, comment, counts).Scan(&id)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("reports: create: %w", err)
 	}

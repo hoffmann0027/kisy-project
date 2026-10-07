@@ -999,7 +999,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		usersSvc.SetBlobStore(blobs)
 	}
 
-	wireQuarantine(cfg.Quarantine, pool, usersRepo, heldBack{
+	quarantineChecker := wireQuarantine(cfg.Quarantine, pool, usersRepo, heldBack{
 		posts:       postsSvc,
 		groups:      groupsSvc,
 		attachments: attachmentsSvc,
@@ -1007,6 +1007,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		chats:       chatsSvc,
 		users:       usersHandler,
 	})
+	wireReportWeight(reportsSvc, quarantineChecker)
 
 	return &modules{
 		authHandler:          authHandler,

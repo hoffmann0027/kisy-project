@@ -8,9 +8,10 @@
 // without it, and an existing account is asked again whenever either text
 // changes.
 //
-// The texts themselves live in the frontend (frontend/src/pages/legal), each
-// with a version. The versions below must match them — a test in this package
-// reads those files and fails if they drift apart.
+// The texts themselves live in the frontend (frontend/src/pages/legal), their
+// versions in frontend/src/shared/config/legalVersions.ts. The versions below
+// must match them — a test in this package reads that file and fails if they
+// drift apart.
 package consent
 
 import (
@@ -25,10 +26,10 @@ import (
 
 // Current versions of the two documents. Bumping either one asks every
 // account to accept again at its next sign-in. Keep them equal to
-// PRIVACY_VERSION / RULES_VERSION in frontend/src/pages/legal.
+// PRIVACY_VERSION / RULES_VERSION in frontend/src/shared/config/legalVersions.ts.
 const (
 	PrivacyVersion = "2026-10-07"
-	RulesVersion   = "2026-10-07"
+	RulesVersion   = "2026-10-08"
 )
 
 // Acceptance is what a client says the person agreed to.

@@ -10,6 +10,7 @@ import { Conversation } from "./Conversation";
 import { BoardView } from "@widgets/board/BoardView";
 import { CalendarView } from "@widgets/calendar/CalendarView";
 import { GroupMembersModal } from "@features/profile/GroupMembersModal";
+import { ReportButton } from "@features/reports/ReportButton";
 import { CommunityWall } from "@widgets/feed/CommunityWall";
 import { VerifiedName } from "@shared/ui/VerifiedBadge";
 import { useCapabilities } from "@shared/lib/useCapabilities";
@@ -96,6 +97,16 @@ export function GroupView({ group }: { group: Group }) {
       <button className="group-tab" onClick={() => setMembersOpen(true)} title="Участники">
         <Icon.Users size={16} />
       </button>
+      {/* Those who run it have the moderation tools; everyone else reports. */}
+      {!runsGroup && (
+        <ReportButton
+          targetKind="community"
+          targetId={group.id}
+          label={isCommunity ? "Пожаловаться на сообщество" : "Пожаловаться на группу"}
+          className="group-tab"
+          size={16}
+        />
+      )}
     </div>
   );
 

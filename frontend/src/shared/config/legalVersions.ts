@@ -8,7 +8,7 @@
 // accept again at its next sign-in.
 
 export const PRIVACY_VERSION = "2026-10-07";
-export const RULES_VERSION = "2026-10-07";
+export const RULES_VERSION = "2026-10-08";
 
 export interface Acceptance {
   privacyVersion: string;

@@ -7,6 +7,7 @@ import { formatRelative } from "@shared/lib/format";
 import type { Post } from "@shared/api/types";
 import { useJoinGroup } from "@entities/group/queries";
 import { useDeletePost, useReactToPost } from "@entities/post/queries";
+import { ReportButton } from "@features/reports/ReportButton";
 
 // One post in the feed or on a community's wall.
 //
@@ -114,6 +115,17 @@ export function PostCard({ post, showCommunity = true }: Props) {
           >
             <Icon.Trash size={18} />
           </IconButton>
+        )}
+        {/* Whoever can delete a post — its author, its community's editors,
+            the CEO — removes it instead; everyone else can report it. The
+            server refuses a report on your own post either way. */}
+        {!post.canDelete && (
+          <ReportButton
+            targetKind="post"
+            targetId={post.id}
+            label="Пожаловаться на запись"
+            className="ui-icon-btn post__report"
+          />
         )}
       </header>
 

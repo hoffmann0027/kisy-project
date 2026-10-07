@@ -12,6 +12,7 @@ import { ForwardModal, type ForwardTarget } from "@features/forward/ForwardModal
 import { MuteMenu } from "@features/notif-prefs/MuteMenu";
 import { DisappearMenu } from "@features/disappear/DisappearMenu";
 import { BlockButton } from "@features/blocks/BlockButton";
+import { ReportButton } from "@features/reports/ReportButton";
 import { useSetMessageExpiry } from "@entities/chat/disappearing";
 import { useBackHandler } from "@shared/lib/backStack";
 import type { Attachment, ChatMediaItem, ChatType, Message } from "@shared/api/types";
@@ -414,7 +415,16 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
           <DisappearMenu chatType={chatType} chatId={chatId} />
           <MuteMenu chatType={chatType} chatId={chatId} />
           {chatType === "private" && target.peerUserId && (
-            <BlockButton userId={target.peerUserId} name={target.title} />
+            <>
+              <BlockButton userId={target.peerUserId} name={target.title} />
+              <ReportButton
+                targetKind="user"
+                targetId={target.peerUserId}
+                label={`Пожаловаться на ${target.title}`}
+                className="conv__panel-toggle"
+                size={20}
+              />
+            </>
           )}
           <button
             className={cn("conv__panel-toggle", panelOpen && "conv__panel-toggle--active")}

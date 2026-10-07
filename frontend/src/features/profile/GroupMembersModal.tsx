@@ -19,6 +19,7 @@ import { useAuthStore } from "@shared/store/auth";
 import { useCapabilities } from "@shared/lib/useCapabilities";
 import { ApiError } from "@shared/api/envelope";
 import { AvatarCropper } from "./AvatarCropper";
+import { ReportButton } from "@features/reports/ReportButton";
 
 interface Props {
   group: Group;
@@ -239,6 +240,18 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
                 <Button variant="ghost" loading={setRole.isPending} onClick={() => toggleEditor(m.user.id, m.role)}>
                   {m.role === "editor" ? "Снять редактора" : "Сделать редактором"}
                 </Button>
+              )}
+              {/* The one place someone you have never written to is visible:
+                  a community's members. Without this, reporting a person
+                  required opening a private chat with them first. */}
+              {m.user.id !== me.id && (
+                <ReportButton
+                  targetKind="user"
+                  targetId={m.user.id}
+                  label={`Пожаловаться на ${m.user.displayName}`}
+                  className="ui-icon-btn"
+                  size={16}
+                />
               )}
             </div>
           );
