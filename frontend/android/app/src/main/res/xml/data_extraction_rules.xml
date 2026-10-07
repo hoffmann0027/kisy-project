@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Nothing of KISY leaves the phone through Android's own backup or transfer.
+
+  The WebView's storage holds the session tokens and, in IndexedDB, the
+  end-to-end encryption keys. A cloud backup carried them into Google's
+  backup together with the data they protect, and a restore onto another
+  phone cloned the device id, which breaks the encrypted chats it belongs to
+  (audit A-22). allowBackup="false" stops the cloud backup only; on Android
+  12+ device-to-device transfer ignores it, hence these rules for both.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+    </device-transfer>
+</data-extraction-rules>

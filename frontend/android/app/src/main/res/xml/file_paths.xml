@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  What the FileProvider may hand to other apps. Capacitor uses it for one
+  thing: the photo the camera takes for an <input type="file" capture> lands
+  in getExternalFilesDir(Pictures). The template exposed the whole external
+  storage ("external-path ."); only that folder and the app's cache are
+  needed (audit E-09).
+-->
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <external-path name="my_images" path="." />
+    <external-files-path name="my_images" path="Pictures/" />
     <cache-path name="my_cache_images" path="." />
 </paths>
