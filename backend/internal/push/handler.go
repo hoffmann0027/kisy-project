@@ -75,7 +75,8 @@ type unsubscribeRequest struct {
 }
 
 func (h *Handler) unsubscribe(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.userID(r); !ok {
+	uid, ok := h.userID(r)
+	if !ok {
 		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
 		return
 	}
@@ -84,7 +85,7 @@ func (h *Handler) unsubscribe(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "invalid request")
 		return
 	}
-	_ = h.svc.Unsubscribe(r.Context(), req.Endpoint)
+	_ = h.svc.Unsubscribe(r.Context(), uid, req.Endpoint)
 	httpresponse.OK(w, r, http.StatusOK, map[string]any{"unsubscribed": true})
 }
 
@@ -122,7 +123,8 @@ func (h *Handler) registerDevice(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) unregisterDevice(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.userID(r); !ok {
+	uid, ok := h.userID(r)
+	if !ok {
 		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
 		return
 	}
@@ -131,6 +133,6 @@ func (h *Handler) unregisterDevice(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "invalid request")
 		return
 	}
-	_ = h.svc.UnregisterDevice(r.Context(), req.Token)
+	_ = h.svc.UnregisterDevice(r.Context(), uid, req.Token)
 	httpresponse.OK(w, r, http.StatusOK, map[string]any{"unregistered": true})
 }

@@ -36,10 +36,14 @@ type Device struct {
 type Repository interface {
 	Upsert(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, s Subscription) error
 	Delete(ctx context.Context, pool *pgxpool.Pool, endpoint string) error
+	// DeleteForUser removes a subscription only if it belongs to userID.
+	DeleteForUser(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, endpoint string) error
 	ListForUser(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID) ([]Subscription, error)
 
 	UpsertDevice(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, d Device) error
 	DeleteDevice(ctx context.Context, pool *pgxpool.Pool, token string) error
+	// DeleteDeviceForUser removes a device token only if it belongs to userID.
+	DeleteDeviceForUser(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, token string) error
 	ListDevicesForUser(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID) ([]Device, error)
 }
 
@@ -66,6 +70,13 @@ func (r *PostgresRepository) Delete(ctx context.Context, pool *pgxpool.Pool, end
 	return nil
 }
 
+func (r *PostgresRepository) DeleteForUser(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, endpoint string) error {
+	if _, err := pool.Exec(ctx, `DELETE FROM push_subscriptions WHERE endpoint = $1 AND user_id = $2`, endpoint, userID); err != nil {
+		return fmt.Errorf("push: delete own: %w", err)
+	}
+	return nil
+}
+
 func (r *PostgresRepository) ListForUser(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID) ([]Subscription, error) {
 	rows, err := pool.Query(ctx, `SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1`, userID)
 	if err != nil {
@@ -86,6 +97,13 @@ func (r *PostgresRepository) ListForUser(ctx context.Context, pool *pgxpool.Pool
 // UpsertDevice records (or refreshes) a device registration token. Tokens move
 // between users when a phone is handed over or a second account signs in, so a
 // conflict rebinds the row instead of failing.
+//
+// That is deliberate, and it is the one half of audit A-20 kept as it was: the
+// token is the device's own secret, so presenting it is presenting the device,
+// and notifications belong to whoever holds the phone now. Refusing the rebind
+// would leave the previous account's notifications on a phone handed to
+// someone else. Deleting, on the other hand, has no such case — see
+// DeleteDeviceForUser.
 func (r *PostgresRepository) UpsertDevice(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, d Device) error {
 	_, err := pool.Exec(ctx, `
 		INSERT INTO device_tokens (user_id, token, platform)
@@ -101,6 +119,13 @@ func (r *PostgresRepository) UpsertDevice(ctx context.Context, pool *pgxpool.Poo
 func (r *PostgresRepository) DeleteDevice(ctx context.Context, pool *pgxpool.Pool, token string) error {
 	if _, err := pool.Exec(ctx, `DELETE FROM device_tokens WHERE token = $1`, token); err != nil {
 		return fmt.Errorf("push: delete device: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepository) DeleteDeviceForUser(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, token string) error {
+	if _, err := pool.Exec(ctx, `DELETE FROM device_tokens WHERE token = $1 AND user_id = $2`, token, userID); err != nil {
+		return fmt.Errorf("push: delete own device: %w", err)
 	}
 	return nil
 }
@@ -171,8 +196,11 @@ func (s *Service) Subscribe(ctx context.Context, userID uuid.UUID, sub Subscript
 	return s.repo.Upsert(ctx, s.pool, userID, sub)
 }
 
-func (s *Service) Unsubscribe(ctx context.Context, endpoint string) error {
-	return s.repo.Delete(ctx, s.pool, endpoint)
+// Unsubscribe removes the caller's own subscription. It used to delete any
+// row with that endpoint, so whoever knew someone's endpoint could switch off
+// their notifications (audit A-20).
+func (s *Service) Unsubscribe(ctx context.Context, userID uuid.UUID, endpoint string) error {
+	return s.repo.DeleteForUser(ctx, s.pool, userID, endpoint)
 }
 
 // RegisterDevice stores the FCM registration token the mobile app reports.
@@ -181,8 +209,11 @@ func (s *Service) RegisterDevice(ctx context.Context, userID uuid.UUID, d Device
 }
 
 // UnregisterDevice forgets a device, e.g. on sign-out.
-func (s *Service) UnregisterDevice(ctx context.Context, token string) error {
-	return s.repo.DeleteDevice(ctx, s.pool, token)
+// UnregisterDevice removes the caller's own device token (audit A-20, as
+// Unsubscribe). Tokens a push service reports as dead are still pruned
+// whoever they belong to — that is the service's word, not a client's.
+func (s *Service) UnregisterDevice(ctx context.Context, userID uuid.UUID, token string) error {
+	return s.repo.DeleteDeviceForUser(ctx, s.pool, userID, token)
 }
 
 // payload is the JSON the service worker's push handler expects.

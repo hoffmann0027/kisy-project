@@ -18,8 +18,12 @@ type fakeRepo struct {
 	deleted []string
 }
 
-func (f *fakeRepo) Upsert(context.Context, *pgxpool.Pool, uuid.UUID, Subscription) error { return nil }
-func (f *fakeRepo) Delete(context.Context, *pgxpool.Pool, string) error                  { return nil }
+func (f *fakeRepo) Upsert(context.Context, *pgxpool.Pool, uuid.UUID, Subscription) error  { return nil }
+func (f *fakeRepo) Delete(context.Context, *pgxpool.Pool, string) error                   { return nil }
+func (f *fakeRepo) DeleteForUser(context.Context, *pgxpool.Pool, uuid.UUID, string) error { return nil }
+func (f *fakeRepo) DeleteDeviceForUser(context.Context, *pgxpool.Pool, uuid.UUID, string) error {
+	return nil
+}
 func (f *fakeRepo) ListForUser(context.Context, *pgxpool.Pool, uuid.UUID) ([]Subscription, error) {
 	return nil, nil
 }
