@@ -149,3 +149,19 @@ func TestTokenIssuedBeforeAccountKindsStillWorks(t *testing.T) {
 		t.Fatalf("kind = %q, want invited", claims.Kind)
 	}
 }
+
+// Audit A-44: a kind this server never issues ("xxx" at level 5) used to be
+// accepted, and the guards that read the kind and the ones that do not then
+// disagreed about the same token.
+func TestUnknownAccountKindIsRejected(t *testing.T) {
+	m := NewManager(testSecret, time.Minute)
+	for _, kind := range []string{"xxx", "ceo", "admin", "INVITED"} {
+		raw, _, err := m.IssueAccess(uuid.New(), uuid.New(), 5, kind)
+		if err != nil {
+			t.Fatalf("IssueAccess(%q) error: %v", kind, err)
+		}
+		if _, err := m.ParseAccess(raw); err == nil {
+			t.Errorf("a token of kind %q was accepted", kind)
+		}
+	}
+}

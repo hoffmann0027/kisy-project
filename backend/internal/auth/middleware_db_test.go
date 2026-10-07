@@ -43,7 +43,7 @@ func (s stubSessions) RevokeAllForUserExcept(context.Context, db.DBTX, uuid.UUID
 func TestRequireAuthSeparatesDeadSessionFromDeadDatabase(t *testing.T) {
 	userID, sessionID := uuid.New(), uuid.New()
 	tokens := token.NewManager("test-secret-value-for-middleware-tests", time.Minute)
-	access, _, err := tokens.IssueAccess(userID, sessionID, 1, "ceo")
+	access, _, err := tokens.IssueAccess(userID, sessionID, 1, "invited")
 	if err != nil {
 		t.Fatalf("issue access token: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestRefreshKeepsCookiesWhenTheStoreIsDown(t *testing.T) {
 func TestSeededPasswordUnlocksNothingButItsOwnChange(t *testing.T) {
 	userID, sessionID := uuid.New(), uuid.New()
 	tokens := token.NewManager("test-secret-value-for-middleware-tests", time.Minute)
-	access, _, err := tokens.IssueAccess(userID, sessionID, 1, "ceo")
+	access, _, err := tokens.IssueAccess(userID, sessionID, 1, "invited")
 	if err != nil {
 		t.Fatal(err)
 	}

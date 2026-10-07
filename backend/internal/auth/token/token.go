@@ -121,6 +121,13 @@ func (m *Manager) ParseAccess(raw string) (*AccessClaims, error) {
 		// accounts — those were the only kind there was.
 		kind = users.KindInvited
 	}
+	// Two kinds exist; anything else is not a token this server issued.
+	// "xxx" with a level of 5 used to pass, and while it still needed the
+	// secret to sign, a guard that compares the kind (RequireInvited) and one
+	// that does not (RequireClearance) disagreed about it (audit A-44).
+	if kind != users.KindInvited && kind != users.KindBasic {
+		return nil, ErrInvalid
+	}
 
 	return &AccessClaims{UserID: userID, SessionID: sessionID, RoleLevel: claims.RoleLevel, Kind: kind}, nil
 }
