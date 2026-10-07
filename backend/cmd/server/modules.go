@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
 
-	"kisy-backend/internal/access"
 	"kisy-backend/internal/admin"
 	"kisy-backend/internal/attachments"
 	"kisy-backend/internal/audit"
@@ -379,13 +378,13 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 				if err != nil {
 					return 0, err
 				}
-				breadth := access.CEOLevel
+				levels := make([]int, 0, len(ids))
 				for _, id := range ids {
-					if lvl, ok := userLevel(ctx, id); ok && lvl > breadth {
-						breadth = lvl
+					if lvl, ok := userLevel(ctx, id); ok {
+						levels = append(levels, lvl)
 					}
 				}
-				return breadth, nil
+				return messages.PrivateChatAudience(levels), nil
 			},
 			Group: func(ctx context.Context, groupID uuid.UUID) (int, error) {
 				return groupsSvc.ClearanceLevel(ctx, groupID)
@@ -616,6 +615,15 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	// --- disappearing messages (UPD3 stage J) ---
 	disappearSvc := disappear.NewService(pool, disappear.NewPostgresRepository(),
 		disappear.ChatAuthorizer(chatAuthorizer), auditRec)
+	// Changing a group's timer needs the right to post there, exactly as a
+	// message does (audit A-14). In a private chat both sides may write, and
+	// the read check above already established membership.
+	disappearSvc.SetWriteAuthorizer(func(ctx context.Context, chatType string, chatID, actorID uuid.UUID, actorLevel int) error {
+		if chatType != "group" {
+			return nil
+		}
+		return groupsSvc.EnsureCanPost(ctx, chatID, groups.ActorMeta{UserID: actorID, RoleLevel: actorLevel})
+	})
 	disappearSvc.SetPublisher(wsPublisher)
 	disappearSvc.SetIndexer(searchSvc)
 	if blobs != nil {

@@ -126,3 +126,29 @@ func TestChatsAreNotGovernedByTheHierarchyWhenSomeoneIsOutsideIt(t *testing.T) {
 		t.Fatal("anyone may write to a basic account")
 	}
 }
+
+// Audit A-15: an audience is named by the weakest level that can reach it, and
+// "no threshold" (NoLevel) is the broadest — it includes accounts outside the
+// hierarchy. Compared as raw numbers it read as the narrowest.
+func TestAudienceBroader(t *testing.T) {
+	cases := []struct {
+		target, source int
+		want           bool
+	}{
+		{NoLevel, 3, true},  // open group ← level-3 group: broader
+		{NoLevel, 10, true}, // open group ← level-10 group: still broader
+		{3, NoLevel, false}, // the other way narrows
+		{8, 3, true},        // weaker threshold = broader
+		{3, 8, false},       // stronger threshold = narrower
+		{5, 5, false},       // same audience
+		{NoLevel, NoLevel, false},
+	}
+	for _, c := range cases {
+		if got := AudienceBroader(c.target, c.source); got != c.want {
+			t.Errorf("AudienceBroader(%d, %d) = %v, want %v", c.target, c.source, got, c.want)
+		}
+	}
+	if got := BroadestAudience(3, NoLevel); got != NoLevel {
+		t.Errorf("BroadestAudience(3, NoLevel) = %d, want NoLevel", got)
+	}
+}

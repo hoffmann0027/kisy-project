@@ -92,6 +92,8 @@ func fail(w http.ResponseWriter, r *http.Request, err error) {
 		badRequest(w, r, "invalid request")
 	case errors.Is(err, ErrNotFound):
 		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "not found")
+	case errors.Is(err, ErrForbidden):
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "only those who may write here can change the timer")
 	default:
 		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
 	}

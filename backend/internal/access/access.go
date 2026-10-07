@@ -71,3 +71,34 @@ func CanInitiateChat(initiatorLevel, targetLevel int) bool {
 	}
 	return initiatorLevel <= targetLevel
 }
+
+// audienceRank orders audiences from narrowest to broadest. An audience is
+// named by the weakest level that can reach it, so a larger level is a broader
+// audience — and NoLevel, "no threshold at all", is the broadest of every one:
+// it includes the accounts outside the hierarchy.
+//
+// Compared as raw numbers, NoLevel (0) read as the NARROWEST audience, which
+// is how a forward from a level-5 group into an open group went through and put
+// its text in front of basic accounts (audit A-15).
+func audienceRank(level int) int {
+	if !HasLevel(level) {
+		return LowestLevel + 1
+	}
+	return level
+}
+
+// AudienceBroader reports whether the target audience reaches anyone the
+// source audience does not. Forwarding must never do that: it would hand a
+// group's content to people its threshold was there to keep out.
+func AudienceBroader(target, source int) bool {
+	return audienceRank(target) > audienceRank(source)
+}
+
+// BroadestAudience is the broader of two audiences — the audience of a chat
+// whose members are these two levels together.
+func BroadestAudience(a, b int) int {
+	if AudienceBroader(a, b) {
+		return a
+	}
+	return b
+}

@@ -441,6 +441,18 @@ func (s *Service) expiryFor(ctx context.Context, in SendInput) (*time.Time, erro
 
 // clearanceBreadth returns a chat's audience breadth (weakest level that can
 // access it), or an error the caller maps to not-found.
+// PrivateChatAudience is the audience of a private chat given its
+// participants' levels: the weakest of them decides, and an account outside
+// the hierarchy is weaker than any level. It used to be skipped — its level is
+// 0 — so a chat with a basic account counted as a narrow one (audit A-15).
+func PrivateChatAudience(levels []int) int {
+	audience := access.CEOLevel
+	for _, l := range levels {
+		audience = access.BroadestAudience(audience, l)
+	}
+	return audience
+}
+
 func (s *Service) clearanceBreadth(ctx context.Context, chatType string, chatID uuid.UUID) (int, error) {
 	switch chatType {
 	case ChatPrivate:
@@ -490,8 +502,10 @@ func (s *Service) Forward(ctx context.Context, in ForwardInput, actor ActorMeta)
 			return nil, err
 		}
 	}
-	// The actor must be able to post to the target, and we need its breadth.
-	if err := s.authorize(ctx, in.TargetChatType, in.TargetChatID, actor); err != nil {
+	// The actor must be able to POST to the target, not merely read it: a
+	// reader of an editors-only channel used to write into it through a
+	// forward while a direct send was refused (audit A-14).
+	if err := s.authorizeWrite(ctx, in.TargetChatType, in.TargetChatID, actor); err != nil {
 		return nil, err
 	}
 	targetBreadth, err := s.clearanceBreadth(ctx, in.TargetChatType, in.TargetChatID)
@@ -534,9 +548,10 @@ func (s *Service) Forward(ctx context.Context, in ForwardInput, actor ActorMeta)
 		if err != nil {
 			return nil, ErrNotFound
 		}
-		// Weaker clearance = larger number = broader audience. Forbid a
-		// target broader than the source.
-		if targetBreadth > srcBreadth {
+		// Never into a broader audience than the source's. The rule lives in
+		// internal/access: "no threshold" is the broadest audience there is,
+		// and a raw comparison read it as the narrowest (audit A-15).
+		if access.AudienceBroader(targetBreadth, srcBreadth) {
 			return nil, ErrForwardBroadens
 		}
 		name := ""
@@ -754,6 +769,12 @@ func (s *Service) SetPinned(ctx context.Context, messageID uuid.UUID, pin bool, 
 	}
 	if err := s.authorize(ctx, m.ChatType, m.ChatID, actor); err != nil {
 		return nil, ErrNotFound
+	}
+	// Pinning decides what everyone in the chat sees first: it is writing.
+	// A plain reader of an editors-only channel could pin and unpin there
+	// while every direct send was refused (audit A-14).
+	if err := s.authorizeWrite(ctx, m.ChatType, m.ChatID, actor); err != nil {
+		return nil, err
 	}
 
 	var at *time.Time

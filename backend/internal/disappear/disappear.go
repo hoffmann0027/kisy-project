@@ -29,6 +29,10 @@ var (
 	ErrValidation = errors.New("disappear: validation failed")
 	// ErrNotFound masks both "no such chat" and "no access" (404, never 403).
 	ErrNotFound = errors.New("disappear: not found")
+	// ErrForbidden: a member who may read the chat but not write to it — a
+	// reader of an editors-only channel. They can see the chat, so 404 would
+	// be a lie.
+	ErrForbidden = errors.New("disappear: may not change this chat")
 )
 
 // TTL bounds: 5s (useful for demos/tests) to 1 year.
@@ -219,9 +223,14 @@ type Service struct {
 	pool      *pgxpool.Pool
 	repo      Repository
 	authorize ChatAuthorizer
-	audit     audit.Recorder
-	pub       Publisher
-	indexer   Indexer
+	// mayWrite says whether the actor may write to the chat. A timer decides
+	// how long everyone's next messages live, so changing it is writing — a
+	// plain reader of an editors-only channel used to be able to make the
+	// editors' posts vanish after 30 seconds (audit A-14). Nil: no extra check.
+	mayWrite ChatAuthorizer
+	audit    audit.Recorder
+	pub      Publisher
+	indexer  Indexer
 	// blobs purges attachment bytes that live in object storage; nil when
 	// files are stored in the database (the cascade already removes them).
 	blobs blobstore.Store
@@ -241,6 +250,10 @@ func (s *Service) SetBlobStore(b blobstore.Store) { s.blobs = b }
 
 // SetPublisher wires the real-time fan-out (constructed together at startup).
 func (s *Service) SetPublisher(p Publisher) { s.pub = p }
+
+// SetWriteAuthorizer wires the check that the actor may write to the chat,
+// required to change its timer.
+func (s *Service) SetWriteAuthorizer(f ChatAuthorizer) { s.mayWrite = f }
 
 // SetIndexer wires full-text index cleanup for reaped messages.
 func (s *Service) SetIndexer(i Indexer) { s.indexer = i }
@@ -280,6 +293,11 @@ func (s *Service) Set(ctx context.Context, chatType string, chatID uuid.UUID, tt
 	}
 	if err := s.authorize(ctx, chatType, chatID, actor.UserID, actor.RoleLevel); err != nil {
 		return Setting{}, ErrNotFound
+	}
+	if s.mayWrite != nil {
+		if err := s.mayWrite(ctx, chatType, chatID, actor.UserID, actor.RoleLevel); err != nil {
+			return Setting{}, ErrForbidden
+		}
 	}
 
 	if enabled {

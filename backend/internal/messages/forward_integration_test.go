@@ -21,6 +21,7 @@ import (
 
 type fwdHarness struct {
 	msgs      *messages.Service
+	groups    *groups.Service
 	pool      *pgxpool.Pool
 	privChat  uuid.UUID // alice(3) <-> bob(8): breadth 8
 	wideGroup uuid.UUID // min_role_level 8 (broad)
@@ -82,6 +83,19 @@ func fwdSetup(t *testing.T) fwdHarness {
 				return err
 			}
 		},
+		// The post policy, as cmd/server wires it: without it the harness
+		// could not see a reader writing where only editors may (audit A-14).
+		GroupPost: func(ctx context.Context, groupID, actorID uuid.UUID, actorLevel int) error {
+			err := groupsSvc.EnsureCanPost(ctx, groupID, groups.ActorMeta{UserID: actorID, RoleLevel: actorLevel})
+			switch {
+			case errors.Is(err, groups.ErrNotFound):
+				return messages.ErrNotFound
+			case errors.Is(err, groups.ErrNotMember), errors.Is(err, groups.ErrForbidden):
+				return messages.ErrForbidden
+			default:
+				return err
+			}
+		},
 	}
 	msgs := messages.NewService(pool, messages.NewPostgresRepository(), rec, authz)
 	msgs.SetForwarding(
@@ -91,13 +105,13 @@ func fwdSetup(t *testing.T) fwdHarness {
 				if err != nil {
 					return 0, err
 				}
-				breadth := 1
+				levels := make([]int, 0, len(ids))
 				for _, id := range ids {
-					if lvl, ok := lookup(ctx, id); ok && lvl > breadth {
-						breadth = lvl
+					if lvl, ok := lookup(ctx, id); ok {
+						levels = append(levels, lvl)
 					}
 				}
-				return breadth, nil
+				return messages.PrivateChatAudience(levels), nil
 			},
 			Group: func(ctx context.Context, groupID uuid.UUID) (int, error) {
 				return groupsSvc.ClearanceLevel(ctx, groupID)
@@ -112,7 +126,7 @@ func fwdSetup(t *testing.T) fwdHarness {
 	)
 
 	return fwdHarness{
-		msgs: msgs, pool: pool, privChat: chat.ID,
+		msgs: msgs, groups: groupsSvc, pool: pool, privChat: chat.ID,
 		wideGroup: wide.ID, narrowGrp: narrow.ID, a: a, b: b, ctx: ctx,
 	}
 }
