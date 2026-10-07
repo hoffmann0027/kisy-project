@@ -66,6 +66,9 @@ const (
 	// ErrPasswordChangeRequired: the account carries a seeded or reset
 	// password, and nothing but changing it is allowed until it does.
 	ErrPasswordChangeRequired = "PASSWORD_CHANGE_REQUIRED" // #nosec G101 -- an error code, not a credential
+	// ErrUnderModeration: a founder tried to delete a group while moderation
+	// sanctions on it are live (audit A-38). The message is for the user.
+	ErrUnderModeration = "UNDER_MODERATION"
 )
 
 func requestID(r *http.Request) string {

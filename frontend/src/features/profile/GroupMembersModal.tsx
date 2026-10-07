@@ -17,7 +17,7 @@ import {
 } from "@entities/group/queries";
 import { useAuthStore } from "@shared/store/auth";
 import { useCapabilities } from "@shared/lib/useCapabilities";
-import { ApiError } from "@shared/api/envelope";
+import { ApiError, userFacingError } from "@shared/api/envelope";
 import { AvatarCropper } from "./AvatarCropper";
 import { ReportButton } from "@features/reports/ReportButton";
 
@@ -101,7 +101,7 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
         onClose();
         navigate("/", { replace: true });
       },
-      onError: () => toast.error("Не удалось удалить группу"),
+      onError: (e) => toast.error(userFacingError(e, "Не удалось удалить группу")),
     });
   };
 

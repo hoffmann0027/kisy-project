@@ -59,7 +59,7 @@ export function userFacingError(err: unknown, fallback: string): string {
 
 // Server refusals whose message is written for the user: a limit they can act
 // on (A-07) and a private chat that takes only encrypted text (A-10).
-const USER_FACING_CODES = new Set(["QUOTA_EXCEEDED", "E2EE_REQUIRED", "QUARANTINE_ACTIVE"]);
+const USER_FACING_CODES = new Set(["QUOTA_EXCEEDED", "E2EE_REQUIRED", "QUARANTINE_ACTIVE", "UNDER_MODERATION"]);
 
 /** "Слишком часто" with the wait, when the server said how long it is. */
 export function rateLimitedMessage(retryAfterSeconds: number): string {

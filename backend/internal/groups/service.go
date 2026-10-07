@@ -381,6 +381,20 @@ func (s *Service) Delete(ctx context.Context, groupID uuid.UUID, actor ActorMeta
 	}
 	defer tx.Rollback(ctx)
 
+	// Deleting cascades into the group's sanction history, so a founder
+	// under a warning or a mute could shed it by deleting and starting over
+	// (audit A-38). While one is live the delete is the CEO's; a revoked or
+	// expired sanction no longer stands in the way.
+	if !access.IsCEO(actor.RoleLevel) {
+		live, err := s.repo.HasLiveSanctions(ctx, tx, groupID)
+		if err != nil {
+			return err
+		}
+		if live {
+			return ErrUnderSanction
+		}
+	}
+
 	if err := s.repo.DeleteGroupMessages(ctx, tx, groupID); err != nil {
 		return err
 	}

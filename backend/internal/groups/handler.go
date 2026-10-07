@@ -183,6 +183,9 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "group not found")
 	case errors.Is(err, ErrForbidden):
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "only the CEO or the group founder may delete this group")
+	case errors.Is(err, ErrUnderSanction):
+		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrUnderModeration,
+			"Сообщество под санкциями модерации — пока они действуют, удалить его нельзя")
 	case err != nil:
 		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "failed to delete group")
 	default:

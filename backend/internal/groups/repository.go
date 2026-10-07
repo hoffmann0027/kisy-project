@@ -27,6 +27,9 @@ type Repository interface {
 	ListMemberIDs(ctx context.Context, q db.DBTX, groupID uuid.UUID) ([]uuid.UUID, error)
 	ListMemberRowIDs(ctx context.Context, q db.DBTX, groupID uuid.UUID) ([]uuid.UUID, error)
 	Delete(ctx context.Context, q db.DBTX, id uuid.UUID) error
+	// HasLiveSanctions reports a moderation warning or mute that still
+	// counts — the ones a founder's delete would wipe out.
+	HasLiveSanctions(ctx context.Context, q db.DBTX, groupID uuid.UUID) (bool, error)
 	// DeleteGroupMessages removes the group's messages, whose polymorphic
 	// chat_id has no cascading foreign key.
 	DeleteGroupMessages(ctx context.Context, q db.DBTX, groupID uuid.UUID) error
@@ -349,6 +352,20 @@ func (r *PostgresRepository) Delete(ctx context.Context, q db.DBTX, id uuid.UUID
 		return ErrNotFound
 	}
 	return nil
+}
+
+func (r *PostgresRepository) HasLiveSanctions(ctx context.Context, q db.DBTX, groupID uuid.UUID) (bool, error) {
+	var live bool
+	err := q.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM group_sanctions
+			WHERE group_id = $1 AND revoked_at IS NULL
+			  AND (kind = 'warn' OR (kind = 'mute' AND (expires_at IS NULL OR expires_at > now())))
+		)`, groupID).Scan(&live)
+	if err != nil {
+		return false, fmt.Errorf("groups: live sanctions: %w", err)
+	}
+	return live, nil
 }
 
 func (r *PostgresRepository) DeleteGroupMessages(ctx context.Context, q db.DBTX, groupID uuid.UUID) error {

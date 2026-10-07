@@ -858,7 +858,10 @@ paths:
       description: >
         The CEO may delete any group; otherwise only the group's founder may
         delete it. Cascades to members, the task board and group messages. A
-        group hidden from the caller's clearance returns 404 (not 403).
+        group hidden from the caller's clearance returns 404 (not 403). While a
+        moderation warning or mute on the group is live, only the CEO may
+        delete it — the founder gets 409 UNDER_MODERATION, since deleting would
+        erase the sanction history (audit A-38).
       parameters:
         - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
@@ -866,6 +869,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
 
   /groups/{groupID}/members:
     post:

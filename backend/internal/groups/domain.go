@@ -22,6 +22,9 @@ var (
 	ErrRequestNotFound = errors.New("groups: join request not found")
 	// ErrBadPolicy is returned for an unknown join/post policy value.
 	ErrBadPolicy = errors.New("groups: invalid policy value")
+	// ErrUnderSanction refuses a founder's delete while moderation sanctions
+	// are live: deleting would erase them along with the group (audit A-38).
+	ErrUnderSanction = errors.New("groups: live moderation sanctions")
 )
 
 // Join and post policy values (Stage N — group access settings).
