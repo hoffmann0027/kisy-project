@@ -46,9 +46,26 @@ func Middleware(next http.Handler) http.Handler {
 		if route == "" {
 			route = "unmatched"
 		}
-		httpRequestsTotal.WithLabelValues(r.Method, route, strconv.Itoa(ww.Status())).Inc()
-		httpRequestDuration.WithLabelValues(r.Method, route).Observe(time.Since(start).Seconds())
+		method := MethodLabel(r.Method)
+		httpRequestsTotal.WithLabelValues(method, route, strconv.Itoa(ww.Status())).Inc()
+		httpRequestDuration.WithLabelValues(method, route).Observe(time.Since(start).Seconds())
 	})
+}
+
+// MethodLabel keeps the method label to a fixed set. The raw method came from
+// the client, and HTTP allows any token there: every invented method
+// ("AUDITXA", then the next) created a fresh set of series — about fourteen —
+// that Prometheus keeps in memory for the life of the process. Anyone could
+// grow it until the instance ran out of memory, without an account (audit
+// A-18). Whatever is not a standard method is counted as OTHER.
+func MethodLabel(method string) string {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut,
+		http.MethodPatch, http.MethodDelete, http.MethodOptions:
+		return method
+	default:
+		return "OTHER"
+	}
 }
 
 // Handler serves the Prometheus exposition endpoint.
