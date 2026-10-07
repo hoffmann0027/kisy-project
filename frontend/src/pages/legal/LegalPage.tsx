@@ -1,12 +1,25 @@
 import { Link } from "react-router-dom";
 import { Logo } from "@shared/ui";
 import { DELETION_STEPS, LAST_UPDATED, PRIVACY_SECTIONS, type LegalSection } from "./privacyContent";
+import { RULES_LAST_UPDATED, RULES_SECTIONS } from "./rulesContent";
 import "./legal.css";
 
-// The two pages Google Play asks for by URL: the privacy policy, and a page
-// that explains account deletion to someone who has not installed the app.
-// Both are open without signing in — that is the point of them — and both are
-// plain text so they stay readable when the app itself is down.
+// The pages Google Play asks for by URL — the privacy policy, and a page that
+// explains account deletion to someone who has not installed the app — plus
+// the community rules every account accepts. All are open without signing in
+// (that is the point of them), and all are plain text so they stay readable
+// when the app itself is down.
+
+/** The body of a legal document; also rendered inside the consent screen. */
+export function LegalSections({ sections }: { sections: LegalSection[] }) {
+  return (
+    <>
+      {sections.map((section) => (
+        <Section key={section.title} section={section} />
+      ))}
+    </>
+  );
+}
 
 function Section({ section }: { section: LegalSection }) {
   return (
@@ -36,9 +49,7 @@ function LegalShell({ title, subtitle, sections }: { title: string; subtitle: st
           <h1 className="legal-title">{title}</h1>
           <p className="legal-subtitle">{subtitle}</p>
         </header>
-        {sections.map((section) => (
-          <Section key={section.title} section={section} />
-        ))}
+        <LegalSections sections={sections} />
         <footer className="legal-foot">
           <Link to="/login" className="auth-link">
             Вернуться в приложение
@@ -55,6 +66,16 @@ export function PrivacyPage() {
       title="Политика конфиденциальности"
       subtitle={`KISY · обновлено ${LAST_UPDATED}`}
       sections={PRIVACY_SECTIONS}
+    />
+  );
+}
+
+export function RulesPage() {
+  return (
+    <LegalShell
+      title="Правила сообщества"
+      subtitle={`KISY · обновлено ${RULES_LAST_UPDATED}`}
+      sections={RULES_SECTIONS}
     />
   );
 }

@@ -8,7 +8,8 @@ import { CallProvider } from "@features/call/CallProvider";
 import { PermissionsOnboarding } from "@features/permissions/PermissionsOnboarding";
 import { TabBar } from "@widgets/tabbar/TabBar";
 import { RouteFallback } from "./RouteFallback";
-import { AccountDeletionPage, PrivacyPage } from "@pages/legal/LegalPage";
+import { AccountDeletionPage, PrivacyPage, RulesPage } from "@pages/legal/LegalPage";
+import { RequireLocalConsent } from "./ConsentGates";
 import { lazy, Suspense, useState } from "react";
 
 // Everything below the messenger is loaded on demand. They are whole screens
@@ -60,7 +61,9 @@ export const router = createBrowserRouter([
     path: "/login",
     element: (
       <RedirectIfAuth>
-        <LoginPage />
+        <RequireLocalConsent>
+          <LoginPage />
+        </RequireLocalConsent>
       </RedirectIfAuth>
     ),
   },
@@ -68,13 +71,16 @@ export const router = createBrowserRouter([
     path: "/register",
     element: (
       <RedirectIfAuth>
-        <RegisterPage />
+        <RequireLocalConsent>
+          <RegisterPage />
+        </RequireLocalConsent>
       </RedirectIfAuth>
     ),
   },
-  // Open to everyone, signed in or not: Google Play points at these two by
-  // URL, and someone who deleted the app must still be able to read them.
+  // Open to everyone, signed in or not: Google Play points at these by URL,
+  // and someone who deleted the app must still be able to read them.
   { path: "/privacy", element: <PrivacyPage /> },
+  { path: "/rules", element: <RulesPage /> },
   { path: "/account-deletion", element: <AccountDeletionPage /> },
   {
     element: <AuthedLayout />,

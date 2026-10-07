@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"kisy-backend/internal/auth"
+	"kisy-backend/internal/consent"
 	"kisy-backend/internal/users"
 )
 
@@ -21,18 +22,18 @@ func TestRegistrationRefusesTheLoginOfADeletedAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := e.svc.Register(ctx, "", "gone_person", "Новый Человек", "long-enough-pass-1", auth.ClientMeta{})
+	_, err := e.svc.Register(ctx, "", "gone_person", "Новый Человек", "long-enough-pass-1", consent.Current(), auth.ClientMeta{})
 	if !errors.Is(err, users.ErrUsernameTaken) {
 		t.Fatalf("registering a retired login: %v, want ErrUsernameTaken", err)
 	}
 
 	// Capitalisation is not a way around it (the column is CITEXT).
-	if _, err := e.svc.Register(ctx, "", "Gone_Person", "Новый Человек", "long-enough-pass-1", auth.ClientMeta{}); !errors.Is(err, users.ErrUsernameTaken) {
+	if _, err := e.svc.Register(ctx, "", "Gone_Person", "Новый Человек", "long-enough-pass-1", consent.Current(), auth.ClientMeta{}); !errors.Is(err, users.ErrUsernameTaken) {
 		t.Fatalf("registering it in another case: %v, want ErrUsernameTaken", err)
 	}
 
 	// An untouched login still works.
-	if _, err := e.svc.Register(ctx, "", "fresh_person", "Другой Человек", "long-enough-pass-1", auth.ClientMeta{}); err != nil {
+	if _, err := e.svc.Register(ctx, "", "fresh_person", "Другой Человек", "long-enough-pass-1", consent.Current(), auth.ClientMeta{}); err != nil {
 		t.Fatalf("an ordinary sign-up: %v", err)
 	}
 }

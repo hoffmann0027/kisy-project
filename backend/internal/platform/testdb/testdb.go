@@ -29,13 +29,7 @@ import (
 func New(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
-	adminURL := os.Getenv("TEST_DATABASE_URL")
-	if adminURL == "" {
-		if missingURLIsFatal(os.Getenv("CI")) {
-			t.Fatal("testdb: TEST_DATABASE_URL is not set in CI — the integration suite would report success without running")
-		}
-		t.Skip("TEST_DATABASE_URL not set; skipping integration test")
-	}
+	adminURL := AdminURL(t)
 
 	ctx := context.Background()
 	// #nosec G404 -- non-security use: a unique throwaway test database name.
@@ -104,6 +98,22 @@ func migrationsDir(t *testing.T) string {
 	}
 	t.Fatalf("testdb: could not locate migrations directory")
 	return ""
+}
+
+// AdminURL returns TEST_DATABASE_URL, or skips the test on a developer's
+// machine and FAILS it in CI when the variable is unset. Every integration
+// harness goes through it: auth's own setup read the variable directly and
+// skipped, so it escaped the CI rule below (audit D-12).
+func AdminURL(t *testing.T) string {
+	t.Helper()
+	url := os.Getenv("TEST_DATABASE_URL")
+	if url == "" {
+		if missingURLIsFatal(os.Getenv("CI")) {
+			t.Fatal("testdb: TEST_DATABASE_URL is not set in CI — the integration suite would report success without running")
+		}
+		t.Skip("TEST_DATABASE_URL not set; skipping integration test")
+	}
+	return url
 }
 
 // missingURLIsFatal decides what an unset TEST_DATABASE_URL means, from the

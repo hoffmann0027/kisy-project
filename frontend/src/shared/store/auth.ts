@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { authApi, usersApi } from "@shared/api/endpoints";
 import { isAuthFailure } from "@shared/api/envelope";
 import { forgetNativePushDevice } from "@shared/lib/nativePush";
+import { clearLocalConsent } from "@shared/lib/consent";
 import type { Quarantine, User } from "@shared/api/types";
 
 type Status = "loading" | "authenticated" | "anonymous" | "offline";
@@ -124,6 +125,10 @@ export const useAuthStore = create<AuthState>((set) => ({
       await authApi.logout();
     } finally {
       set({ user: null, status: "anonymous" });
+      // The next person to sign in on this device ticks the boxes themselves:
+      // otherwise their account would be recorded as agreeing to documents
+      // they never saw (shared/lib/consent.ts).
+      clearLocalConsent();
       // Nothing of the signed-out account may stay in memory.
       if (pageOwner !== null) reloadPage();
     }

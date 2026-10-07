@@ -59,6 +59,10 @@ const (
 	ErrQuarantineActive   = "QUARANTINE_ACTIVE"
 	ErrCaptchaFailed      = "CAPTCHA_FAILED"
 	ErrCaptchaUnavailable = "CAPTCHA_UNAVAILABLE"
+	// ErrConsentRequired: the request did not accept the current privacy
+	// policy and community rules (internal/consent) — none at all, or an older
+	// version than the one in force.
+	ErrConsentRequired = "CONSENT_REQUIRED"
 )
 
 func requestID(r *http.Request) string {

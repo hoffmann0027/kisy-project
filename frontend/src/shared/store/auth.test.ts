@@ -94,6 +94,15 @@ describe("the page belongs to one account", () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
+  it("forgets the consent ticked on this device, so the next person ticks for themselves", async () => {
+    // Otherwise someone signing in on a shared phone after this account would
+    // have the previous person's tick recorded as their own consent.
+    localStorage.setItem("kisy.consent", JSON.stringify({ privacyVersion: "x", rulesVersion: "y" }));
+    authApi.logout.mockResolvedValue({ loggedOut: true });
+    await useAuthStore.getState().logout();
+    expect(localStorage.getItem("kisy.consent")).toBeNull();
+  });
+
   it("reloads even when the server could not be told about the sign-out", async () => {
     setPageReloaderForTests(reload, user.id);
     authApi.logout.mockRejectedValue(new TypeError("Failed to fetch"));

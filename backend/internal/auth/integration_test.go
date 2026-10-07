@@ -9,7 +9,6 @@ import (
 	"io"
 	"log/slog"
 	"net/url"
-	"os"
 	"testing"
 	"time"
 
@@ -20,6 +19,7 @@ import (
 	"kisy-backend/internal/auth"
 	"kisy-backend/internal/auth/password"
 	"kisy-backend/internal/auth/token"
+	"kisy-backend/internal/consent"
 	"kisy-backend/internal/invitations"
 	"kisy-backend/internal/platform/postgres"
 	"kisy-backend/internal/platform/testdb"
@@ -48,10 +48,7 @@ type env struct {
 func setup(t *testing.T) *env {
 	t.Helper()
 
-	adminURL := os.Getenv("TEST_DATABASE_URL")
-	if adminURL == "" {
-		t.Skip("TEST_DATABASE_URL not set")
-	}
+	adminURL := testdb.AdminURL(t)
 
 	ctx := context.Background()
 
@@ -189,7 +186,7 @@ func TestInviteRegisterFlow(t *testing.T) {
 		t.Fatalf("invite TTL too long: %v", created.ExpiresAt)
 	}
 
-	res, err := e.svc.Register(ctx, created.Token, "new_employee", "Новый Сотрудник", "employee-pass-99", testMeta)
+	res, err := e.svc.Register(ctx, created.Token, "new_employee", "Новый Сотрудник", "employee-pass-99", consent.Current(), testMeta)
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -198,12 +195,12 @@ func TestInviteRegisterFlow(t *testing.T) {
 	}
 
 	// Single use: the same token must be rejected now.
-	if _, err := e.svc.Register(ctx, created.Token, "second_try", "Вторая Попытка", "employee-pass-99", testMeta); !errors.Is(err, auth.ErrInvalidInvite) {
+	if _, err := e.svc.Register(ctx, created.Token, "second_try", "Вторая Попытка", "employee-pass-99", consent.Current(), testMeta); !errors.Is(err, auth.ErrInvalidInvite) {
 		t.Fatalf("reuse error = %v, want ErrInvalidInvite", err)
 	}
 
 	// Unknown token.
-	if _, err := e.svc.Register(ctx, "made-up-token", "third_try", "Третья Попытка", "employee-pass-99", testMeta); !errors.Is(err, auth.ErrInvalidInvite) {
+	if _, err := e.svc.Register(ctx, "made-up-token", "third_try", "Третья Попытка", "employee-pass-99", consent.Current(), testMeta); !errors.Is(err, auth.ErrInvalidInvite) {
 		t.Fatalf("unknown token error = %v, want ErrInvalidInvite", err)
 	}
 
@@ -235,7 +232,7 @@ func TestExpiredInviteRejected(t *testing.T) {
 		t.Fatalf("insert expired invite: %v", err)
 	}
 
-	if _, err := e.svc.Register(ctx, plain, "late_user", "Опоздавший", "employee-pass-99", testMeta); !errors.Is(err, auth.ErrInvalidInvite) {
+	if _, err := e.svc.Register(ctx, plain, "late_user", "Опоздавший", "employee-pass-99", consent.Current(), testMeta); !errors.Is(err, auth.ErrInvalidInvite) {
 		t.Fatalf("expired invite error = %v, want ErrInvalidInvite", err)
 	}
 }
@@ -346,7 +343,7 @@ func TestRegisterWithoutInviteCreatesAnAccountOutsideTheHierarchy(t *testing.T) 
 	e := setup(t)
 	ctx := context.Background()
 
-	res, err := e.svc.Register(ctx, "", "just_someone", "Просто Человек", "open-register-77", testMeta)
+	res, err := e.svc.Register(ctx, "", "just_someone", "Просто Человек", "open-register-77", consent.Current(), testMeta)
 	if err != nil {
 		t.Fatalf("register without invite: %v", err)
 	}
@@ -377,7 +374,7 @@ func TestBadInviteIsNeverQuietlyDowngraded(t *testing.T) {
 	// Someone who was given a token and typed it in must be told it did not
 	// work — not handed a different, lesser account without being told.
 	e := setup(t)
-	if _, err := e.svc.Register(context.Background(), "not-a-real-token", "hopeful", "Надеющийся", "open-register-77", testMeta); !errors.Is(err, auth.ErrInvalidInvite) {
+	if _, err := e.svc.Register(context.Background(), "not-a-real-token", "hopeful", "Надеющийся", "open-register-77", consent.Current(), testMeta); !errors.Is(err, auth.ErrInvalidInvite) {
 		t.Fatalf("error = %v, want ErrInvalidInvite", err)
 	}
 }
@@ -390,7 +387,7 @@ func TestRegisterChecksTheDisplayNameBeforeSpendingTheInvite(t *testing.T) {
 	ctx := context.Background()
 	ceo := e.createUser(t, "the_ceo", "ceo-password-42", 1)
 
-	if _, err := e.svc.Register(ctx, "", "first_anna", "Анна Смирнова", "open-register-77", testMeta); err != nil {
+	if _, err := e.svc.Register(ctx, "", "first_anna", "Анна Смирнова", "open-register-77", consent.Current(), testMeta); err != nil {
 		t.Fatalf("first holder: %v", err)
 	}
 
@@ -398,14 +395,14 @@ func TestRegisterChecksTheDisplayNameBeforeSpendingTheInvite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.svc.Register(ctx, created.Token, "second_anna", "  АННА   смирнова ", "employee-pass-99", testMeta); !errors.Is(err, users.ErrDisplayNameTaken) {
+	if _, err := e.svc.Register(ctx, created.Token, "second_anna", "  АННА   смирнова ", "employee-pass-99", consent.Current(), testMeta); !errors.Is(err, users.ErrDisplayNameTaken) {
 		t.Fatalf("taken name: got %v, want ErrDisplayNameTaken", err)
 	}
-	if _, err := e.svc.Register(ctx, created.Token, "second_anna", "anna_2", "employee-pass-99", testMeta); !errors.Is(err, users.ErrDisplayNameCharacters) {
+	if _, err := e.svc.Register(ctx, created.Token, "second_anna", "anna_2", "employee-pass-99", consent.Current(), testMeta); !errors.Is(err, users.ErrDisplayNameCharacters) {
 		t.Fatalf("invalid name: got %v, want ErrDisplayNameCharacters", err)
 	}
 	// The invitation survived both refusals.
-	res, err := e.svc.Register(ctx, created.Token, "second_anna", "Анна Петрова", "employee-pass-99", testMeta)
+	res, err := e.svc.Register(ctx, created.Token, "second_anna", "Анна Петрова", "employee-pass-99", consent.Current(), testMeta)
 	if err != nil {
 		t.Fatalf("the invitation was spent by a refused sign-up: %v", err)
 	}

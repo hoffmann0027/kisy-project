@@ -71,6 +71,64 @@
   text-align: center;
 }
 
+/* Экран согласия: две отдельные галочки и кнопка, которая оживает только
+   когда отмечены обе. Карточка уже узкая — это не текст для чтения, а выбор. */
+.consent {
+  max-width: 480px;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.consent__row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--hover);
+  font-size: 15px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.consent__box {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  accent-color: var(--acc);
+  cursor: pointer;
+}
+
+.consent__link {
+  display: inline;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--acc);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.consent__hint {
+  margin: 0;
+  font-size: 13px;
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+
+/* Документ внутри окна: длинный, поэтому прокручивается сам, а не страница. */
+.consent__doc {
+  max-height: 60dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-right: var(--space-2);
+}
+
 /* Ландшафтный телефон — тоже телефон (docs/mobile.md M5). */
 @media (max-width: 760px), (max-height: 500px) {
   .legal-card {

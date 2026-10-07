@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"kisy-backend/internal/auth"
+	"kisy-backend/internal/consent"
 	"kisy-backend/internal/platform/turnstile"
 )
 
@@ -43,7 +44,10 @@ func fakeCloudflare(t *testing.T) *httptest.Server {
 }
 
 func registerBody(token string) string {
-	body := map[string]any{"username": "captcha_user", "displayName": "Проверка Капчи", "password": "captcha-pass-12"}
+	body := map[string]any{
+		"username": "captcha_user", "displayName": "Проверка Капчи", "password": "captcha-pass-12",
+		"privacyVersion": consent.PrivacyVersion, "rulesVersion": consent.RulesVersion,
+	}
 	if token != "" {
 		body["turnstileToken"] = token
 	}

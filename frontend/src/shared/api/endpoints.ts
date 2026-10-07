@@ -1,5 +1,6 @@
 import { isNative, loadTokens, saveTokens, type NativeTokens } from "@shared/lib/native";
 import { apiClient } from "./client";
+import { currentAcceptance } from "@shared/config/legalVersions";
 import type {
   ActiveSanctions,
   DeletedGroup,
@@ -76,9 +77,20 @@ export const authApi = {
       .then(keepTokens),
   // turnstileToken: what the Turnstile widget produced (empty when the
   // deployment has no check — see registrationPolicy().turnstileSiteKey).
+  // The privacy policy and community rules versions travel with every sign-up:
+  // the server creates no account without them (backend: internal/consent).
+  // Reaching this form at all requires the consent screen, so they are always
+  // the ones the person just ticked.
   register: (inviteToken: string, username: string, displayName: string, password: string, turnstileToken = "") =>
     apiClient
-      .post<WithTokens<{ user: User }>>("/auth/register", { inviteToken, username, displayName, password, turnstileToken })
+      .post<WithTokens<{ user: User }>>("/auth/register", {
+        inviteToken,
+        username,
+        displayName,
+        password,
+        turnstileToken,
+        ...currentAcceptance(),
+      })
       .then(keepTokens),
   logout: () =>
     apiClient.post<{ loggedOut: boolean }>("/auth/logout").finally(() => saveTokens(null)),
@@ -103,6 +115,9 @@ export const authApi = {
 export const usersApi = {
   // quarantine comes with the account while a new one is still held back.
   me: () => apiClient.get<{ user: User; quarantine?: Quarantine }>("/users/me"),
+  // Accepting the current privacy policy and community rules, for an account
+  // that existed before them or before their latest version.
+  acceptConsent: () => apiClient.post<{ user: User }>("/users/me/consent", currentAcceptance()),
   // Blocking someone. One-sided and silent: the other side is never told.
   blocks: () => apiClient.get<{ blocks: BlockedUser[] }>("/users/me/blocks"),
   block: (userId: string) => apiClient.post<{ blocked: boolean }>(`/users/${userId}/block`),

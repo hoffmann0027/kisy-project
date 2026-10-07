@@ -90,6 +90,13 @@ export interface User {
    * behind a rename screen until a new one is chosen. Present only when true.
    */
   displayNameNeedsChange?: boolean;
+  /**
+   * The account has not accepted the current privacy policy and community
+   * rules (never, or an older version): the app stays behind the consent
+   * screen until it does. Present only when true, and only on your own
+   * profile (backend: internal/consent).
+   */
+  consentRequired?: boolean;
   /** When the CEO verified the account; null/absent when it carries no mark. */
   verifiedAt?: string | null;
 }

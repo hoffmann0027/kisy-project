@@ -37,6 +37,9 @@ const (
 	ActionUserUnverified  = "user.unverified"
 	ActionGroupVerified   = "group.verified"
 	ActionGroupUnverified = "group.unverified"
+	// Acceptance of the privacy policy and community rules by an existing
+	// account (internal/consent). At sign-up it is part of user.registered.
+	ActionConsentAccepted = "user.consent_accepted"
 )
 
 // Event is one audit record. Optional fields are pointers/empty strings.

@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/consent"
 	"kisy-backend/internal/quarantine"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
@@ -81,6 +82,7 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Patch("/me", h.patchMe)
 	r.Delete("/me", h.deleteMe)
 	r.Post("/me/avatar", h.uploadAvatar)
+	r.Post("/me/consent", h.acceptConsent)
 	r.Get("/directory", h.directory)
 }
 
@@ -126,7 +128,7 @@ func (h *Handler) getMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body := map[string]any{"user": u.ToDTO()}
+	body := map[string]any{"user": u.ToSelfDTO()}
 	if h.quarantine != nil {
 		status, qErr := h.quarantine(r.Context(), id.UserID)
 		if qErr != nil {
@@ -263,7 +265,7 @@ func (h *Handler) patchMe(w http.ResponseWriter, r *http.Request) {
 		u = updated
 	}
 
-	httpresponse.OK(w, r, http.StatusOK, map[string]any{"user": u.ToDTO()})
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"user": u.ToSelfDTO()})
 }
 
 // uploadAvatar accepts a raw image body (image/jpeg or image/png), stores it,
@@ -293,7 +295,38 @@ func (h *Handler) uploadAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpresponse.OK(w, r, http.StatusOK, map[string]any{"user": u.ToDTO()})
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"user": u.ToSelfDTO()})
+}
+
+// acceptConsent records that the signed-in account accepted the current
+// privacy policy and community rules. Answers with the updated profile, so the
+// client can drop its blocking screen without another round trip.
+//
+// A stale version is refused rather than recorded: agreeing to last month's
+// rules is not agreeing to this month's, and a client still showing the old
+// text has to reload before its tick means anything.
+func (h *Handler) acceptConsent(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.identity(r)
+	if !ok {
+		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
+		return
+	}
+	var req consent.Acceptance
+	if err := httpjson.Decode(w, r, &req); err != nil {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "malformed JSON body")
+		return
+	}
+	u, err := h.svc.AcceptConsent(r.Context(), id.UserID, req, h.meta(r))
+	if errors.Is(err, consent.ErrNotAccepted) {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrConsentRequired,
+			"the current privacy policy and community rules must be accepted")
+		return
+	}
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
+		return
+	}
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"user": u.ToSelfDTO()})
 }
 
 // FailDisplayName writes the response for a display-name rule error. Shared

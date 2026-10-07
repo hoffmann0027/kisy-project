@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"kisy-backend/internal/access"
+	"kisy-backend/internal/consent"
 )
 
 var (
@@ -54,6 +55,11 @@ type User struct {
 	VerifiedAt *time.Time
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+	// PrivacyVersion / RulesVersion are the versions of the privacy policy and
+	// the community rules this account last accepted; nil when it never did
+	// (migration 55, internal/consent).
+	PrivacyVersion *string
+	RulesVersion   *string
 }
 
 // DTO is the public representation from docs/spec/09-api-contracts.md
@@ -81,6 +87,11 @@ type DTO struct {
 	// DisplayNameNeedsChange (omitempty → only when true) makes the client
 	// stop at a blocking "choose a new name" screen, like MustChangePassword.
 	DisplayNameNeedsChange bool `json:"displayNameNeedsChange,omitempty"`
+	// ConsentRequired (omitempty → only when true) stops the client at the
+	// screen with the privacy policy and community rules: never accepted, or
+	// accepted a text that has changed since. Only ever set by ToSelfDTO —
+	// whether someone else has accepted the rules is nobody's business.
+	ConsentRequired bool `json:"consentRequired,omitempty"`
 }
 
 func (u *User) ToDTO() DTO {
@@ -104,4 +115,13 @@ func (u *User) ToDTO() DTO {
 		MustChangePassword:     u.MustChangePassword,
 		DisplayNameNeedsChange: u.DisplayNameNeedsChange,
 	}
+}
+
+// ToSelfDTO is the DTO of the account making the request: ToDTO plus what only
+// its owner should learn about it — whether it still has to accept the
+// current privacy policy and community rules.
+func (u *User) ToSelfDTO() DTO {
+	d := u.ToDTO()
+	d.ConsentRequired = consent.Required(u.PrivacyVersion, u.RulesVersion)
+	return d
 }

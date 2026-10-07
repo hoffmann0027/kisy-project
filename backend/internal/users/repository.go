@@ -84,7 +84,8 @@ func NewPostgresRepository() *PostgresRepository { return &PostgresRepository{} 
 const userColumns = `
 	id, username::text, display_name, password_hash, COALESCE(role_id, 0), account_kind,
 	avatar_url, status, last_seen_at, is_active, failed_login_attempts, locked_until,
-	must_change_password, display_name_needs_change, verified_at, created_at, updated_at`
+	must_change_password, display_name_needs_change, verified_at, created_at, updated_at,
+	privacy_version, rules_version`
 
 // scanUserInto reads one row of userColumns. The one place the column order is
 // spelled out on the Go side: four hand-kept copies of this list were how a
@@ -94,6 +95,7 @@ func scanUserInto(row pgx.Row, u *User) error {
 		&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &u.RoleID, &u.AccountKind,
 		&u.AvatarURL, &u.Status, &u.LastSeenAt, &u.IsActive, &u.FailedLoginAttempts,
 		&u.LockedUntil, &u.MustChangePassword, &u.DisplayNameNeedsChange, &u.VerifiedAt, &u.CreatedAt, &u.UpdatedAt,
+		&u.PrivacyVersion, &u.RulesVersion,
 	)
 }
 

@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"kisy-backend/internal/auth/password"
+	"kisy-backend/internal/consent"
 	"kisy-backend/internal/platform/clientip"
 	"kisy-backend/internal/platform/turnstile"
 	"kisy-backend/internal/users"
@@ -116,6 +117,10 @@ type registerRequest struct {
 	Username       string `json:"username"`
 	DisplayName    string `json:"displayName"`
 	Password       string `json:"password"`
+	// The versions of the privacy policy and community rules the person ticked
+	// on this device. Required: an account is never created without them.
+	PrivacyVersion string `json:"privacyVersion"`
+	RulesVersion   string `json:"rulesVersion"`
 }
 
 // registrationPolicy tells the sign-up screen whether an account can be
@@ -150,15 +155,21 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, password.RuleText)
 		return
 	}
+	accepted := consent.Acceptance{PrivacyVersion: req.PrivacyVersion, RulesVersion: req.RulesVersion}
+	if !accepted.IsCurrent() {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrConsentRequired,
+			"the current privacy policy and community rules must be accepted")
+		return
+	}
 
-	res, err := h.svc.Register(r.Context(), req.InviteToken, req.Username, req.DisplayName, req.Password, h.ClientMeta(r))
+	res, err := h.svc.Register(r.Context(), req.InviteToken, req.Username, req.DisplayName, req.Password, accepted, h.ClientMeta(r))
 	if err != nil {
 		h.writeAuthError(w, r, err)
 		return
 	}
 
 	h.setAuthCookies(w, res.Tokens)
-	httpresponse.OK(w, r, http.StatusCreated, h.withTokens(r, map[string]any{"user": res.User.ToDTO()}, res.Tokens))
+	httpresponse.OK(w, r, http.StatusCreated, h.withTokens(r, map[string]any{"user": res.User.ToSelfDTO()}, res.Tokens))
 }
 
 type loginRequest struct {
@@ -184,7 +195,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.setAuthCookies(w, res.Tokens)
-	httpresponse.OK(w, r, http.StatusOK, h.withTokens(r, map[string]any{"user": res.User.ToDTO()}, res.Tokens))
+	httpresponse.OK(w, r, http.StatusOK, h.withTokens(r, map[string]any{"user": res.User.ToSelfDTO()}, res.Tokens))
 }
 
 func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
@@ -324,6 +335,9 @@ func (h *Handler) writeAuthError(w http.ResponseWriter, r *http.Request, err err
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "registration requires an invitation on this deployment")
 	case errors.Is(err, users.ErrUsernameTaken):
 		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrValidationFailed, "username is already taken")
+	case errors.Is(err, consent.ErrNotAccepted):
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrConsentRequired,
+			"the current privacy policy and community rules must be accepted")
 	case errors.Is(err, ErrInvalidRefresh):
 		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "refresh token is invalid")
 	default:

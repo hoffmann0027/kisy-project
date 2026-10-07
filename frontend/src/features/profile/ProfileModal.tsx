@@ -207,6 +207,9 @@ export function ProfileModal({ open, onClose }: Props) {
         <a className="auth-link" href="/privacy" target="_blank" rel="noreferrer">
           Политика конфиденциальности
         </a>
+        <a className="auth-link" href="/rules" target="_blank" rel="noreferrer">
+          Правила сообщества
+        </a>
       </div>
       {deleteOpen && <DeleteAccountDialog open onClose={() => setDeleteOpen(false)} />}
     </Modal>

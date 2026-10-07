@@ -8,12 +8,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"kisy-backend/internal/access"
 	"kisy-backend/internal/audit"
 	"kisy-backend/internal/auth/password"
 	"kisy-backend/internal/auth/token"
+	"kisy-backend/internal/consent"
 	"kisy-backend/internal/invitations"
 	"kisy-backend/internal/users"
 )
@@ -218,7 +220,15 @@ func (s *Service) openSession(ctx context.Context, u *users.User, meta ClientMet
 // Register redeems an invitation token and creates the account, marking
 // the invitation used in the same transaction (single-use guarantee), then
 // opens the first session.
-func (s *Service) Register(ctx context.Context, inviteToken, username, rawDisplayName, plainPassword string, meta ClientMeta) (*LoginResult, error) {
+//
+// accepted is the privacy policy and community rules the person agreed to; it
+// is recorded in the same transaction as the account, so an account without
+// consent cannot exist (Google Play UGC policy, internal/consent).
+func (s *Service) Register(ctx context.Context, inviteToken, username, rawDisplayName, plainPassword string, accepted consent.Acceptance, meta ClientMeta) (*LoginResult, error) {
+	// Checked before anything is spent, like the name below.
+	if !accepted.IsCurrent() {
+		return nil, consent.ErrNotAccepted
+	}
 	// Checked before anything is spent: an invitation is single-use, and it
 	// must not be consumed by a sign-up that then fails on the name.
 	displayName, err := users.NormalizeDisplayName(rawDisplayName)
@@ -244,7 +254,7 @@ func (s *Service) Register(ctx context.Context, inviteToken, username, rawDispla
 	// someone a working account while telling them nothing about the
 	// invitation they thought they were using.
 	if strings.TrimSpace(inviteToken) == "" {
-		return s.registerWithoutInvite(ctx, username, displayName, plainPassword, meta)
+		return s.registerWithoutInvite(ctx, username, displayName, plainPassword, accepted, meta)
 	}
 
 	now := time.Now().UTC()
@@ -284,6 +294,9 @@ func (s *Service) Register(ctx context.Context, inviteToken, username, rawDispla
 	}
 
 	if err := s.invites.MarkUsed(ctx, tx, inv.ID, u.ID, now); err != nil {
+		return nil, err
+	}
+	if err := recordConsent(ctx, tx, u, accepted, meta); err != nil {
 		return nil, err
 	}
 
@@ -328,7 +341,7 @@ func (s *Service) Register(ctx context.Context, inviteToken, username, rawDispla
 // but everything built on levels (the rating board, promotions, level votes,
 // administration) is not merely hidden from it, it does not apply.
 func (s *Service) registerWithoutInvite(
-	ctx context.Context, username, displayName, plainPassword string, meta ClientMeta,
+	ctx context.Context, username, displayName, plainPassword string, accepted consent.Acceptance, meta ClientMeta,
 ) (*LoginResult, error) {
 	if !s.registrationOpen {
 		return nil, ErrRegistrationClosed
@@ -355,6 +368,9 @@ func (s *Service) registerWithoutInvite(
 	}
 	if err := s.users.Create(ctx, tx, u); err != nil {
 		return nil, err // users.ErrUsernameTaken and ErrDisplayNameTaken pass through
+	}
+	if err := recordConsent(ctx, tx, u, accepted, meta); err != nil {
+		return nil, err
 	}
 
 	if err := s.audit.Record(ctx, tx, audit.Event{
@@ -562,4 +578,16 @@ func (s *Service) VerifyPassword(ctx context.Context, userID uuid.UUID, plaintex
 		return false, err
 	}
 	return ok, nil
+}
+
+// recordConsent stores the sign-up's acceptance of the privacy policy and
+// community rules inside the account's own transaction, and reflects it on the
+// in-memory user so the response already says nothing is left to accept.
+func recordConsent(ctx context.Context, tx pgx.Tx, u *users.User, accepted consent.Acceptance, meta ClientMeta) error {
+	if err := consent.Record(ctx, tx, u.ID, accepted, meta.IPHash); err != nil {
+		return err
+	}
+	u.PrivacyVersion = &accepted.PrivacyVersion
+	u.RulesVersion = &accepted.RulesVersion
+	return nil
 }

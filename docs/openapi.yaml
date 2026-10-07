@@ -71,6 +71,11 @@ paths:
         deployments may disable the check). Without a valid token: 403
         CAPTCHA_FAILED and no account; when the check itself cannot be made:
         503 CAPTCHA_UNAVAILABLE.
+
+        Every sign-up also carries the versions of the privacy policy and the
+        community rules the person accepted. Anything but the current pair —
+        missing, partial or older — is 400 CONSENT_REQUIRED and no account: the
+        consent is recorded in the same transaction that creates the account.
       security: []
       requestBody:
         required: true
@@ -78,8 +83,14 @@ paths:
           application/json:
             schema:
               type: object
-              required: [username, displayName, password]
+              required: [username, displayName, password, privacyVersion, rulesVersion]
               properties:
+                privacyVersion:
+                  type: string
+                  description: Version of the privacy policy accepted on the consent screen (e.g. "2026-10-07").
+                rulesVersion:
+                  type: string
+                  description: Version of the community rules accepted on the consent screen (e.g. "2026-10-07").
                 turnstileToken:
                   type: string
                   maxLength: 2048
@@ -440,6 +451,43 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+  /users/me/consent:
+    post:
+      tags: [users]
+      summary: Accept the current privacy policy and community rules
+      description: >
+        For an account created before the rules existed, and for every account
+        after either text changes (GET /users/me answers consentRequired).
+        Sign-up records consent on its own. Only the versions in force are
+        accepted: an older one is 400 CONSENT_REQUIRED, since agreeing to last
+        month's rules is not agreeing to this month's. Each acceptance is kept
+        as append-only evidence: who, which versions, when, and a salted digest
+        of the address.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [privacyVersion, rulesVersion]
+              properties:
+                privacyVersion: { type: string }
+                rulesVersion: { type: string }
+      responses:
+        '200':
+          description: Accepted; the updated profile, without consentRequired
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          user: { $ref: '#/components/schemas/User' }
+        '400': { description: "Not the current versions (CONSENT_REQUIRED)" }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /users/me/avatar:
     post:
       tags: [users]
@@ -4138,6 +4186,13 @@ components:
         mustChangePassword:
           type: boolean
           description: Present (true) only while a new password must be set before using the app.
+        consentRequired:
+          type: boolean
+          description: >
+            Present (true) only on your own profile, while the account has not
+            accepted the current privacy policy and community rules — never, or
+            an older version. The client blocks the app until POST
+            /users/me/consent.
         verifiedAt:
           type: [string, 'null']
           format: date-time

@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"kisy-backend/internal/audit"
+	"kisy-backend/internal/consent"
 	"kisy-backend/internal/platform/blobstore"
 )
 
@@ -93,6 +94,37 @@ type ActorMeta struct {
 	SessionID uuid.UUID
 	IPHash    string
 	RequestID string
+}
+
+// AcceptConsent records that the account accepted the current privacy policy
+// and community rules (internal/consent) and returns it updated. For accounts
+// that existed before the rules did, and for every account after either text
+// changes: sign-up records consent on its own.
+func (s *Service) AcceptConsent(ctx context.Context, userID uuid.UUID, a consent.Acceptance, meta ActorMeta) (*User, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("users: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err := consent.Record(ctx, tx, userID, a, meta.IPHash); err != nil {
+		return nil, err
+	}
+	if err := s.audit.Record(ctx, tx, audit.Event{
+		ActorID:    &userID,
+		Action:     audit.ActionConsentAccepted,
+		TargetType: "user",
+		TargetID:   &userID,
+		IPHash:     meta.IPHash,
+		RequestID:  meta.RequestID,
+		Metadata:   map[string]any{"privacyVersion": a.PrivacyVersion, "rulesVersion": a.RulesVersion},
+	}); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("users: commit: %w", err)
+	}
+	return s.repo.GetByID(ctx, s.pool, userID)
 }
 
 // ChangeUsername renames the account and audits the change.
