@@ -1729,8 +1729,7 @@ paths:
                 alg: { type: integer, description: E2EE scheme version; required with ciphertext. }
                 epoch: { type: integer, format: int64 }
                 contentKind: { type: integer, description: "1 text, 2 attachment, 3 system." }
-                forwardedFromSenderId: { type: string, format: uuid, description: Client-side (E2EE) forward attribution — original author id snapshot. }
-                forwardedFromSenderName: { type: string, description: Client-side (E2EE) forward attribution — original author name snapshot. }
+                forwardedFromMessageId: { type: string, format: uuid, description: "Client-side (E2EE) forward: the encrypted source message, which the sender must be able to read (else 404; a plaintext source is 403, use /messages/forward). The server derives author and name from it; the client never supplies them." }
                 ttlSeconds: { type: [integer, 'null'], description: Per-message disappearing timer (stage J); overrides the chat default. }
                 threadRootId: { type: [string, 'null'], format: uuid, description: "Thread reply (stage K, groups only) — the root message id; root must be in the same chat and not a reply itself." }
       responses:

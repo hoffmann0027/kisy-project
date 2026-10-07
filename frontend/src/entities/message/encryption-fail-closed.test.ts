@@ -144,7 +144,7 @@ describe("forwarding into a private chat is fail-closed", () => {
   const target = { chatType: "private" as const, chatId: "chat-1", peerUserId: "user-bob" };
 
   it("sends the group message's text encrypted, never in the clear", async () => {
-    await forwardMessages({ target, messages: [groupMessage], resolveName: () => "alice" });
+    await forwardMessages({ target, messages: [groupMessage] });
     expect(api.send).not.toHaveBeenCalled();
     expect(api.forward).toHaveBeenCalledTimes(1);
     const encrypted = api.forward.mock.calls[0][3];
@@ -153,15 +153,26 @@ describe("forwarding into a private chat is fail-closed", () => {
 
   it("forwards nothing when encryption fails", async () => {
     e2ee.encrypt.mockRejectedValue(new Error("mls"));
-    await expectUserFacingRefusal(forwardMessages({ target, messages: [groupMessage], resolveName: () => "alice" }));
+    await expectUserFacingRefusal(forwardMessages({ target, messages: [groupMessage] }));
     expect(api.forward).not.toHaveBeenCalled();
     expect(api.send).not.toHaveBeenCalled();
+  });
+
+  // Audit A-34: the author of a forward is the server's to name.
+  it("names the source of an E2EE forward, never its author", async () => {
+    const e2eeMessage = sentMessage({ id: "p-7", text: "личное", encrypted: true, senderId: "user-bob" });
+    await forwardMessages({ target: { chatType: "group", chatId: "group-1" }, messages: [e2eeMessage] });
+    expect(api.send).toHaveBeenCalledTimes(1);
+    const body = api.send.mock.calls[0][2];
+    expect(body.forwardedFromMessageId).toBe("p-7");
+    expect(body).not.toHaveProperty("forwardedFromSenderId");
+    expect(body).not.toHaveProperty("forwardedFromSenderName");
   });
 
   it("forwards nothing when a decrypted E2EE message cannot be re-encrypted", async () => {
     e2ee.encrypt.mockRejectedValue(new Error("mls"));
     const e2eeMessage = sentMessage({ id: "p-1", text: "личное", encrypted: true, chatId: "chat-9" });
-    await expectUserFacingRefusal(forwardMessages({ target, messages: [e2eeMessage], resolveName: () => "alice" }));
+    await expectUserFacingRefusal(forwardMessages({ target, messages: [e2eeMessage] }));
     expect(api.send).not.toHaveBeenCalled();
   });
 });

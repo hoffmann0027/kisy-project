@@ -154,9 +154,9 @@ export interface SendMessageBody {
   alg?: number;
   epoch?: number;
   contentKind?: number;
-  /** Forwarded-from attribution for a client-side (E2EE) forward. */
-  forwardedFromSenderId?: string;
-  forwardedFromSenderName?: string;
+  /** Client-side (E2EE) forward: the source message. The server derives the
+   *  attribution from it — author and name are never the client's word. */
+  forwardedFromMessageId?: string;
   /** Thread reply (stage K, groups only): the root message id. */
   threadRootId?: string;
 }

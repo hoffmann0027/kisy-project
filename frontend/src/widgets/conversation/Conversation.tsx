@@ -255,15 +255,6 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
       return next;
     });
 
-  // Resolve the original author's display name for forward attribution: in a
-  // private chat the sender is either us or the peer; groups fall back to the
-  // server-side attribution for plaintext messages.
-  const resolveSenderName = (senderId: string): string => {
-    if (senderId === me.id) return me.displayName;
-    if (chatType === "private") return target.title;
-    return "";
-  };
-
   const openForward = (msgs: Message[]) => {
     if (msgs.length === 0) return;
     setForwardSource(msgs);
@@ -274,7 +265,7 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
     const msgs = forwardSource ?? [];
     setForwardOpen(false);
     forward.mutate(
-      { target: t, messages: msgs, resolveName: resolveSenderName },
+      { target: t, messages: msgs },
       {
         onSuccess: () => {
           toast.success(`Переслано в «${t.title}»`);

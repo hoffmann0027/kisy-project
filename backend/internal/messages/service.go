@@ -259,12 +259,11 @@ type SendInput struct {
 	Epoch       *int64
 	ContentKind *int16
 
-	// Forwarded-from attribution (stage D). Set by the client when
-	// re-sending a decrypted E2EE message as a forward: the server cannot
-	// read ciphertext, so it stamps the snapshot the client provides. For
-	// plaintext forwards use Forward instead (server-enforced hierarchy).
-	ForwardedFromSenderID   *uuid.UUID
-	ForwardedFromSenderName *string
+	// Client-side forward of an encrypted message (stage D): the server
+	// cannot read the ciphertext, so the client re-sends the decrypted body
+	// and names the source. Author and name are read from that source, never
+	// from the client (audit A-34). Plaintext sources go through Forward.
+	ForwardedFromMessageID *uuid.UUID
 
 	// Scheduled origin (stage I). Set only by the scheduled-send worker —
 	// never accepted from the HTTP handler.
@@ -363,6 +362,37 @@ func (s *Service) SendTx(ctx context.Context, q db.DBTX, in SendInput, actor Act
 		}
 	}
 
+	// "Forwarded from" is a claim about somebody else, so the client does
+	// not get to make it (audit A-34): it names the source message, which the
+	// sender must be able to read, and the author and name come from there.
+	// Only an encrypted source qualifies — a plaintext one goes through
+	// Forward, which also keeps content from moving to a broader audience.
+	var fwdSenderID *uuid.UUID
+	var fwdSenderName *string
+	if in.ForwardedFromMessageID != nil {
+		src, err := s.repo.GetByID(ctx, s.pool, *in.ForwardedFromMessageID)
+		if err != nil || src.IsDeleted {
+			return DTO{}, nil, ErrNotFound
+		}
+		if err := s.authorize(ctx, src.ChatType, src.ChatID, actor); err != nil {
+			return DTO{}, nil, ErrNotFound
+		}
+		if len(src.Ciphertext) == 0 {
+			return DTO{}, nil, ErrForbidden
+		}
+		author := src.SenderID
+		if src.ForwardedFromSenderID != nil {
+			author = *src.ForwardedFromSenderID
+		}
+		name := ""
+		if s.senderName != nil {
+			if n, ok := s.senderName(ctx, author); ok {
+				name = n
+			}
+		}
+		fwdSenderID, fwdSenderName = &author, &name
+	}
+
 	m := &Message{
 		ChatType:                in.ChatType,
 		ChatID:                  in.ChatID,
@@ -372,8 +402,9 @@ func (s *Service) SendTx(ctx context.Context, q db.DBTX, in SendInput, actor Act
 		Alg:                     in.Alg,
 		Epoch:                   in.Epoch,
 		ContentKind:             in.ContentKind,
-		ForwardedFromSenderID:   in.ForwardedFromSenderID,
-		ForwardedFromSenderName: in.ForwardedFromSenderName,
+		ForwardedFromMessageID:  in.ForwardedFromMessageID,
+		ForwardedFromSenderID:   fwdSenderID,
+		ForwardedFromSenderName: fwdSenderName,
 		ScheduledMessageID:      in.ScheduledMessageID,
 		ThreadRootID:            in.ThreadRootID,
 	}

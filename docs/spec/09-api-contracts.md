@@ -355,11 +355,14 @@ moves "up" to a broader audience (403). Each forward is audited
 
 E2EE: the server can't read ciphertext, so it rejects encrypted sources with
 409; the client decrypts locally and re-sends via POST /messages with
-forwardedFromSenderId/Name set (re-encrypting for an E2EE private target, or
+forwardedFromMessageId set (re-encrypting for an E2EE private target, or
 sending the decrypted text when forwarding out to a non-E2EE target — an
-explicit user action). Server-enforced hierarchy applies to the plaintext
+explicit user action). The attribution is the server's: the source must be an
+encrypted message the sender can read (else 404; a plaintext source is 403 —
+it goes through /messages/forward), and author and name are read from it,
+never from the client. Server-enforced hierarchy applies to the plaintext
 path; for client-side E2EE forwards the server always enforces target access
-but cannot police the source it cannot see.
+but cannot police the content it cannot see.
 
 ## Text Formatting & Link Previews (stage E)
 

@@ -162,9 +162,9 @@ type sendRequest struct {
 	Epoch       *int64 `json:"epoch"`
 	ContentKind *int16 `json:"contentKind"`
 
-	// Forwarded-from attribution for a client-side (E2EE) forward.
-	ForwardedFromSenderID   *string `json:"forwardedFromSenderId"`
-	ForwardedFromSenderName *string `json:"forwardedFromSenderName"`
+	// Client-side (E2EE) forward: the source message. The server derives the
+	// attribution from it; author and name are never taken from the client.
+	ForwardedFromMessageID *string `json:"forwardedFromMessageId"`
 
 	// Per-message disappearing timer in seconds (stage J, additive);
 	// overrides the chat's default TTL for this message.
@@ -226,14 +226,14 @@ func (h *Handler) send(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var fwdSenderID *uuid.UUID
-	if req.ForwardedFromSenderID != nil {
-		id, err := uuid.Parse(*req.ForwardedFromSenderID)
+	var fwdSource *uuid.UUID
+	if req.ForwardedFromMessageID != nil {
+		id, err := uuid.Parse(*req.ForwardedFromMessageID)
 		if err != nil {
-			httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "forwardedFromSenderId must be a valid UUID")
+			httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "forwardedFromMessageId must be a valid UUID")
 			return
 		}
-		fwdSenderID = &id
+		fwdSource = &id
 	}
 
 	if req.TTLSeconds != nil && (*req.TTLSeconds < 0 || *req.TTLSeconds > maxTTLSeconds) {
@@ -251,19 +251,18 @@ func (h *Handler) send(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dto, err := h.svc.Send(r.Context(), SendInput{
-		ChatType:                req.ChatType,
-		ChatID:                  chatID,
-		Text:                    req.Text,
-		ReplyTo:                 replyTo,
-		AttachmentIDs:           attachmentIDs,
-		Ciphertext:              ciphertext,
-		Alg:                     req.Alg,
-		Epoch:                   req.Epoch,
-		ContentKind:             req.ContentKind,
-		ForwardedFromSenderID:   fwdSenderID,
-		ForwardedFromSenderName: req.ForwardedFromSenderName,
-		TTLSeconds:              req.TTLSeconds,
-		ThreadRootID:            threadRootID,
+		ChatType:               req.ChatType,
+		ChatID:                 chatID,
+		Text:                   req.Text,
+		ReplyTo:                replyTo,
+		AttachmentIDs:          attachmentIDs,
+		Ciphertext:             ciphertext,
+		Alg:                    req.Alg,
+		Epoch:                  req.Epoch,
+		ContentKind:            req.ContentKind,
+		ForwardedFromMessageID: fwdSource,
+		TTLSeconds:             req.TTLSeconds,
+		ThreadRootID:           threadRootID,
 	}, actor)
 	if err != nil {
 		h.writeError(w, r, err)

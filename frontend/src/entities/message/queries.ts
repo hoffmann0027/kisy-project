@@ -152,17 +152,18 @@ export interface ForwardTargetRef {
  * Encrypted messages are re-sent client-side: re-encrypted for a private
  * target, or — forwarded out to a group — sent as the locally decrypted text
  * (an explicit user choice). If any text cannot be encrypted, nothing is
- * forwarded (fail-closed, audit A-10). Attribution is preserved: an
- * already-forwarded message keeps its original author.
+ * forwarded (fail-closed, audit A-10). Attribution is the server's: a
+ * client-side forward names its source message and the server reads author
+ * and name from it (audit A-34); an already-forwarded message keeps its
+ * original author.
  */
 export interface ForwardArgs {
   target: ForwardTargetRef;
   messages: Message[];
-  resolveName: (senderId: string) => string;
 }
 
 export async function forwardMessages(args: ForwardArgs): Promise<void> {
-  const { target, messages, resolveName } = args;
+  const { target, messages } = args;
   const intoPrivate = target.chatType === "private";
 
   const plaintext: Message[] = [];
@@ -193,14 +194,11 @@ export async function forwardMessages(args: ForwardArgs): Promise<void> {
   }
 
   for (const { m, body } of clientSends) {
-    const senderId = m.forwardedFrom?.senderId ?? m.senderId;
-    const senderName = m.forwardedFrom?.senderName ?? resolveName(senderId);
     if (body) {
       const { message } = await messagesApi.send(target.chatType, target.chatId, {
         ...body,
         contentKind: 1,
-        forwardedFromSenderId: senderId,
-        forwardedFromSenderName: senderName,
+        forwardedFromMessageId: m.id,
       });
       const s = e2eeSession();
       if (s) await cachePlaintext(s, message.id, m.text ?? "", message.expiresAt);
@@ -209,8 +207,7 @@ export async function forwardMessages(args: ForwardArgs): Promise<void> {
       // text there — the user chose the target.
       await messagesApi.send(target.chatType, target.chatId, {
         text: m.text ?? "",
-        forwardedFromSenderId: senderId,
-        forwardedFromSenderName: senderName,
+        forwardedFromMessageId: m.id,
       });
     }
   }
