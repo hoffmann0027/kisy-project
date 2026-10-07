@@ -30,13 +30,24 @@ const (
 	OwnerGroup = "group"
 )
 
+// ImageError is a problem with the uploaded image itself. Its message is the
+// one thing about a failed upload that may be shown to the uploader: the
+// handlers used to send err.Error() for every failure, so a database error
+// (with its pgx text) or an object-storage one (with the endpoint and bucket)
+// went straight to the client (audit A-42). Callers recognise it with
+// errors.As against interface{ UserMessage() string }, without importing this
+// package.
+type ImageError struct{ msg string }
+
+func (e ImageError) Error() string       { return "avatars: " + e.msg }
+func (e ImageError) UserMessage() string { return e.msg }
+
 var (
-	// ErrTooLarge, ErrUnsupported and ErrNotSquare are validation failures the
-	// handler maps to 400s.
-	ErrTooLarge    = errors.New("avatars: image exceeds size limit")
-	ErrUnsupported = errors.New("avatars: unsupported image type (jpeg or png only)")
-	ErrNotSquare   = errors.New("avatars: image must be square")
-	ErrBadImage    = errors.New("avatars: could not decode image")
+	// Validation failures, each answered as a 400 with its own message.
+	ErrTooLarge    = ImageError{"image exceeds size limit"}
+	ErrUnsupported = ImageError{"unsupported image type (jpeg or png only)"}
+	ErrNotSquare   = ImageError{"image must be square"}
+	ErrBadImage    = ImageError{"could not decode image"}
 )
 
 // Service validates and stores avatar images and reports back a versioned URL

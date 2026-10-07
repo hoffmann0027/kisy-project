@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -91,7 +92,16 @@ func (h *Handler) uploadAvatar(w http.ResponseWriter, r *http.Request) {
 
 	url, err := h.avatars.Store(r.Context(), "group", groupID, raw)
 	if err != nil {
-		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "invalid image: "+err.Error())
+		// Only a problem with the image itself is the uploader's to read; a
+		// storage or database failure is ours, and its text names internals
+		// (audit A-42).
+		var bad interface{ UserMessage() string }
+		if errors.As(err, &bad) {
+			httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "invalid image: "+bad.UserMessage())
+			return
+		}
+		slog.ErrorContext(r.Context(), "avatar store failed", "error", err)
+		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "could not store the image")
 		return
 	}
 

@@ -223,6 +223,15 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 
 	// --- groups ---
 	groupsSvc := groups.NewService(pool, groupsRepo, auditRec)
+	// A group's avatar is shown to whoever may see the group (audit A-36).
+	avatarsHandler.SetGroupGuard(func(r *http.Request, groupID uuid.UUID) bool {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return false
+		}
+		_, err := groupsSvc.Get(r.Context(), groupID, groups.ActorMeta{UserID: claims.UserID, RoleLevel: claims.RoleLevel})
+		return err == nil
+	})
 	groupsSvc.SetProfileLoader(groups.ProfileLoader(usersProfile))
 	groupsHandler := groups.NewHandler(groupsSvc, avatarsSvc,
 		func(r *http.Request) (groups.ActorMeta, bool) {
