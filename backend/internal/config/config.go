@@ -681,6 +681,26 @@ func (c *Config) validateProduction() error {
 	// deploy that looks healthy with something dead inside it (audit D-03).
 	problems = append(problems, c.halfConfigured()...)
 
+	// Placeholders copied from .env.example are public: the file is in the
+	// repository. "change_me_min_32_chars_______________" is 37 characters and
+	// passed the length check, which made a forged CEO token one copy-paste
+	// away for a compose deploy (audit A-24).
+	for name, val := range c.checkedSecrets() {
+		if isPlaceholder(val) {
+			problems = append(problems, fmt.Sprintf("%s is still the placeholder from .env.example — set a real secret", name))
+		}
+	}
+	// One secret for both tokens means a refresh token verifies as an access
+	// token and the other way round: the two kinds stop being two.
+	if c.JWTAccessSecret != "" && c.JWTAccessSecret == c.JWTRefreshSecret {
+		problems = append(problems, "JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must differ")
+	}
+	// REDIS_URL replaces REDIS_PASSWORD, so a URL without credentials to a
+	// non-local Redis is an open cache — rate limits, sessions kicks, all of it.
+	if c.RedisURL != "" && redisURLWithoutPassword(c.RedisURL) {
+		problems = append(problems, "REDIS_URL has no password — add credentials (redis://:password@host:port)")
+	}
+
 	if len(problems) > 0 {
 		return fmt.Errorf("config: refusing to start in production:\n  - %s", strings.Join(problems, "\n  - "))
 	}
@@ -706,6 +726,28 @@ func (c *Config) insecureDBTransport() bool {
 		return false
 	}
 	return !isLoopbackHost(c.Postgres.Host)
+}
+
+// isPlaceholder reports a value that is still the .env.example template.
+func isPlaceholder(v string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(v)), "change_me")
+}
+
+// redisURLWithoutPassword reports a REDIS_URL to a non-loopback host that
+// carries no password.
+func redisURLWithoutPassword(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false // the client constructor will surface the real error
+	}
+	if isLoopbackHost(u.Hostname()) {
+		return false
+	}
+	if u.User == nil {
+		return true
+	}
+	pw, set := u.User.Password()
+	return !set || pw == ""
 }
 
 func isLoopbackHost(host string) bool {
