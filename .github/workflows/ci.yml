@@ -161,6 +161,9 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./backend
+          # Base images are floating tags; without pull a stale local copy
+          # is what gets scanned (audit A-25).
+          pull: true
           push: false
           load: true
           tags: kisy-backend:ci
@@ -171,11 +174,34 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
+          pull: true
           push: false
           load: true
           tags: kisy-frontend:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # The image that actually runs in production: Render builds the root
+      # Dockerfile (backend + SPA in one). It used to be neither built nor
+      # scanned here, and carried a dozen fixable HIGHs nobody saw (audit A-25).
+      - name: Build production image (root Dockerfile, as Render builds it)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          pull: true
+          push: false
+          load: true
+          tags: kisy-allinone:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Production image vulnerability scan (HIGH and CRITICAL)
+        # The internet-facing process: HIGH counts here too. Fixed-only, so a
+        # finding always has a remedy — bump the base or the dependency.
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f \
+            image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 kisy-allinone:ci
 
       - name: Image vulnerability scan (trivy image)
         # CRITICAL + fixed-only keeps this actionable: an unfixed HIGH in the
