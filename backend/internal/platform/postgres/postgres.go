@@ -12,6 +12,8 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"kisy-backend/internal/platform/dsn"
 )
 
 // PoolSettings bounds the connection pool. Left at their zero values, pgx
@@ -30,8 +32,14 @@ type PoolSettings struct {
 // with a ping, so startup fails fast if the database is unreachable rather
 // than surfacing the error on the first request. Zero-valued settings fall
 // back to the pgx defaults, so callers may pass a partially filled struct.
-func NewPool(ctx context.Context, dsn string, s PoolSettings) (*pgxpool.Pool, error) {
-	cfg, err := pgxpool.ParseConfig(dsn)
+// No error carries the DSN's password (audit A-39).
+func NewPool(ctx context.Context, connString string, s PoolSettings) (*pgxpool.Pool, error) {
+	pool, err := newPool(ctx, connString, s)
+	return pool, dsn.Scrub(err, connString)
+}
+
+func newPool(ctx context.Context, connString string, s PoolSettings) (*pgxpool.Pool, error) {
+	cfg, err := pgxpool.ParseConfig(connString)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: parse config: %w", err)
 	}
@@ -67,12 +75,16 @@ func NewPool(ctx context.Context, dsn string, s PoolSettings) (*pgxpool.Pool, er
 // Migrate applies all pending migrations found in migrationsPath. The dsn
 // may use the postgres:// or postgresql:// scheme (managed providers use
 // either); it is translated to the pgx5 driver scheme that golang-migrate's
-// pgx v5 database driver expects.
-func Migrate(dsn, migrationsPath string) error {
-	trimmed := strings.TrimPrefix(dsn, "postgresql://")
+// pgx v5 database driver expects. golang-migrate quotes a URL it cannot
+// parse in full, so the error is scrubbed of the password (audit A-39).
+func Migrate(connString, migrationsPath string) error {
+	trimmed := strings.TrimPrefix(connString, "postgresql://")
 	trimmed = strings.TrimPrefix(trimmed, "postgres://")
 	migrateDSN := "pgx5://" + trimmed
+	return dsn.Scrub(migrateUp(migrateDSN, migrationsPath), migrateDSN)
+}
 
+func migrateUp(migrateDSN, migrationsPath string) error {
 	m, err := migrate.New("file://"+migrationsPath, migrateDSN)
 	if err != nil {
 		return fmt.Errorf("postgres: init migrator: %w", err)

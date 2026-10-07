@@ -9,12 +9,20 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"kisy-backend/internal/config"
+	"kisy-backend/internal/platform/dsn"
 )
 
 // NewClient creates a client and verifies connectivity with a ping. When
 // url is non-empty (e.g. a managed Redis/Key-Value connection string,
 // possibly rediss:// for TLS) it takes precedence over the discrete fields.
+// No error carries the URL's password (audit A-39): go-redis quotes a URL it
+// cannot parse in full.
 func NewClient(ctx context.Context, cfg config.RedisConfig, url string) (*redis.Client, error) {
+	client, err := newClient(ctx, cfg, url)
+	return client, dsn.Scrub(err, url)
+}
+
+func newClient(ctx context.Context, cfg config.RedisConfig, url string) (*redis.Client, error) {
 	var opts *redis.Options
 	if url != "" {
 		parsed, err := redis.ParseURL(url)
