@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/platform/filehttp"
 	"kisy-backend/internal/quarantine"
 	"kisy-backend/internal/quota"
 	"kisy-backend/pkg/httpjson"
@@ -235,18 +235,9 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", b.MimeType)
-	w.Header().Set("Content-Length", strconv.Itoa(len(b.Data)))
-	w.Header().Set("Cache-Control", "private, max-age=86400")
-	// Images render inline; everything else downloads. nosniff (set globally)
-	// prevents a non-image being interpreted as active content.
-	disp := "attachment"
-	if strings.HasPrefix(b.MimeType, "image/") {
-		disp = "inline"
-	}
-	w.Header().Set("Content-Disposition", disp+`; filename*=UTF-8''`+url.PathEscape(b.FileName))
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(b.Data)
+	// Pictures, audio and video render in place; anything else is an opaque,
+	// sandboxed download, whatever it is (audit A-41).
+	filehttp.Write(w, b.MimeType, b.FileName, b.Data, "private, max-age=86400")
 }
 
 // --- helpers ---

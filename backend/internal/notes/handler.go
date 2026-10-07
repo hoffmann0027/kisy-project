@@ -5,12 +5,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/platform/filehttp"
 	"kisy-backend/internal/quarantine"
 	"kisy-backend/internal/quota"
 	"kisy-backend/pkg/httpjson"
@@ -110,16 +109,9 @@ func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "note not found")
 		return
 	}
-	w.Header().Set("Content-Type", b.FileType)
-	w.Header().Set("Content-Length", strconv.Itoa(len(b.Data)))
-	w.Header().Set("Cache-Control", "private, max-age=86400")
-	disp := "attachment"
-	if strings.HasPrefix(b.FileType, "image/") {
-		disp = "inline"
-	}
-	w.Header().Set("Content-Disposition", disp+`; filename*=UTF-8''`+url.PathEscape(b.FileName))
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(b.Data)
+	// The same way as message attachments: an opaque, sandboxed download
+	// unless it is a picture, audio or video (audit A-41).
+	filehttp.Write(w, b.FileType, b.FileName, b.Data, "private, max-age=86400")
 }
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
