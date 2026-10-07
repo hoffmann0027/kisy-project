@@ -168,7 +168,15 @@ func (s *Service) SetMinRoleLevel(ctx context.Context, groupID uuid.UUID, newLev
 // ListMembers returns each member's public profile plus their in-group role,
 // if the actor may see the group. Shape: [{ "user": <profile>, "role": ... }].
 func (s *Service) ListMembers(ctx context.Context, groupID uuid.UUID, actor ActorMeta) ([]any, error) {
-	if _, err := s.Get(ctx, groupID, actor); err != nil {
+	// Who is in a group is the group's business. Visibility alone used to be
+	// enough, so the membership of a closed group — and of every public
+	// community — was a free staff directory for anyone who could see the
+	// group exist (audit A-19). Members see it; the CEO, who moderates, too.
+	if access.IsCEO(actor.RoleLevel) {
+		if _, err := s.Get(ctx, groupID, actor); err != nil {
+			return nil, err
+		}
+	} else if err := s.EnsureMember(ctx, groupID, actor); err != nil {
 		return nil, err
 	}
 	members, err := s.repo.ListMembersWithRoles(ctx, s.pool, groupID)

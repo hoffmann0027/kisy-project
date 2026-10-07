@@ -94,9 +94,14 @@ export function GroupView({ group }: { group: Group }) {
           </button>
         </>
       )}
-      <button className="group-tab" onClick={() => setMembersOpen(true)} title="Участники">
-        <Icon.Users size={16} />
-      </button>
+      {/* The member list is for members (and the CEO): the server refuses it
+          to anyone else, so a reader of a public community is not offered a
+          button that leads to an error. */}
+      {(viewer?.member || caps.canAdmin) && (
+        <button className="group-tab" onClick={() => setMembersOpen(true)} title="Участники">
+          <Icon.Users size={16} />
+        </button>
+      )}
       {/* Those who run it have the moderation tools; everyone else reports. */}
       {!runsGroup && (
         <ReportButton

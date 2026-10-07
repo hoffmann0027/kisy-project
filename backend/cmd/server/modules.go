@@ -864,6 +864,9 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	hub.SetCallSignaler(callSignalAdapter{svc: callsSvc})
 	// A user's final disconnect records last-seen and tears down any call they
 	// were on (prevents the other party ringing forever / stale busy markers).
+	// Presence: only the people you have a private chat with — the app
+	// subscribes to exactly those (audit A-19).
+	hub.SetPresenceFilter(chatPartnersOnly(pool))
 	hub.SetPresenceSink(func(ctx context.Context, userID uuid.UUID) {
 		usersSvc.TouchLastSeen(ctx, userID)
 		callsSvc.HandleDisconnect(ctx, userID)

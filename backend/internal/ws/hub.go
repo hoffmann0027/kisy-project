@@ -87,7 +87,22 @@ type Hub struct {
 
 	// limits caps sockets per account and per address, and frames per socket.
 	limits ConnLimits
+
+	// presenceFilter narrows a presence subscription to the people the
+	// subscriber may watch (nil: nobody — see subscribePresence).
+	presenceFilter PresenceFilter
 }
+
+// PresenceFilter returns the subset of targets whose online status the
+// subscriber may follow.
+type PresenceFilter func(ctx context.Context, subscriber uuid.UUID, targets []uuid.UUID) ([]uuid.UUID, error)
+
+// maxPresenceTargets bounds one subscription. The app subscribes to its chat
+// partners; a list longer than this is not a chat list.
+const maxPresenceTargets = 1000
+
+// SetPresenceFilter installs who may watch whose online status.
+func (h *Hub) SetPresenceFilter(f PresenceFilter) { h.presenceFilter = f }
 
 // kickEnvelope selects the sockets to end: one session of a user, or every
 // session of a user except Keep (uuid.Nil keeps none).
@@ -308,6 +323,25 @@ func (h *Hub) removeClient(c *Client) {
 // subscribePresence records the client's interest in the given users and
 // immediately reports those already online.
 func (h *Hub) subscribePresence(c *Client, targets []uuid.UUID) {
+	// Any user id used to be accepted, so anyone could follow when anyone —
+	// a manager three levels up included — came online and went offline: the
+	// presence half of the staff directory a basic account is not meant to
+	// have (audit A-19). Only those the subscriber shares a chat with now.
+	if len(targets) > maxPresenceTargets {
+		targets = targets[:maxPresenceTargets]
+	}
+	if h.presenceFilter == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	allowed, err := h.presenceFilter(ctx, c.userID, targets)
+	cancel()
+	if err != nil {
+		h.log.Warn("ws: presence filter failed", "error", err)
+		return
+	}
+	targets = allowed
+
 	h.mu.Lock()
 	for _, t := range targets {
 		c.subs[t] = struct{}{}

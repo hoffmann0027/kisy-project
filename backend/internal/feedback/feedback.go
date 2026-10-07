@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"kisy-backend/internal/access"
 	"kisy-backend/internal/platform/db"
 )
 
@@ -35,8 +36,10 @@ var (
 type Author struct {
 	ID          uuid.UUID `json:"id"`
 	DisplayName string    `json:"displayName"`
-	Username    string    `json:"username"`
-	AvatarURL   *string   `json:"avatarUrl"`
+	// Username and RoleLevel are left out for a viewer outside the hierarchy
+	// (see List).
+	Username  string  `json:"username,omitempty"`
+	AvatarURL *string `json:"avatarUrl"`
 	// Null for an author with no level (an account outside the hierarchy).
 	RoleLevel *int `json:"roleLevel"`
 }
@@ -163,7 +166,28 @@ func (s *Service) Create(ctx context.Context, authorID uuid.UUID, body string) (
 
 // List returns a page of feedback newest-first. cursor is the created_at of
 // the last item already seen (RFC3339); empty starts from the newest.
-func (s *Service) List(ctx context.Context, cursor string, limit int) (Page, error) {
+// List returns a page of feedback for viewer.
+//
+// An account outside the hierarchy has no staff directory by design, but this
+// board handed it one: every author's login and level (audit A-19). Such a
+// viewer still sees what was written and by which display name — names are
+// public anyway — but not the logins and the levels that map the company.
+func (s *Service) List(ctx context.Context, viewer Actor, cursor string, limit int) (Page, error) {
+	page, err := s.list(ctx, cursor, limit)
+	if err != nil || access.HasLevel(viewer.RoleLevel) {
+		return page, err
+	}
+	for i := range page.Items {
+		if page.Items[i].Author.ID == viewer.UserID {
+			continue
+		}
+		page.Items[i].Author.Username = ""
+		page.Items[i].Author.RoleLevel = nil
+	}
+	return page, nil
+}
+
+func (s *Service) list(ctx context.Context, cursor string, limit int) (Page, error) {
 	if limit <= 0 || limit > maxPageLen {
 		limit = defaultPageLen
 	}

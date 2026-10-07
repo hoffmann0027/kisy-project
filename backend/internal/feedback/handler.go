@@ -29,7 +29,8 @@ func (h *Handler) Routes(r chi.Router) {
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.actor(r); !ok {
+	actor, ok := h.actor(r)
+	if !ok {
 		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
 		return
 	}
@@ -37,7 +38,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	if raw := r.URL.Query().Get("limit"); raw != "" {
 		limit, _ = strconv.Atoi(raw)
 	}
-	page, err := h.svc.List(r.Context(), r.URL.Query().Get("cursor"), limit)
+	page, err := h.svc.List(r.Context(), actor, r.URL.Query().Get("cursor"), limit)
 	if err != nil {
 		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "failed to list feedback")
 		return
