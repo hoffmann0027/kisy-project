@@ -92,6 +92,12 @@ func validateURL(u *url.URL) error {
 	if host == "" {
 		return ErrBlockedURL
 	}
+	// Web pages live on the web ports. Any other port turned the preview into
+	// a port scanner of other people's hosts — a closed port answered in
+	// 0.09 s, a filtered one in 6 s (audit A-43).
+	if port := u.Port(); port != "" && port != "80" && port != "443" {
+		return ErrBlockedURL
+	}
 	// A URL that is itself a literal private IP is rejected up-front.
 	if ip := net.ParseIP(host); ip != nil && blockedIP(ip) {
 		return ErrBlockedURL

@@ -45,6 +45,8 @@ func TestValidateURL(t *testing.T) {
 		"ftp://example.com", "file:///etc/passwd", "gopher://x",
 		"http://127.0.0.1/", "https://10.0.0.1/", "http://169.254.169.254/latest/meta-data/",
 		"http://[::1]/", "javascript:alert(1)", "http://",
+		// Any port but the web ones: the preview was a port scanner (audit A-43).
+		"http://example.com:22/", "https://example.com:6379/", "http://example.com:8080/",
 	}
 	for _, s := range bad {
 		u, _ := url.Parse(s)
@@ -55,7 +57,7 @@ func TestValidateURL(t *testing.T) {
 			t.Errorf("%s must be rejected", s)
 		}
 	}
-	good := []string{"http://example.com/", "https://sub.example.org/path?q=1"}
+	good := []string{"http://example.com/", "https://sub.example.org/path?q=1", "https://example.com:443/", "http://example.com:80/"}
 	for _, s := range good {
 		u, _ := url.Parse(s)
 		if err := validateURL(u); err != nil {
