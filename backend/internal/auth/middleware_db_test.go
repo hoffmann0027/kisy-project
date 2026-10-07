@@ -124,3 +124,64 @@ func TestRefreshKeepsCookiesWhenTheStoreIsDown(t *testing.T) {
 		t.Fatal("session gone: the dead refresh cookie must be cleared")
 	}
 }
+
+// TestSeededPasswordUnlocksNothingButItsOwnChange pins audit A-16: the
+// must_change_password flag was enforced only by the client's screens, so a
+// temporary password set by the CEO — or the bootstrap one — kept working for
+// every API call and for /admin, which skipped that screen.
+func TestSeededPasswordUnlocksNothingButItsOwnChange(t *testing.T) {
+	userID, sessionID := uuid.New(), uuid.New()
+	tokens := token.NewManager("test-secret-value-for-middleware-tests", time.Minute)
+	access, _, err := tokens.IssueAccess(userID, sessionID, 1, "ceo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seeded := stubSessions{session: &Session{
+		ID: sessionID, UserID: userID, ExpiresAt: time.Now().UTC().Add(time.Hour), MustChangePassword: true,
+	}}
+	m := NewMiddleware(tokens, seeded, nil)
+	handler := m.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	call := func(method, path string) int {
+		req := httptest.NewRequest(method, path, nil)
+		req.Header.Set("Authorization", "Bearer "+access)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	for _, refused := range []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/chats"},
+		{http.MethodPost, "/api/v1/messages"},
+		{http.MethodPatch, "/api/v1/users/me"},
+		{http.MethodGet, "/api/v1/admin/users"},
+	} {
+		if got := call(refused.method, refused.path); got != http.StatusForbidden {
+			t.Errorf("%s %s = %d with a seeded password, want 403", refused.method, refused.path, got)
+		}
+	}
+	for _, allowed := range []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/users/me"},
+		{http.MethodPost, "/api/v1/auth/password"},
+		{http.MethodPost, "/api/v1/auth/logout"},
+		{http.MethodDelete, "/api/v1/users/me"},
+	} {
+		if got := call(allowed.method, allowed.path); got != http.StatusOK {
+			t.Errorf("%s %s = %d with a seeded password, want it allowed", allowed.method, allowed.path, got)
+		}
+	}
+
+	// The WebSocket is the whole app; it does not open either.
+	req := httptest.NewRequest(http.MethodGet, "/ws?access_token="+access, nil)
+	if m.Authenticate(req) != nil {
+		t.Fatal("the WebSocket authenticated an account that must change its password")
+	}
+
+	// Once changed, everything opens.
+	seeded.session.MustChangePassword = false
+	if got := call(http.MethodGet, "/api/v1/chats"); got != http.StatusOK {
+		t.Fatalf("after the change: %d", got)
+	}
+}

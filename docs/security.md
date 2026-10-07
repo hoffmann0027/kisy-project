@@ -247,9 +247,14 @@ CEO) берутся из переменных окружения / `.env`, ни�
   скомпрометированным значением (дайджесты в `knownCompromisedDigests`).
 - **Ротация секретов:** значения из переданного за пределы среды `.env`
   считаются сожжёнными и ротированы; guard навсегда отклоняет их в проде.
-- **Обязательная смена seed-пароля CEO:** bootstrap создаёт CEO с
-  `must_change_password=true`; флаг отдаётся в `/me` и login, фронт
-  (`RequireAuth` → `ForcePasswordChange`) блокирует приложение до смены.
+- **Обязательная смена seed-пароля CEO и пароля после сброса:** bootstrap и
+  админский сброс ставят `must_change_password=true`. Флаг принуждает
+  **сервер**: middleware читает его тем же запросом, что и сессию, и пока он
+  стоит, отвечает `403 PASSWORD_CHANGE_REQUIRED` на всё, кроме
+  `GET /users/me`, `POST /auth/password`, выхода и удаления аккаунта;
+  WebSocket не открывается. Фронт показывает `ForcePasswordChange`. Раньше
+  флаг проверял только экран на клиенте, и временный пароль работал
+  бессрочно для любого запроса и для `/admin` (аудит A-16).
 - **Container hardening (`docker-compose.prod.yml`):** `read_only` + tmpfs +
   `cap_drop: [ALL]` (+ точечные `cap_add`) + `no-new-privileges` + лимиты
   ресурсов; фронтенд переведён на `nginx-unprivileged` (non-root, порт 8080).

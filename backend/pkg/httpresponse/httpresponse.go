@@ -63,6 +63,9 @@ const (
 	// policy and community rules (internal/consent) — none at all, or an older
 	// version than the one in force.
 	ErrConsentRequired = "CONSENT_REQUIRED"
+	// ErrPasswordChangeRequired: the account carries a seeded or reset
+	// password, and nothing but changing it is allowed until it does.
+	ErrPasswordChangeRequired = "PASSWORD_CHANGE_REQUIRED" // #nosec G101 -- an error code, not a credential
 )
 
 func requestID(r *http.Request) string {

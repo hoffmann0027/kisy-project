@@ -44,12 +44,13 @@ func (r *PostgresSessionRepository) Create(ctx context.Context, q db.DBTX, s *Se
 func (r *PostgresSessionRepository) GetByID(ctx context.Context, q db.DBTX, id uuid.UUID) (*Session, error) {
 	var s Session
 	err := q.QueryRow(ctx, `
-		SELECT id, user_id, refresh_token_hash, device_name, user_agent, ip_hash,
-		       created_at, last_used_at, expires_at, revoked_at
-		FROM sessions WHERE id = $1`, id,
+		SELECT s.id, s.user_id, s.refresh_token_hash, s.device_name, s.user_agent, s.ip_hash,
+		       s.created_at, s.last_used_at, s.expires_at, s.revoked_at, u.must_change_password
+		FROM sessions s JOIN users u ON u.id = s.user_id
+		WHERE s.id = $1`, id,
 	).Scan(
 		&s.ID, &s.UserID, &s.RefreshTokenHash, &s.DeviceName, &s.UserAgent, &s.IPHash,
-		&s.CreatedAt, &s.LastUsedAt, &s.ExpiresAt, &s.RevokedAt,
+		&s.CreatedAt, &s.LastUsedAt, &s.ExpiresAt, &s.RevokedAt, &s.MustChangePassword,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrSessionNotFound

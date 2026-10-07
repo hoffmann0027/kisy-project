@@ -44,6 +44,10 @@ type Session struct {
 	LastUsedAt       time.Time
 	ExpiresAt        time.Time
 	RevokedAt        *time.Time
+	// MustChangePassword is the owning account's flag, read in the same query
+	// as the session so the middleware can enforce it without a second round
+	// trip (audit A-16).
+	MustChangePassword bool
 }
 
 // Active reports whether the session can still be used.

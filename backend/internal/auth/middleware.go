@@ -78,6 +78,14 @@ func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 		case !sess.Active(time.Now().UTC()) || sess.UserID != claims.UserID:
 			httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "session is no longer active")
 			return
+		case sess.MustChangePassword && !allowedBeforePasswordChange(r):
+			// The flag used to be the client's business alone: a temporary
+			// password set by the CEO, or the bootstrap one, kept working
+			// indefinitely for anything but the screens that checked it —
+			// /admin included (audit A-16).
+			httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrPasswordChangeRequired,
+				"the password must be changed before anything else")
+			return
 		}
 
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, claims)))
@@ -107,7 +115,25 @@ func (m *Middleware) Authenticate(r *http.Request) *token.AccessClaims {
 	if err != nil || !sess.Active(time.Now().UTC()) || sess.UserID != claims.UserID {
 		return nil
 	}
+	// A live socket is the whole app — messages, presence, calls — so an
+	// account that has to change its password gets none of it (audit A-16).
+	if sess.MustChangePassword {
+		return nil
+	}
 	return claims
+}
+
+// allowedBeforePasswordChange lists what an account with a seeded or reset
+// password may still do: learn that it has to change it (GET /users/me),
+// change it, sign out — and delete itself, which re-checks the password anyway.
+func allowedBeforePasswordChange(r *http.Request) bool {
+	path := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1"), "/")
+	switch r.Method + " " + path {
+	case "GET /users/me", "DELETE /users/me",
+		"POST /auth/password", "POST /auth/logout", "POST /auth/logout-all":
+		return true
+	}
+	return false
 }
 
 // RequireClearance allows only actors whose level is at most maxLevel
