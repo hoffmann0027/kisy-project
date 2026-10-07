@@ -18,6 +18,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"kisy-backend/internal/platform/netguard"
 )
 
 var (
@@ -42,40 +44,13 @@ const (
 // blockedIP reports whether an IP must never be dialed for an outbound
 // preview fetch. Covers loopback, private (RFC1918 + ULA), link-local
 // (incl. 169.254.169.254 cloud metadata), CGNAT, multicast and unspecified.
-func blockedIP(ip net.IP) bool {
-	if ip == nil {
-		return true
-	}
-	if v4 := ip.To4(); v4 != nil {
-		ip = v4
-	}
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() ||
-		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() ||
-		ip.IsInterfaceLocalMulticast() {
-		return true
-	}
-	// Carrier-grade NAT 100.64.0.0/10 and "this network" 0.0.0.0/8.
-	if v4 := ip.To4(); v4 != nil {
-		if v4[0] == 0 {
-			return true
-		}
-		if v4[0] == 100 && v4[1] >= 64 && v4[1] <= 127 {
-			return true
-		}
-	}
-	return false
-}
+func blockedIP(ip net.IP) bool { return netguard.BlockedIP(ip) }
 
 // guardedControl is the dialer hook: it runs after DNS resolution with the
 // concrete address about to be connected, so a hostname that resolves to a
 // private IP (including via rebinding between checks) is still rejected.
-func guardedControl(_, address string, _ syscall.RawConn) error {
-	host, _, err := net.SplitHostPort(address)
-	if err != nil {
-		return ErrBlockedURL
-	}
-	ip := net.ParseIP(host)
-	if blockedIP(ip) {
+func guardedControl(network, address string, raw syscall.RawConn) error {
+	if err := netguard.Control(network, address, raw); err != nil {
 		return ErrBlockedURL
 	}
 	return nil

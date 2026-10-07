@@ -1,6 +1,7 @@
 package push
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -57,7 +58,12 @@ func (h *Handler) subscribe(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "invalid subscription")
 		return
 	}
-	if err := h.svc.Subscribe(r.Context(), uid, Subscription{Endpoint: req.Endpoint, P256dh: req.Keys.P256dh, Auth: req.Keys.Auth}); err != nil {
+	err := h.svc.Subscribe(r.Context(), uid, Subscription{Endpoint: req.Endpoint, P256dh: req.Keys.P256dh, Auth: req.Keys.Auth})
+	if errors.Is(err, ErrBadEndpoint) {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "not a browser push service endpoint")
+		return
+	}
+	if err != nil {
 		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "failed to subscribe")
 		return
 	}

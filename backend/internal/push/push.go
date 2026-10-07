@@ -133,11 +133,23 @@ type Service struct {
 
 	// fcm is nil unless Firebase credentials were configured.
 	fcm *FCM
+
+	// web is the client browser pushes go through (endpoint.go).
+	web *http.Client
 }
 
 func NewService(pool *pgxpool.Pool, repo Repository, log *slog.Logger, publicKey, privateKey, subject string) *Service {
-	return &Service{pool: pool, repo: repo, log: log, publicKey: publicKey, privateKey: privateKey, subject: subject}
+	return &Service{
+		pool: pool, repo: repo, log: log, publicKey: publicKey, privateKey: privateKey, subject: subject,
+		web: newSendClient(),
+	}
 }
+
+// notifyTimeout bounds one whole fan-out — every browser and every device of
+// one person. Callers start Notify in a goroutine on context.Background() so
+// the push outlives the request that caused it; this is what keeps that
+// goroutine from living forever when a push service hangs.
+const notifyTimeout = 30 * time.Second
 
 // SetFCM wires Firebase delivery for the mobile app. Passing nil leaves the
 // mobile transport off.
@@ -153,6 +165,9 @@ func (s *Service) MobileEnabled() bool { return s.fcm != nil }
 func (s *Service) PublicKey() string { return s.publicKey }
 
 func (s *Service) Subscribe(ctx context.Context, userID uuid.UUID, sub Subscription) error {
+	if err := ValidateEndpoint(sub.Endpoint); err != nil {
+		return err
+	}
 	return s.repo.Upsert(ctx, s.pool, userID, sub)
 }
 
@@ -182,6 +197,8 @@ type payload struct {
 // and installed mobile apps. It runs its work synchronously; callers typically
 // invoke it in a goroutine. Dead endpoints and tokens are pruned.
 func (s *Service) Notify(ctx context.Context, userID uuid.UUID, title, body, url string) {
+	ctx, cancel := context.WithTimeout(ctx, notifyTimeout)
+	defer cancel()
 	s.notifyBrowsers(ctx, userID, title, body, url)
 	s.notifyDevices(ctx, userID, title, body, url)
 }
@@ -278,7 +295,13 @@ func (s *Service) notifyBrowsers(ctx context.Context, userID uuid.UUID, title, b
 	data, _ := json.Marshal(payload{Title: title, Body: body, URL: url, Tag: "kisy"})
 
 	for _, sub := range subs {
-		resp, err := webpush.SendNotification(data, &webpush.Subscription{
+		// Rows stored before endpoints were checked may point anywhere: they
+		// are dropped rather than called (audit A-17).
+		if ValidateEndpoint(sub.Endpoint) != nil {
+			_ = s.repo.Delete(ctx, s.pool, sub.Endpoint)
+			continue
+		}
+		resp, err := webpush.SendNotificationWithContext(ctx, data, &webpush.Subscription{
 			Endpoint: sub.Endpoint,
 			Keys:     webpush.Keys{P256dh: sub.P256dh, Auth: sub.Auth},
 		}, &webpush.Options{
@@ -286,6 +309,7 @@ func (s *Service) notifyBrowsers(ctx context.Context, userID uuid.UUID, title, b
 			VAPIDPublicKey:  s.publicKey,
 			VAPIDPrivateKey: s.privateKey,
 			TTL:             86400,
+			HTTPClient:      s.web,
 		})
 		if err != nil {
 			s.log.Warn("push send failed", "error", err)

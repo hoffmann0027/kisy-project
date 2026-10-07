@@ -211,7 +211,8 @@ func (s *Service) Announce(ctx context.Context, recipients []uuid.UUID, a Announ
 		}
 		if s.pusher != nil && a.PushBody != "" {
 			// #nosec G118 -- deliberate: the push must outlive the request that
-			// raised it; the pusher applies its own timeout.
+			// raised it. Bounded by push.notifyTimeout (30 s for the whole
+			// fan-out) and a 10 s client per delivery (audit A-17, D-07).
 			go s.pusher.Notify(context.Background(), id, a.PushTitle, a.PushBody, a.URL)
 		}
 	}
