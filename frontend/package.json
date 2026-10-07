@@ -12,9 +12,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@capacitor/android": "8.5.0",
+    "@capacitor/android": "8.5.2",
     "@capacitor/app": "8.1.1",
-    "@capacitor/core": "8.5.0",
+    "@capacitor/core": "8.5.2",
     "@capacitor/preferences": "8.0.1",
     "@capacitor/push-notifications": "8.1.2",
     "@hookform/resolvers": "^3.9.1",
@@ -27,14 +27,14 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.53.2",
-    "react-router-dom": "^6.28.0",
+    "react-router-dom": "6.30.6",
     "recharts": "^2.15.4",
     "ts-mls": "^1.6.2",
     "zod": "^3.23.8",
     "zustand": "^5.0.1"
   },
   "devDependencies": {
-    "@capacitor/cli": "8.5.0",
+    "@capacitor/cli": "8.5.2",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@types/node": "^22.10.1",
