@@ -447,6 +447,8 @@ func fail(w http.ResponseWriter, r *http.Request, err error) {
 			"chat moved on: re-read the handshake and commit again")
 	case errors.Is(err, ErrValidation):
 		badRequest(w, r, "invalid request")
+	case errors.Is(err, ErrDeviceTaken):
+		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrValidationFailed, "device id already registered")
 	case errors.Is(err, ErrRateLimited):
 		httpresponse.Fail(w, r, http.StatusTooManyRequests, httpresponse.ErrRateLimited, "too many requests")
 	default:

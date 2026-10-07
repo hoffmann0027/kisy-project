@@ -23,6 +23,10 @@ var (
 	ErrStaleEpoch = errors.New("e2ee: stale epoch")
 	// ErrRateLimited: too many key-package claims against one user.
 	ErrRateLimited = errors.New("e2ee: too many key package claims")
+	// ErrDeviceTaken: the device id is registered to another account, or to
+	// this one with another key. Re-registering a device is renaming it, and
+	// only its owner, with its own key, may (audit A-21).
+	ErrDeviceTaken = errors.New("e2ee: device id already registered")
 )
 
 // Handshake message kinds (e2ee_group_messages.kind).
@@ -40,6 +44,10 @@ const (
 	MaxBackupBytes     = 16 << 20
 	MaxBatchUpload     = 100
 	MaxDeviceName      = 128
+	// MaxWelcomeRecipients bounds one Welcome's fan-out. A private chat has
+	// two people with a handful of devices each; the map used to be
+	// unbounded, one database row and one real-time event per entry.
+	MaxWelcomeRecipients = 32
 )
 
 type Device struct {

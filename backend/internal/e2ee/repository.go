@@ -67,9 +67,18 @@ func (r *PostgresRepository) UpsertDevice(ctx context.Context, q db.DBTX, d *Dev
 		INSERT INTO e2ee_devices (id, user_id, name, ed25519_pub, signed_by, signature)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
+		  -- Only the same account with the same key may touch an existing
+		  -- device. Anyone used to be able to rename anyone's (audit A-21).
+		  WHERE e2ee_devices.user_id = EXCLUDED.user_id
+		    AND e2ee_devices.ed25519_pub = EXCLUDED.ed25519_pub
 		RETURNING created_at`,
 		d.ID, d.UserID, d.Name, d.Ed25519Pub, d.SignedBy, d.Signature,
 	).Scan(&d.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// The conflict was there and the WHERE refused it: someone else's
+		// device, or ours with a different key.
+		return ErrDeviceTaken
+	}
 	if err != nil {
 		return fmt.Errorf("e2ee: upsert device: %w", err)
 	}

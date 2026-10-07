@@ -199,6 +199,29 @@ func (s *Service) RevokeDevice(ctx context.Context, actor Actor, deviceID uuid.U
 
 // ownsActiveDevice guards uploads: the device must exist, belong to the
 // actor and not be revoked.
+// checkWelcomeRecipients requires every recipient device to exist, be
+// active, belong to the user the map names, and that user to be in the chat.
+// Only private chats carry Welcomes today (group encryption is not built), so
+// a group chat is refused rather than checked against a rule nobody uses.
+func (s *Service) checkWelcomeRecipients(ctx context.Context, in PublishHandshakeInput) error {
+	if in.ChatType != "private" {
+		return ErrValidation
+	}
+	for deviceID, userID := range in.Recipients {
+		d, err := s.repo.GetDevice(ctx, s.pool, deviceID)
+		if err != nil {
+			return ErrValidation
+		}
+		if d.RevokedAt != nil || d.UserID != userID {
+			return ErrValidation
+		}
+		if err := s.authz.Private(ctx, in.ChatID, d.UserID); err != nil {
+			return ErrValidation
+		}
+	}
+	return nil
+}
+
 func (s *Service) ownsActiveDevice(ctx context.Context, actor Actor, deviceID uuid.UUID) (*Device, error) {
 	d, err := s.repo.GetDevice(ctx, s.pool, deviceID)
 	if err != nil {
@@ -296,7 +319,7 @@ func (s *Service) PublishHandshake(ctx context.Context, actor Actor, in PublishH
 	if in.Kind != KindWelcome && in.Kind != KindCommit && in.Kind != KindProposal {
 		return ErrValidation
 	}
-	if in.Kind == KindWelcome && len(in.Recipients) == 0 {
+	if in.Kind == KindWelcome && (len(in.Recipients) == 0 || len(in.Recipients) > MaxWelcomeRecipients) {
 		return ErrValidation
 	}
 	if err := s.authorize(ctx, in.ChatType, in.ChatID, actor); err != nil {
@@ -308,6 +331,13 @@ func (s *Service) PublishHandshake(ctx context.Context, actor Actor, in PublishH
 
 	sender := in.SenderDevice
 	if in.Kind == KindWelcome {
+		// Every recipient is checked before anything is stored. The map comes
+		// from the client: its user ids decided who received a real-time
+		// event, and nothing tied them to the devices or to the chat — any
+		// user could be sent Welcome events for any chat (audit A-21).
+		if err := s.checkWelcomeRecipients(ctx, in); err != nil {
+			return err
+		}
 		for deviceID, userID := range in.Recipients {
 			m := &GroupMessage{
 				ChatType:        in.ChatType,
