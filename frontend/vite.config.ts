@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
+import { nativeContentSecurityPolicy } from "./src/shared/config/nativeCsp";
 
 export default defineConfig(({ mode }) => {
   // Dev-only proxy target for the backend. Defaults to :8080; override via
@@ -10,9 +11,28 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const backendTarget = env.VITE_PROXY_TARGET || "http://localhost:8080";
   const wsTarget = backendTarget.replace(/^http/, "ws");
+  // A native build (VITE_NATIVE_API_ORIGIN set, see the android workflows)
+  // has no server to send a CSP header, so the policy goes into index.html.
+  const nativeApi = env.VITE_NATIVE_API_ORIGIN;
 
   return {
-    plugins: [react()],
+    plugins: [
+      react(),
+      {
+        name: "kisy-native-csp",
+        apply: "build",
+        transformIndexHtml: () =>
+          nativeApi
+            ? [
+                {
+                  tag: "meta",
+                  attrs: { "http-equiv": "Content-Security-Policy", content: nativeContentSecurityPolicy(nativeApi) },
+                  injectTo: "head-prepend",
+                },
+              ]
+            : [],
+      },
+    ],
     resolve: {
       alias: {
         "@app": path.resolve(__dirname, "src/app"),

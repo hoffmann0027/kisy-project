@@ -101,7 +101,19 @@ security-hardening и для будущих аудитов.
 - **Заголовки:** CSP, `X-Content-Type-Options`, `X-Frame-Options`,
   `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-*` ставятся
   бэкендом (`internal/platform/security`) на API-ответы и Nginx на
-  статику; `server_tokens off` скрывает версию.
+  статику; `server_tokens off` скрывает версию. `connect-src` — только свой
+  origin и WebSocket на том же хосте (раньше `ws: wss:` — сокет куда угодно,
+  A-45). `script-src` содержит `'wasm-unsafe-eval'`: libsodium — это
+  WebAssembly без запасного пути, без него шифрование в браузере не
+  стартует; `eval` и inline-скрипты по-прежнему запрещены. Ответы `/api`
+  идут с `Cache-Control: no-store` (файлы задают своё кэширование сами).
+  В приложении Capacitor заголовка нет (бандл отдаёт сам WebView), поэтому
+  сборка с `VITE_NATIVE_API_ORIGIN` встраивает ту же политику в
+  `index.html` мета-тегом (`frontend/src/shared/config/nativeCsp.ts`).
+- **Пользовательские файлы** (вложения, заметки, медиа постов) отдаются
+  через `internal/platform/filehttp`: картинки, аудио и видео — на месте,
+  всё прочее — `application/octet-stream` + `attachment`, всегда `nosniff`
+  и `CSP: sandbox` (A-41).
 
 ## Секреты
 

@@ -5,8 +5,8 @@
 // Bump this whenever the shell caching behavior changes: the new bytes make
 // browsers install the updated worker on next navigation, which purges the
 // old cache in activate and takes control (skipWaiting + clients.claim).
-const CACHE = "kisy-shell-v10";
-const SHELL = ["/", "/favicon.png?v=2", "/manifest.webmanifest", "/icon-192.png?v=2", "/icon-512.png?v=2"];
+const CACHE = "kisy-shell-v11";
+const SHELL = ["/", "/theme-init.js", "/favicon.png?v=2", "/manifest.webmanifest", "/icon-192.png?v=2", "/icon-512.png?v=2"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -110,12 +110,12 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Other static files (favicon.png, logo.png, icon-*.png, manifest, fonts)
-  // have STABLE names, so cache-first would pin a stale copy forever (this is
+  // Other static files (favicon.png, logo.png, icon-*.png, manifest, fonts,
+  // theme-init.js) have STABLE names, so cache-first would pin a stale copy forever (this is
   // why an updated logo did not appear). Use network-first: serve the fresh
   // bytes when online, fall back to cache offline, and refresh the cache on
   // every successful fetch.
-  if (/\.(png|svg|webmanifest|woff2?)$/.test(url.pathname)) {
+  if (/\.(png|svg|webmanifest|woff2?)$/.test(url.pathname) || url.pathname === "/theme-init.js") {
     event.respondWith(
       fetch(request)
         .then((resp) => {
