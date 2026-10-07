@@ -134,8 +134,16 @@ func (r *PostgresRepository) ClaimDue(ctx context.Context, q db.DBTX, now time.T
 }
 
 func (r *PostgresRepository) MarkSent(ctx context.Context, q db.DBTX, id, messageID uuid.UUID) error {
+	// Sent, the snapshot has done its job: the content now lives in the
+	// message itself. Keeping it here meant it outlived the message — deleted,
+	// expired by a disappearing timer, cleared from search — sitting in this
+	// table and in every backup (audit A-29). Only the fact and the link stay,
+	// as on cancel.
 	_, err := q.Exec(ctx, `
-		UPDATE scheduled_messages SET status = 'sent', sent_message_id = $2, updated_at = now() WHERE id = $1`,
+		UPDATE scheduled_messages
+		SET status = 'sent', sent_message_id = $2, updated_at = now(),
+		    text = NULL, ciphertext = NULL, attachment_ids = '{}'
+		WHERE id = $1`,
 		id, messageID)
 	if err != nil {
 		return fmt.Errorf("scheduled: mark sent: %w", err)

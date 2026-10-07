@@ -200,6 +200,19 @@ func TestWorkerSendsExactlyOnce(t *testing.T) {
 		t.Fatalf("status=%q sentMsg=%v", status, sentMsg)
 	}
 
+	// Audit A-29: the snapshot is gone once sent — the text must not outlive
+	// the message (deleted, expired, purged from search) in this table.
+	var leftover *string
+	var leftAttachments int
+	if err := h.pool.QueryRow(h.ctx, `
+		SELECT COALESCE(text, encode(ciphertext, 'hex')), cardinality(attachment_ids)
+		FROM scheduled_messages WHERE id = $1`, dto.ID).Scan(&leftover, &leftAttachments); err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	if leftover != nil || leftAttachments != 0 {
+		t.Fatalf("a sent scheduled message kept its content: %v, %d attachments", *leftover, leftAttachments)
+	}
+
 	// A sent row can no longer be edited or canceled.
 	at := time.Now().Add(time.Hour)
 	if _, err := h.svc.Update(h.ctx, dto.ID, scheduled.UpdateInput{SendAt: &at}, h.alice); !errors.Is(err, scheduled.ErrNotFound) {
