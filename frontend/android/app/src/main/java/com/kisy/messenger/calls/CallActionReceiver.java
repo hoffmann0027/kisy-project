@@ -17,8 +17,10 @@ public class CallActionReceiver extends BroadcastReceiver {
     public void onReceive(Context ctx, Intent intent) {
         // Logged before the filter, and unconditionally: if "Ответить" ever
         // ends a call, the first question is whether its tap arrived here — the
-        // receiver that only knows how to decline.
-        Log.i(TAG, "receiver got intent action=" + intent.getAction() + " extras=" + intent.getExtras());
+        // receiver that only knows how to decline. The action only: the
+        // extras carry the caller's name, and logcat is readable by anyone
+        // with a cable and by every bug report (audit A-49).
+        Log.i(TAG, "receiver got intent action=" + intent.getAction());
         if (!ACTION_DECLINE.equals(intent.getAction())) return;
         String callId = intent.getStringExtra(EXTRA_CALL_ID);
         Log.i(TAG, "declined " + callId + " from the notification");

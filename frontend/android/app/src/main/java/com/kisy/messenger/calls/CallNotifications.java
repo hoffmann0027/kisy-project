@@ -123,7 +123,8 @@ public final class CallNotifications {
             Log.w(TAG, "notify refused: " + e.getMessage());
         }
         CallRinger.start(ctx, callId);
-        Log.i(TAG, "incoming call " + callId + " from " + name);
+        // Never the caller's name: logcat ends up in bug reports (audit A-49).
+        Log.i(TAG, "incoming call " + callId);
         logDelivery(ctx);
     }
 
