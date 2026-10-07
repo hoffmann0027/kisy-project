@@ -706,6 +706,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 
 	// --- notification preferences: chat mutes + settings (stage G) ---
 	notifprefsSvc := notifprefs.NewService(pool, notifprefs.NewPostgresRepository())
+	notifprefsSvc.SetChatMember(chatMember(pool))
 	notificationsSvc.SetPreferences(notifPrefsGate{svc: notifprefsSvc})
 	notifprefsHandler := notifprefs.NewHandler(notifprefsSvc, func(r *http.Request) (uuid.UUID, bool) {
 		claims, ok := auth.ClaimsFromContext(r.Context())

@@ -17,6 +17,9 @@ func TestMuteLifecycle(t *testing.T) {
 	pool := testdb.New(t)
 	ctx := context.Background()
 	svc := notifprefs.NewService(pool, notifprefs.NewPostgresRepository())
+	// This test is about the mute timeline; who may mute which chat is
+	// covered in cmd/server (chatstate_integration_test.go).
+	svc.SetChatMember(func(context.Context, string, uuid.UUID, uuid.UUID) (bool, error) { return true, nil })
 
 	alice := testdb.SeedUser(t, pool, "alice", 3)
 	bob := testdb.SeedUser(t, pool, "bob", 8)

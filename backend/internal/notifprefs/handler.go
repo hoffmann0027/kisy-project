@@ -149,5 +149,9 @@ func fail(w http.ResponseWriter, r *http.Request, err error) {
 		badRequest(w, r, "invalid request")
 		return
 	}
+	if errors.Is(err, ErrNotFound) {
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "chat not found")
+		return
+	}
 	httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
 }

@@ -5,6 +5,7 @@ package readstate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -40,17 +41,30 @@ type PostgresRepository struct{}
 func NewPostgresRepository() *PostgresRepository { return &PostgresRepository{} }
 
 func (r *PostgresRepository) MarkRead(ctx context.Context, q db.DBTX, userID uuid.UUID, chatType string, chatID, messageID uuid.UUID) error {
-	_, err := q.Exec(ctx, `
+	// The message has to be one of this chat's. Any id used to be stored —
+	// one from somebody else's chat included — and then sent to this chat's
+	// members as the reader's position (audit A-37). The casts are needed:
+	// the same parameter appears as a value and in a comparison, and Postgres
+	// will not guess one type for both.
+	tag, err := q.Exec(ctx, `
 		INSERT INTO chat_read_state (user_id, chat_type, chat_id, last_read_at, last_read_message_id)
-		VALUES ($1, $2, $3, now(), $4)
+		SELECT $1::uuid, $2::text, $3::uuid, now(), $4::uuid
+		WHERE EXISTS (SELECT 1 FROM messages WHERE id = $4::uuid AND chat_type = $2::text AND chat_id = $3::uuid)
 		ON CONFLICT (user_id, chat_type, chat_id)
 		DO UPDATE SET last_read_at = now(), last_read_message_id = EXCLUDED.last_read_message_id`,
 		userID, chatType, chatID, messageID)
 	if err != nil {
 		return fmt.Errorf("readstate: mark read: %w", err)
 	}
+	if tag.RowsAffected() == 0 {
+		return ErrMessageNotInChat
+	}
 	return nil
 }
+
+// ErrMessageNotInChat: the read position names a message of another chat, or
+// none at all.
+var ErrMessageNotInChat = errors.New("readstate: message is not in this chat")
 
 func (r *PostgresRepository) UnreadForChats(ctx context.Context, q db.DBTX, userID uuid.UUID, chatType string, chatIDs []uuid.UUID) (map[uuid.UUID]int, error) {
 	out := make(map[uuid.UUID]int, len(chatIDs))
@@ -175,8 +189,9 @@ func (s *Service) GroupReads(ctx context.Context, chatID uuid.UUID) (map[uuid.UU
 	return s.repo.GroupReads(ctx, s.pool, chatID)
 }
 
-// PersistRead is a fire-and-forget hook for the WebSocket read receipt; it
-// swallows the (already authorized upstream) error to a boolean.
-func (s *Service) PersistRead(ctx context.Context, userID uuid.UUID, chatType string, chatID, messageID uuid.UUID) {
-	_ = s.repo.MarkRead(ctx, s.pool, userID, chatType, chatID, messageID)
+// PersistRead is the WebSocket read receipt's hook. It reports whether the
+// position was stored: the hub announces a read to the chat only when it was,
+// so a message id from elsewhere is never broadcast (audit A-37).
+func (s *Service) PersistRead(ctx context.Context, userID uuid.UUID, chatType string, chatID, messageID uuid.UUID) bool {
+	return s.repo.MarkRead(ctx, s.pool, userID, chatType, chatID, messageID) == nil
 }

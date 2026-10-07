@@ -75,7 +75,7 @@ type Hub struct {
 	sender        Sender
 	authorizeChat ChatAuthorizer
 	calls         CallSignaler
-	onRead        func(ctx context.Context, userID uuid.UUID, chatType string, chatID, messageID uuid.UUID)
+	onRead        func(ctx context.Context, userID uuid.UUID, chatType string, chatID, messageID uuid.UUID) bool
 	// onOffline records a user's last-seen time when their final connection
 	// closes (best-effort; may be nil).
 	onOffline func(ctx context.Context, userID uuid.UUID)
@@ -234,7 +234,7 @@ func (h *Hub) onKick(payload []byte) {
 
 // SetHandlers wires inbound-message behaviour after construction. onRead
 // may be nil to disable read-receipt persistence.
-func (h *Hub) SetHandlers(sender Sender, authorizeChat ChatAuthorizer, onRead func(ctx context.Context, userID uuid.UUID, chatType string, chatID, messageID uuid.UUID)) {
+func (h *Hub) SetHandlers(sender Sender, authorizeChat ChatAuthorizer, onRead func(ctx context.Context, userID uuid.UUID, chatType string, chatID, messageID uuid.UUID) bool) {
 	h.sender = sender
 	h.authorizeChat = authorizeChat
 	h.onRead = onRead

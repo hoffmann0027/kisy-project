@@ -19,6 +19,12 @@ import (
 
 var ErrValidation = errors.New("notifprefs: validation failed")
 
+// ErrNotFound: no such chat, or not one the user is in — one answer for both.
+var ErrNotFound = errors.New("notifprefs: chat not found")
+
+// ChatMember reports whether userID takes part in the chat.
+type ChatMember func(ctx context.Context, chatType string, chatID, userID uuid.UUID) (bool, error)
+
 // Group notification modes.
 const (
 	GroupAll          = "all"
@@ -184,7 +190,12 @@ func (r *PostgresRepository) UpsertSettings(ctx context.Context, q db.DBTX, user
 type Service struct {
 	pool *pgxpool.Pool
 	repo Repository
+	// member gates muting: only a chat you are in (audit A-37). Nil: refused.
+	member ChatMember
 }
+
+// SetChatMember installs the participation check muting needs.
+func (s *Service) SetChatMember(f ChatMember) { s.member = f }
 
 func NewService(pool *pgxpool.Pool, repo Repository) *Service {
 	return &Service{pool: pool, repo: repo}
@@ -197,6 +208,18 @@ func (s *Service) Mute(ctx context.Context, userID uuid.UUID, chatType string, c
 	}
 	if until != nil && until.Before(time.Now()) {
 		return ErrValidation
+	}
+	// Any chat id used to be accepted, filling the table with rows for
+	// conversations the user is not part of (audit A-37).
+	if s.member == nil {
+		return ErrNotFound
+	}
+	in, err := s.member(ctx, chatType, chatID, userID)
+	if err != nil {
+		return err
+	}
+	if !in {
+		return ErrNotFound
 	}
 	return s.repo.SetMute(ctx, s.pool, userID, chatType, chatID, until)
 }

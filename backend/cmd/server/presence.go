@@ -26,3 +26,23 @@ func chatPartnersOnly(pool *pgxpool.Pool) ws.PresenceFilter {
 		return pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
 	}
 }
+
+// chatMember is whether a user takes part in a chat: one of the two sides of a
+// private chat, or a member of a group. Muting needs only that much — it
+// changes nothing anyone else sees (audit A-37).
+func chatMember(pool *pgxpool.Pool) func(ctx context.Context, chatType string, chatID, userID uuid.UUID) (bool, error) {
+	return func(ctx context.Context, chatType string, chatID, userID uuid.UUID) (bool, error) {
+		var query string
+		switch chatType {
+		case "private":
+			query = `SELECT EXISTS (SELECT 1 FROM private_chats WHERE id = $1 AND $2 IN (user_a_id, user_b_id))`
+		case "group":
+			query = `SELECT EXISTS (SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2)`
+		default:
+			return false, nil
+		}
+		var in bool
+		err := pool.QueryRow(ctx, query, chatID, userID).Scan(&in)
+		return in, err
+	}
+}

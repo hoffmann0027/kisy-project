@@ -132,10 +132,12 @@ func (h *Hub) handleRead(ctx context.Context, c *Client, data json.RawMessage) {
 			return
 		}
 	}
-	// Persist the read position (best-effort) so unread counters reflect
-	// reads that arrive over the socket, not just via REST.
-	if h.onRead != nil {
-		h.onRead(ctx, c.userID, p.ChatType, p.ChatID, p.MessageID)
+	// Persist the read position so unread counters reflect reads that arrive
+	// over the socket, not just via REST — and announce only a position that
+	// was stored: one naming another chat's message is refused there, and
+	// must not reach this chat's members (audit A-37).
+	if h.onRead != nil && !h.onRead(ctx, c.userID, p.ChatType, p.ChatID, p.MessageID) {
+		return
 	}
 	frame := encode(EventMessageRead, readData{
 		ChatType:  p.ChatType,
