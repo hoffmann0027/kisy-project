@@ -64,7 +64,8 @@ export function ThreadPanel({ root, onClose, onReact, onDelete, onEdit, onOpenIm
 
   const noop = () => {};
 
-  const bubble = (m: Message) => (
+  // Threads live in groups: each bubble says who wrote it, once per run.
+  const bubble = (m: Message, showSender: boolean) => (
     <MessageBubble
       key={m.id}
       message={m}
@@ -79,6 +80,7 @@ export function ThreadPanel({ root, onClose, onReact, onDelete, onEdit, onOpenIm
       onPin={noop}
       onOpenImage={onOpenImage}
       onForward={noop}
+      showSender={showSender}
     />
   );
 
@@ -92,7 +94,7 @@ export function ThreadPanel({ root, onClose, onReact, onDelete, onEdit, onOpenIm
       </header>
 
       <div className="thread-panel__scroll">
-        <div className="thread-panel__root">{bubble(root)}</div>
+        <div className="thread-panel__root">{bubble(root, true)}</div>
         <div className="thread-panel__divider">
           {root.threadReplyCount
             ? t("chat.thread.replies", { count: root.threadReplyCount })
@@ -110,7 +112,7 @@ export function ThreadPanel({ root, onClose, onReact, onDelete, onEdit, onOpenIm
             </Button>
           </div>
         )}
-        {replies.map(bubble)}
+        {replies.map((m, i) => bubble(m, i === 0 || replies[i - 1].senderId !== m.senderId))}
         <div ref={bottomRef} />
       </div>
 

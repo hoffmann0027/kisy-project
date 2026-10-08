@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { t, type Key } from "@shared/i18n";
 import { cn } from "@shared/lib/cn";
-import { formatTime } from "@shared/lib/format";
+import { colorFromString, formatTime } from "@shared/lib/format";
 import { handleDownloadClick } from "@shared/lib/mediaSrc";
 import { ApiImage } from "@shared/ui/ApiImage";
 import { Icon } from "@shared/ui/icons";
@@ -44,6 +44,8 @@ interface Props {
   onSetExpiry?: (m: Message, ttlSeconds: number | null) => void;
   /** Threads (stage K, group main feed only): open the discussion panel. */
   onOpenThread?: (m: Message) => void;
+  /** Group chats: name the author above the first of their consecutive messages. */
+  showSender?: boolean;
 }
 
 const QUICK_EMOJI = ["👍", "❤️", "😂", "🔥", "👏"];
@@ -105,6 +107,7 @@ export const MessageBubble = memo(function MessageBubble({
   onToggleSelect,
   onSetExpiry,
   onOpenThread,
+  showSender = false,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -316,6 +319,12 @@ export const MessageBubble = memo(function MessageBubble({
           <ReportDialog targetKind="message" targetId={message.id} onClose={() => setReportOpen(false)} />
         )}
 
+        {showSender && !mine && message.senderName && (
+          // The author's colour follows them from message to message, as their avatar does.
+          <div className="bubble__sender" style={{ color: colorFromString(message.senderId) }}>
+            {message.senderName}
+          </div>
+        )}
         {message.forwardedFrom && (
           <div className="bubble__forwarded">{forwardedLabel(message.forwardedFrom.senderName)}</div>
         )}

@@ -310,6 +310,10 @@ export interface Message {
    * chat), shown as "Переслано от …". */
   forwardedFrom?: { senderId: string; senderName: string } | null;
 
+  /** Group messages: the author's display name (the server adds it, so a
+   * member who has left still has one). */
+  senderName?: string;
+
   /** Scheduled origin (stage I): id of the scheduled_messages row this
    * message was born from — lets the sender restore its plaintext cache. */
   scheduledId?: string | null;

@@ -154,3 +154,19 @@ describe("MessageBubble action bar", () => {
     expect(screen.getByTitle("Ответить")).toBeTruthy();
   });
 });
+
+// In a group the bubble has to say who wrote it — once per run, never on
+// one's own messages.
+describe("MessageBubble author", () => {
+  it("names the author of someone else's group message", () => {
+    renderBubble({ text: "привет", chatType: "group", senderName: "Михаил Орлов" }, { mine: false, showSender: true });
+    expect(screen.getByText("Михаил Орлов")).toBeTruthy();
+  });
+
+  it("does not name it inside a run, or on one's own message", () => {
+    renderBubble({ text: "раз", chatType: "group", senderName: "Михаил Орлов" }, { mine: false, showSender: false });
+    expect(screen.queryByText("Михаил Орлов")).toBeNull();
+    renderBubble({ text: "два", chatType: "group", senderName: "Анна" }, { mine: true, showSender: true });
+    expect(screen.queryByText("Анна")).toBeNull();
+  });
+});

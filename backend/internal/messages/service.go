@@ -431,7 +431,7 @@ func (s *Service) SendTx(ctx context.Context, q db.DBTX, in SendInput, actor Act
 		}
 	}
 
-	dto := m.ToDTO()
+	dto := s.named(ctx, m.ToDTO())
 	deliver := func(ctx context.Context) DTO {
 		if s.attachLoad != nil && len(in.AttachmentIDs) > 0 {
 			if byMsg, err := s.attachLoad(ctx, []uuid.UUID{m.ID}); err == nil {
@@ -634,7 +634,7 @@ func (s *Service) Forward(ctx context.Context, in ForwardInput, actor ActorMeta)
 			return nil, err
 		}
 
-		dto := m.ToDTO()
+		dto := s.named(ctx, m.ToDTO())
 		// Carry the source's attachments onto the forwarded message.
 		if s.attachCopy != nil {
 			if atts, err := s.attachCopy(ctx, src.ID, m.ID, actor.UserID); err == nil && len(atts) > 0 {
@@ -864,7 +864,37 @@ func (s *Service) enrich(ctx context.Context, items []DTO, viewerID uuid.UUID) e
 			}
 		}
 	}
+	s.nameSenders(ctx, items)
 	return nil
+}
+
+// named is dto with its author's name, when it is a group message.
+func (s *Service) named(ctx context.Context, dto DTO) DTO {
+	one := []DTO{dto}
+	s.nameSenders(ctx, one)
+	return one[0]
+}
+
+// nameSenders puts the author's name on group messages. A page has few
+// distinct authors, so each is looked up once. A name that cannot be found
+// leaves the field empty rather than failing the page.
+func (s *Service) nameSenders(ctx context.Context, items []DTO) {
+	if s.senderName == nil {
+		return
+	}
+	names := map[uuid.UUID]string{}
+	for i := range items {
+		if items[i].ChatType != ChatGroup {
+			continue
+		}
+		id := items[i].SenderID
+		name, seen := names[id]
+		if !seen {
+			name, _ = s.senderName(ctx, id)
+			names[id] = name
+		}
+		items[i].SenderName = name
+	}
 }
 
 // ListThread returns a page of one thread's replies (stage K). Access is
@@ -958,6 +988,7 @@ func (s *Service) ListPinned(ctx context.Context, chatType string, chatID uuid.U
 	for i := range rows {
 		out = append(out, rows[i].ToDTO())
 	}
+	s.nameSenders(ctx, out)
 	return out, nil
 }
 

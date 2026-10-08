@@ -1489,6 +1489,16 @@
   margin-bottom: 3px;
   opacity: 0.9;
 }
+/* In a group: who wrote it, in the colour that follows them around. */
+.bubble__sender {
+  font-size: 13px;
+  font-weight: 650;
+  margin-bottom: 2px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .bubble--out .bubble__forwarded {
   color: #cfe0ff;
 }

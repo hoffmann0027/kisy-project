@@ -360,6 +360,9 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
   };
 
   let lastDay = "";
+  // Who wrote the message above: in a group, a run of messages by one person
+  // is named once, at its top (and again after a day break).
+  let lastSender = "";
 
 
   return (
@@ -485,6 +488,8 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
           const day = formatDay(m.createdAt);
           const showDay = day !== lastDay;
           lastDay = day;
+          const showSender = chatType === "group" && (showDay || m.senderId !== lastSender);
+          lastSender = m.senderId;
           return (
             <div key={m.id} id={`msg-${m.id}`} className={cn(highlightId === m.id && "msg-row--highlight")}>
               {showDay && <div className="conv__day">{day}</div>}
@@ -509,6 +514,7 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
                 onToggleSelect={toggleSelect}
                 onSetExpiry={handleSetExpiry}
                 onOpenThread={chatType === "group" ? setThreadRoot : undefined}
+                showSender={showSender}
               />
             </div>
           );

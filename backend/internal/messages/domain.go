@@ -146,6 +146,12 @@ type DTO struct {
 	ThreadRootID      *uuid.UUID `json:"threadRootId,omitempty"`
 	ThreadReplyCount  int        `json:"threadReplyCount,omitempty"`
 	ThreadLastReplyAt *time.Time `json:"threadLastReplyAt,omitempty"`
+
+	// SenderName is the author's display name, on group messages: in a group
+	// the bubble has to say who wrote it, and the app may not know a member
+	// who has since left. Private messages leave it out — the chat is with
+	// one person, whose name the header already shows.
+	SenderName string `json:"senderName,omitempty"`
 }
 
 // ForwardedFrom is the "Переслано от …" attribution shown on a forwarded
