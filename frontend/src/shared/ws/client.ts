@@ -87,18 +87,27 @@ class WsClient {
         this.closedBeforeOpen = true;
         return;
       }
-      // The native client authenticates the handshake with the access token in
-      // the URL. Once that token expires the server refuses every reconnect,
-      // and retrying the same dead credential just walks the backoff up to 15s
-      // of silence. A handshake that never reached "open" is the signal to
-      // renew first — the next attempt then carries a fresh token.
-      const renewFirst = this.closedBeforeOpen && isNative();
+      // A handshake that never reached "open" is the signal that the
+      // credential it carried is dead, so renew it before dialling again.
+      // Native puts the access token in the URL; the browser sends the access
+      // cookie, which expires with the token. Either way, once the server
+      // restarts after the token's 15 minutes (a deploy, the free instance
+      // waking up), every retry with the same credential is refused and the
+      // app silently stops receiving events until something else refreshes.
+      const renewFirst = this.closedBeforeOpen;
       this.closedBeforeOpen = true;
       const delay = this.reconnectDelay;
       this.reconnectDelay = Math.min(this.reconnectDelay * 2, 15000);
       setTimeout(() => {
-        if (renewFirst) void refreshSession().then(() => this.open());
-        else this.open();
+        if (!renewFirst) {
+          this.open();
+          return;
+        }
+        void refreshSession().then((outcome) => {
+          // The server ended the session: every further dial would be refused,
+          // so stop. Returning to the app (ensureConnected) tries once more.
+          if (outcome !== "rejected") this.open();
+        });
       }, delay);
     };
 

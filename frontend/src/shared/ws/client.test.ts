@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@shared/api/client", () => ({ refreshSession: vi.fn(async () => {}) }));
+vi.mock("@shared/api/client", () => ({ refreshSession: vi.fn(async () => "ok") }));
 vi.mock("@shared/lib/native", () => ({ isNative: () => false, apiOrigin: () => "", loadTokens: () => null }));
 
 // A stand-in socket that the test opens and closes by hand.
@@ -28,11 +28,13 @@ class FakeSocket {
 }
 
 const { wsClient, CLOSE_REPLACED } = await import("./client");
+const { refreshSession } = await import("@shared/api/client");
 
 describe("ws client after the server closed the socket", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     FakeSocket.all = [];
+    vi.mocked(refreshSession).mockClear();
     vi.stubGlobal("WebSocket", FakeSocket);
   });
   afterEach(() => {
@@ -60,5 +62,34 @@ describe("ws client after the server closed the socket", () => {
 
     wsClient.ensureConnected(); // the person returned to this tab
     expect(FakeSocket.all).toHaveLength(2);
+  });
+
+  // The browser authenticates the handshake with the access cookie, which
+  // expires with the token. After a server restart (a deploy, the free
+  // instance waking up) every retry with that cookie was refused, and the tab
+  // stopped receiving messages until something else refreshed the session.
+  it("renews the session before dialling again after a refused handshake", async () => {
+    wsClient.connect();
+    FakeSocket.all[0].serverCloses(1006); // refused: never opened
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(refreshSession).toHaveBeenCalledTimes(1);
+    expect(FakeSocket.all).toHaveLength(2);
+  });
+
+  it("does not renew after a socket that was open drops", async () => {
+    wsClient.connect();
+    FakeSocket.all[0].serverOpens();
+    FakeSocket.all[0].serverCloses(1006);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(refreshSession).not.toHaveBeenCalled();
+    expect(FakeSocket.all).toHaveLength(2);
+  });
+
+  it("stops dialling once the server has ended the session", async () => {
+    vi.mocked(refreshSession).mockResolvedValueOnce("rejected");
+    wsClient.connect();
+    FakeSocket.all[0].serverCloses(1006);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(FakeSocket.all).toHaveLength(1);
   });
 });
