@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Spinner } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import { adminApi } from "@shared/api/endpoints";
@@ -6,6 +7,7 @@ import type { DashboardOverview } from "@shared/api/types";
 import { formatRelative } from "@shared/lib/format";
 import { GrowthChart } from "./GrowthChart";
 import { auditLabel } from "./auditLabels";
+import { FeedbackModal } from "@features/feedback/FeedbackModal";
 
 // "Обзор": what is happening in KISY right now, from real data only — no
 // revenue (there are no payments), no countries (no IP is stored), no month
@@ -147,9 +149,17 @@ function SystemCard({ o }: { o: DashboardOverview }) {
 }
 
 function InboxCard({ o, onNavigate }: { o: DashboardOverview; onNavigate: (s: AdminSection) => void }) {
-  const items = [
+  const qc = useQueryClient();
+  // The feedback inbox opens right here; answered entries leave the count
+  // when it closes.
+  const [feedback, setFeedback] = useState(false);
+  const closeFeedback = () => {
+    setFeedback(false);
+    void qc.invalidateQueries({ queryKey: ["admin", "dashboard"] });
+  };
+  const items: { label: string; value: number; go?: () => void; hint?: string }[] = [
     { label: "Открытые жалобы", value: o.inbox.openReports, go: () => onNavigate("reports") },
-    { label: "Отзывы без ответа", value: o.inbox.unansweredFeedback, hint: "Хаб → Отзывы → Входящие" },
+    { label: "Отзывы без ответа", value: o.inbox.unansweredFeedback, go: () => setFeedback(true) },
     { label: "Заявки в группы", value: o.inbox.pendingJoinRequests, hint: "решают владельцы групп" },
   ];
   return (
@@ -177,6 +187,7 @@ function InboxCard({ o, onNavigate }: { o: DashboardOverview; onNavigate: (s: Ad
           </li>
         ))}
       </ul>
+      <FeedbackModal open={feedback} onClose={closeFeedback} />
     </section>
   );
 }
@@ -210,7 +221,7 @@ function LimitsCard({ o }: { o: DashboardOverview }) {
         <h3 className="dash-card__title">Лимиты тарифов</h3>
       </header>
       <Meter label="База данных (Neon)" used={l.database.usedBytes} limit={l.database.limitBytes} />
-      <div className="dash-meter__note">
+      <div className="dash-meter__note dash-meter__note--block">
         Из них файлы: {formatBytes(l.filesInDatabase)} — пока объектное хранилище не подключено, вложения лежат в базе
       </div>
       {l.redis ? (

@@ -7,7 +7,13 @@ import type { DashboardOverview } from "@shared/api/types";
 // down or nearly full, in words as well as colour.
 
 const api = vi.hoisted(() => ({ dashboard: vi.fn() }));
-vi.mock("@shared/api/endpoints", () => ({ adminApi: api }));
+vi.mock("@shared/api/endpoints", () => ({
+  adminApi: api,
+  feedbackApi: { list: vi.fn(async () => ({ items: [], hasMore: false, nextCursor: null })), create: vi.fn(), reply: vi.fn(), remove: vi.fn() },
+}));
+vi.mock("@shared/store/auth", () => ({
+  useAuthStore: (sel: (s: { user: { id: string; roleLevel: number } }) => unknown) => sel({ user: { id: "ceo", roleLevel: 1 } }),
+}));
 
 const { OverviewTab, formatBytes, usageLevel, uptime } = await import("./OverviewTab");
 const { niceTicks } = await import("./GrowthChart");
@@ -66,6 +72,12 @@ describe("the overview", () => {
     const onNavigate = renderTab();
     fireEvent.click(await screen.findByText("Открытые жалобы", { selector: "span" }));
     expect(onNavigate).toHaveBeenCalledWith("reports");
+  });
+
+  it("opens the unanswered feedback right from the inbox", async () => {
+    renderTab();
+    fireEvent.click(await screen.findByText("Отзывы без ответа", { selector: "span" }));
+    expect(await screen.findByText("Отзывы и предложения")).toBeTruthy();
   });
 });
 
