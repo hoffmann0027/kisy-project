@@ -8,6 +8,7 @@ import {
   addMembers,
   createChat,
   createDeviceKeyPackage,
+  currentEpoch,
   deserializeChatState,
   encryptMessage,
   getSodium,
@@ -374,6 +375,20 @@ async function catchUpHandshake(s: E2EESession, chatId: string): Promise<void> {
 }
 
 /**
+ * Apply the commits this device missed, when a message comes from an epoch it
+ * has not reached. Commits are announced over the socket only, so a phone that
+ * was closed while a device was added never heard of the commit — and every
+ * message after it stayed a padlock for good. Assumes the caller holds the
+ * chat's lock.
+ */
+async function reachEpoch(s: E2EESession, chatId: string, epoch: number | null | undefined): Promise<void> {
+  if (epoch === null || epoch === undefined) return;
+  const state = await loadState(s, chatId);
+  if (!state || BigInt(epoch) <= currentEpoch(state)) return;
+  await catchUpHandshake(s, chatId);
+}
+
+/**
  * Add a device that appeared after the chat did (audit B-02).
  *
  * Whoever is online does it — the loser of the race simply gets
@@ -685,9 +700,13 @@ async function decryptOnce(
   chatId: string,
   messageId: string,
   ciphertextB64: string,
+  epoch: number | null | undefined,
   expiresAt?: string | null,
 ): Promise<string | null> {
-  return withChatLock(s, chatId, () => decryptUnlocked(s, chatId, messageId, ciphertextB64, expiresAt));
+  return withChatLock(s, chatId, async () => {
+    await reachEpoch(s, chatId, epoch);
+    return decryptUnlocked(s, chatId, messageId, ciphertextB64, expiresAt);
+  });
 }
 
 /** decryptOnce for a caller that already holds the chat's lock. */
@@ -742,6 +761,9 @@ const catchUpKey = (chatId: string) => `dec/${chatId}`;
 export async function catchUpChat(s: E2EESession, chatId: string): Promise<number> {
   return withChatLock(s, chatId, async () => {
     if (!(await loadState(s, chatId))) return 0; // not in this chat's group (yet)
+    // Commits made while this device was offline come first: without them
+    // nothing sent after them opens.
+    await catchUpHandshake(s, chatId);
 
     const cursorRaw = await s.store.get(catchUpKey(chatId));
     const cursor = cursorRaw ? utf8dec.decode(cursorRaw) : null;
@@ -810,7 +832,7 @@ export async function hydrateMessage(s: E2EESession, msg: Message): Promise<Mess
     // Our own outgoing messages cannot be decrypted (MLS senders consume
     // their keys at encryption time) — their plaintext is cached by the
     // send path; a miss here means another of our devices sent it.
-    const text = await decryptOnce(s, msg.chatId, msg.id, msg.ciphertext, msg.expiresAt);
+    const text = await decryptOnce(s, msg.chatId, msg.id, msg.ciphertext, msg.epoch, msg.expiresAt);
     if (text !== null) return { ...msg, text, encrypted: true };
   }
   return { ...msg, text: null, encrypted: true, undecryptable: true };

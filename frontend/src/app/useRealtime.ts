@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { wsClient } from "@shared/ws/client";
 import type { ServerEvent } from "@shared/ws/events";
 import type { Chat, ChatType, Message, User } from "@shared/api/types";
@@ -79,9 +79,7 @@ export function useRealtime() {
     };
     const unsubOpen = wsClient.onOpen(() => {
       resubscribe();
-      // Backfill: pull fresh history for open conversations and the chat list.
-      void qc.invalidateQueries({ queryKey: ["messages"] });
-      void qc.invalidateQueries({ queryKey: chatKeys.list });
+      refreshAfterGap(qc);
     });
     resubscribe();
 
@@ -92,8 +90,7 @@ export function useRealtime() {
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
       wsClient.ensureConnected();
-      void qc.invalidateQueries({ queryKey: ["messages"] });
-      void qc.invalidateQueries({ queryKey: chatKeys.list });
+      refreshAfterGap(qc);
     };
     document.addEventListener("visibilitychange", onVisible);
 
@@ -197,14 +194,7 @@ export function useRealtime() {
           handleUserUpdated(qc, ev.data, meId);
           break;
         case "group.changed":
-          qc.invalidateQueries({ queryKey: groupKeys.list });
-          // Access settings, membership, pending requests and the "find a
-          // group" catalogue may all have shifted.
-          qc.invalidateQueries({ queryKey: groupKeys.directory });
-          qc.invalidateQueries({ queryKey: ["group-requests"] });
-          qc.invalidateQueries({ queryKey: ["group-viewer"] });
-          // A warning, mute, deletion or restore by the CEO.
-          qc.invalidateQueries({ queryKey: ["group-sanctions"] });
+          refreshGroups(qc);
           break;
         case "rating.changed":
           qc.invalidateQueries({ queryKey: ["rating"] });
@@ -236,6 +226,31 @@ export function useRealtime() {
       wsClient.disconnect();
     };
   }, [qc, meId]);
+}
+
+/**
+ * Re-read what the socket keeps current, after a gap in it: a reconnect, or
+ * the app coming back from the background. The events sent in between are
+ * gone — a tablet that slept while its account joined a community went on
+ * showing that community as a stranger sees it, without the member list.
+ */
+export function refreshAfterGap(qc: QueryClient) {
+  // Fresh history for open conversations and the chat list.
+  void qc.invalidateQueries({ queryKey: ["messages"] });
+  void qc.invalidateQueries({ queryKey: chatKeys.list });
+  refreshGroups(qc);
+}
+
+// refreshGroups re-reads everything a group.changed event may have shifted.
+function refreshGroups(qc: QueryClient) {
+  void qc.invalidateQueries({ queryKey: groupKeys.list });
+  // Access settings, membership, pending requests and the "find a group"
+  // catalogue.
+  void qc.invalidateQueries({ queryKey: groupKeys.directory });
+  void qc.invalidateQueries({ queryKey: ["group-requests"] });
+  void qc.invalidateQueries({ queryKey: ["group-viewer"] });
+  // A warning, mute, deletion or restore by the CEO.
+  void qc.invalidateQueries({ queryKey: ["group-sanctions"] });
 }
 
 // handleUserUpdated refreshes a user's cached name/avatar across the app when

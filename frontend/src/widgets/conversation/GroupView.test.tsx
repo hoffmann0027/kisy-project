@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
@@ -119,6 +121,23 @@ describe("a community's screen", () => {
     renderView(community({ isPublic: false, joinPolicy: "request", createdBy: "u-someone" }), reader);
     expect(screen.queryByText(/записи видят только участники/)).toBeNull();
     expect(screen.getByText("Пока здесь нет постов.")).toBeTruthy();
+  });
+
+  // On a phone the tab row hides icons to save room and shows them only on the
+  // icon-only keys. It used to pick those by position (the last key), so once
+  // the report key followed the members key, the members key showed nothing.
+  it("keeps the icon of every icon-only key on a phone", () => {
+    signIn({ id: "u-reader" });
+    renderView(community({ createdBy: "u-someone" }), reader);
+    const members = screen.getByTitle("Участники");
+    const report = screen.getByTitle("Пожаловаться на сообщество");
+    for (const key of [members, report]) {
+      expect(key.textContent?.trim(), key.title).toBe("");
+      expect(key.classList.contains("group-tab--icon"), key.title).toBe(true);
+    }
+    const css = readFileSync(join(__dirname, "../../pages/messenger/messenger.css"), "utf8");
+    expect(css).toMatch(/\.group-tabs \.group-tab--icon svg \{\s*display: block;/);
+    expect(css).not.toMatch(/\.group-tab:last-child/);
   });
 
   it("still shows it to an invited account", () => {

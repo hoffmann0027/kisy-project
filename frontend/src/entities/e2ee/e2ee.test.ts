@@ -211,7 +211,7 @@ async function publishPool(s: E2EESession, count: number): Promise<void> {
   server.deviceOwners.set(s.identity.deviceId, s.userId);
 }
 
-function messageDTO(id: string, chatId: string, senderId: string, ciphertext: string): Message {
+function messageDTO(id: string, chatId: string, senderId: string, ciphertext: string, epoch?: number): Message {
   return {
     id,
     chatId,
@@ -231,6 +231,7 @@ function messageDTO(id: string, chatId: string, senderId: string, ciphertext: st
     readTotal: null,
     ciphertext,
     alg: 1,
+    epoch,
   };
 }
 
@@ -489,6 +490,47 @@ describe("E2EE private chat orchestration", () => {
     // Later it looks again, finds everyone in, and adds no one.
     expect(await syncChatDevices(alice, chatId, now + DEVICE_SYNC_INTERVAL_MS + 1)).toBe(0);
     expect(server.listDevicesCalls).toBeGreaterThan(calls);
+  });
+
+  // The owner's phone: closed while the tablet was being added, so the commit
+  // that added it went out over a socket the phone did not have. Everything
+  // sent afterwards belonged to an epoch the phone never reached, and turned
+  // into a padlock for good — nothing ever replayed the feed. Now a message
+  // from a later epoch, or opening the chat, applies what was missed first.
+  it("a device that slept through a commit reads the next message", async () => {
+    const alice = await makeSession("user-alice");
+    const phone = await makeSession("user-bob");
+    await publishPool(phone, 3);
+    const chatId = "chat-slept";
+    await encryptForChat(alice, chatId, "user-bob", "первое");
+    await processWelcomes(phone);
+
+    const tablet = await makeSession("user-bob");
+    await publishPool(tablet, 3);
+    expect(await addDeviceToChat(alice, chatId, tablet.identity.deviceId, "user-bob")).toBe(true);
+    // No processChatHandshake(phone, …): its socket was closed.
+
+    const sent = await encryptForChat(alice, chatId, "user-bob", "пока телефон спал");
+    const view = await hydrateMessage(phone, messageDTO("m-slept", chatId, "user-alice", sent.ciphertext, sent.epoch));
+    expect(view.text).toBe("пока телефон спал");
+  });
+
+  it("a device that slept through a commit reads the history when the chat opens", async () => {
+    const alice = await makeSession("user-alice");
+    const phone = await makeSession("user-bob");
+    await publishPool(phone, 3);
+    const chatId = "chat-slept-open";
+    await encryptForChat(alice, chatId, "user-bob", "первое");
+    await processWelcomes(phone);
+
+    const tablet = await makeSession("user-bob");
+    await publishPool(tablet, 3);
+    expect(await addDeviceToChat(alice, chatId, tablet.identity.deviceId, "user-bob")).toBe(true);
+
+    const sent = await encryptForChat(alice, chatId, "user-bob", "в истории");
+    server.messages.set(chatId, [messageDTO("m-hist", chatId, "user-alice", sent.ciphertext, sent.epoch)]);
+    expect(await catchUpChat(phone, chatId)).toBe(1);
+    expect(await cachedPlaintext(phone, "m-hist")).toBe("в истории");
   });
 
   // Audit B-03: a phone that was offline for a day opens the chat and gets the

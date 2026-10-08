@@ -2489,13 +2489,15 @@
   .group-tabs .group-tab svg {
     display: none;
   }
-  /* …except the members key, which is icon-only. */
-  .group-tabs .group-tab:last-child {
+  /* …except the keys that are icon-only (members, report). Marked by class,
+     not by position: once the report key followed the members key, the
+     members key lost its icon and stood there as an empty pill. */
+  .group-tabs .group-tab--icon {
     width: 44px;
     padding: 0;
     justify-content: center;
   }
-  .group-tabs .group-tab:last-child svg {
+  .group-tabs .group-tab--icon svg {
     display: block;
   }
   .group-tabs .group-tab--active {

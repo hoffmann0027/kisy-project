@@ -101,7 +101,7 @@ export function GroupView({ group }: { group: Group }) {
           to anyone else, so a reader of a public community is not offered a
           button that leads to an error. */}
       {(viewer?.member || caps.canAdmin) && (
-        <button className="group-tab" onClick={() => setMembersOpen(true)} title={t("chat.group.members")}>
+        <button className="group-tab group-tab--icon" onClick={() => setMembersOpen(true)} title={t("chat.group.members")}>
           <Icon.Users size={16} />
         </button>
       )}
@@ -111,7 +111,7 @@ export function GroupView({ group }: { group: Group }) {
           targetKind="community"
           targetId={group.id}
           label={isCommunity ? t("chat.group.reportCommunity") : t("chat.group.reportGroup")}
-          className="group-tab"
+          className="group-tab group-tab--icon"
           size={16}
         />
       )}
