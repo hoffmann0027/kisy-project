@@ -2,7 +2,7 @@
 import type { LegalDocs } from "../legalContent";
 
 export const docs: LegalDocs = {
-  privacyUpdated: "2026-10-07",
+  privacyUpdated: "2026-10-08",
   rulesUpdated: "2026-10-08",
   privacy: [
     {
@@ -104,10 +104,13 @@ export const docs: LegalDocs = {
     {
       title: "Aansprakelijkheid",
       body: [
-        "De dienst wordt geleverd “zoals hij is” en “zoals beschikbaar”, zonder enige garantie: niet voor de beschikbaarheid, het behoud van gegevens, de geschiktheid voor een bepaald doel of de afwezigheid van fouten.",
-        "Voor zover maximaal toegestaan door het toepasselijke recht is de eigenaar van de dienst niet aansprakelijk voor: verlies of beschadiging van gegevens en gesprekken, onbeschikbaarheid van de dienst, de onmogelijkheid om versleutelingssleutels en geschiedenis te herstellen, inhoud die door gebruikers is gemaakt, handelingen van andere gebruikers en derden, en evenmin voor indirecte schade, gederfde winst en alle gevolgen van het gebruik of het niet kunnen gebruiken van de dienst.",
+        "De dienst is gratis en wordt geleverd “zoals hij is” en “zoals beschikbaar”, zonder enige garantie, uitdrukkelijk of stilzwijgend: niet voor de beschikbaarheid, de ononderbroken werking, het behoud van gegevens, de geschiktheid voor een bepaald doel of de afwezigheid van fouten en kwetsbaarheden. Je gebruikt de dienst op eigen risico.",
+        "De eigenaar van de dienst is niet verplicht om je gegevens en gesprekken te bewaren, er back-ups van te maken, ze te herstellen of te verstrekken, inhoud te controleren en te modereren, of de werking van de dienst of van afzonderlijke functies in stand te houden. De dienst en elk van zijn functies kunnen op elk moment zonder voorafgaande kennisgeving worden gewijzigd, opgeschort of beëindigd.",
+        "Voor zover maximaal toegestaan door het toepasselijke recht is de eigenaar van de dienst niet aansprakelijk voor: verlies of beschadiging van gegevens en gesprekken, onbeschikbaarheid van de dienst, de onmogelijkheid om versleutelingssleutels en geschiedenis te herstellen, inhoud die door gebruikers is gemaakt, handelingen van andere gebruikers, derden en diensten van derden waarop KISY draait, en evenmin voor directe en indirecte schade, gederfde winst en alle gevolgen van het gebruik of het niet kunnen gebruiken van de dienst.",
+        "Mocht de eigenaar van de dienst toch aansprakelijk zijn, dan is die aansprakelijkheid in totaal beperkt tot het bedrag dat je in de afgelopen 12 maanden voor de dienst hebt betaald. De dienst is gratis, dus dat bedrag is nul.",
+        "Jij draagt de volledige verantwoordelijkheid voor de manier waarop je KISY gebruikt: voor de inhoud die je maakt, verstuurt en publiceert, voor het naleven van de wetten en het respecteren van de rechten van anderen, en voor de veiligheid van je wachtwoord, je apparaten en je versleutelingssleutels. Als er vanwege jouw inhoud of jouw handelingen claims tegen de eigenaar van de dienst worden ingediend, verplicht je je om hem te vrijwaren voor zijn schade en kosten.",
         "De inhoud van gesprekken wordt door gebruikers gemaakt. De eigenaar van de dienst controleert die niet vooraf en is er niet verantwoordelijk voor; bij overtreding van de regels kan een account worden beperkt of verwijderd.",
-        "De voorbehouden hierboven doen niets af aan wat volgens de wet niet kan worden uitgesloten: aansprakelijkheid voor opzet en grove nalatigheid en voor schade aan leven en gezondheid, en evenmin aan de rechten van consumenten en de plichten van de verwerkingsverantwoordelijke voor persoonsgegevens in je land. Waar een dergelijke beperking niet is toegestaan, wordt ze toegepast in de minimale mate die de wet toestaat.",
+        "De voorbehouden hierboven doen niets af aan wat volgens de wet niet kan worden uitgesloten: aansprakelijkheid voor opzet en grove nalatigheid en voor schade aan leven en gezondheid, en evenmin aan de rechten van consumenten en de plichten van de verwerkingsverantwoordelijke voor persoonsgegevens in je land. Waar een beperking van aansprakelijkheid niet volledig is toegestaan, geldt ze in de maximale mate die de wet toestaat.",
       ],
     },
     {
@@ -164,6 +167,7 @@ export const docs: LegalDocs = {
       body: [
         "KISY is een plek voor gesprekken, gedeelde groepen en community's. De regels hieronder gelden overal waar je iets schrijft, uploadt of aan anderen laat zien: in privé- en groepschats, in community's en hun feed, in namen en beschrijvingen van groepen, en in de naam en avatar van je profiel.",
         "De belangrijkste regel: doe anderen niets aan waarvoor je in het gewone leven verantwoording moet afleggen tegenover de wet of tegenover mensen. Twijfel je — publiceer het dan niet.",
+        "Voor alles wat je schrijft, verstuurt en publiceert, en voor de gevolgen daarvan, ben je zelf verantwoordelijk. KISY controleert inhoud niet vooraf en is er niet verantwoordelijk voor.",
       ],
     },
     {

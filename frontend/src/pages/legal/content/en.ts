@@ -2,7 +2,7 @@
 import type { LegalDocs } from "../legalContent";
 
 export const docs: LegalDocs = {
-  privacyUpdated: "2026-10-07",
+  privacyUpdated: "2026-10-08",
   rulesUpdated: "2026-10-08",
   privacy: [
     {
@@ -104,10 +104,13 @@ export const docs: LegalDocs = {
     {
       title: "Liability",
       body: [
-        "The service is provided “as is” and “as available”, without any warranties: of availability, data preservation, fitness for a particular purpose or freedom from errors.",
-        "To the maximum extent permitted by applicable law, the owner of the service is not liable for: loss of or damage to data and conversations, unavailability of the service, inability to recover encryption keys and history, content created by users, actions of other users and third parties, or for indirect losses, lost profits and any consequences of using or being unable to use the service.",
+        "The service is free and is provided “as is” and “as available”, without any warranties, express or implied: of availability, uninterrupted operation, data preservation, fitness for a particular purpose or freedom from errors and vulnerabilities. You use it at your own risk.",
+        "The owner of the service is under no obligation to store, back up, restore or hand over your data and conversations, to check or moderate content, or to keep the service or individual features running. The service and any of its features may be changed, suspended or discontinued at any time without notice.",
+        "To the maximum extent permitted by applicable law, the owner of the service is not liable for: loss of or damage to data and conversations, unavailability of the service, inability to recover encryption keys and history, content created by users, actions of other users, third parties and the third-party services on which KISY runs, or for direct and indirect losses, lost profits and any consequences of using or being unable to use the service.",
+        "Should the owner of the service nevertheless become liable, the total amount of that liability is limited to the amount you paid for the service in the last 12 months. The service is free, so this amount is zero.",
+        "You bear all responsibility for how you use KISY: for the content you create, send and publish, for complying with the law and respecting the rights of other people, and for keeping your password, devices and encryption keys safe. If claims are brought against the owner of the service because of your content or your actions, you undertake to indemnify the owner for losses and expenses.",
         "The content of conversations is created by users. The owner of the service does not check it in advance and is not responsible for it; if the rules are broken, the account may be restricted or deleted.",
-        "The disclaimers above do not exclude what cannot be excluded by law: liability for intentional acts and gross negligence, for harm to life and health, or consumer rights and the obligations of a personal data controller in your country. Where such a limitation is not permitted, it applies to the minimum extent permitted by law.",
+        "The disclaimers above do not exclude what cannot be excluded by law: liability for intentional acts and gross negligence, for harm to life and health, or consumer rights and the obligations of a personal data controller in your country. Where a limitation of liability is not permitted in full, it applies to the maximum extent permitted by law.",
       ],
     },
     {
@@ -164,6 +167,7 @@ export const docs: LegalDocs = {
       body: [
         "KISY is a place for conversations, shared groups and communities. The guidelines below apply wherever you write, upload or show something to others: in private and group chats, in communities and their feed, in the names and descriptions of groups, and in your profile name and avatar.",
         "The main rule: don't do to others anything that, in everyday life, you would have to answer for before the law or before other people. If in doubt, don't post it.",
+        "You alone are responsible for everything you write, send and publish, and for its consequences. KISY does not check content in advance and is not responsible for it.",
       ],
     },
     {

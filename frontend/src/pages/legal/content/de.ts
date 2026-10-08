@@ -2,7 +2,7 @@
 import type { LegalDocs } from "../legalContent";
 
 export const docs: LegalDocs = {
-  privacyUpdated: "2026-10-07",
+  privacyUpdated: "2026-10-08",
   rulesUpdated: "2026-10-08",
   privacy: [
     {
@@ -104,10 +104,13 @@ export const docs: LegalDocs = {
     {
       title: "Haftung",
       body: [
-        "Der Dienst wird „wie besehen“ und „wie verfügbar“ bereitgestellt, ohne jegliche Garantien: für Verfügbarkeit, Erhalt der Daten, Eignung für einen bestimmten Zweck und Fehlerfreiheit.",
-        "Im größtmöglichen nach geltendem Recht zulässigen Umfang haftet der Inhaber des Dienstes nicht für: Verlust oder Beschädigung von Daten und Chats, Nichtverfügbarkeit des Dienstes, die Unmöglichkeit, Verschlüsselungsschlüssel und Verlauf wiederherzustellen, von Nutzern erstellte Inhalte, Handlungen anderer Nutzer und Dritter sowie für indirekte Schäden, entgangenen Gewinn und jegliche Folgen der Nutzung oder Unmöglichkeit der Nutzung des Dienstes.",
+        "Der Dienst ist kostenlos und wird „wie besehen“ und „wie verfügbar“ bereitgestellt, ohne ausdrückliche oder stillschweigende Garantien jeglicher Art: für Verfügbarkeit, ununterbrochenen Betrieb, Erhalt der Daten, Eignung für einen bestimmten Zweck sowie Freiheit von Fehlern und Schwachstellen. Du nutzt ihn auf eigenes Risiko.",
+        "Der Inhaber des Dienstes ist nicht verpflichtet, deine Daten und Chats zu speichern, zu sichern, wiederherzustellen oder herauszugeben, Inhalte zu prüfen oder zu moderieren oder den Betrieb des Dienstes oder einzelner Funktionen aufrechtzuerhalten. Der Dienst und jede seiner Funktionen können jederzeit ohne Vorankündigung geändert, ausgesetzt oder eingestellt werden.",
+        "Im größtmöglichen nach geltendem Recht zulässigen Umfang haftet der Inhaber des Dienstes nicht für: Verlust oder Beschädigung von Daten und Chats, Nichtverfügbarkeit des Dienstes, die Unmöglichkeit, Verschlüsselungsschlüssel und Verlauf wiederherzustellen, von Nutzern erstellte Inhalte, Handlungen anderer Nutzer, Dritter und der Dienste von Drittanbietern, auf denen KISY läuft, sowie für direkte und indirekte Schäden, entgangenen Gewinn und jegliche Folgen der Nutzung oder Unmöglichkeit der Nutzung des Dienstes.",
+        "Sollte der Inhaber des Dienstes dennoch haften, ist der Gesamtumfang seiner Haftung auf den Betrag begrenzt, den du in den letzten 12 Monaten für den Dienst gezahlt hast. Der Dienst ist kostenlos, daher beträgt dieser Betrag null.",
+        "Die gesamte Verantwortung dafür, wie du KISY nutzt, trägst du: für die Inhalte, die du erstellst, sendest und veröffentlichst, für die Einhaltung der Gesetze und der Rechte anderer Menschen, für den Schutz deines Passworts, deiner Geräte und deiner Verschlüsselungsschlüssel. Werden gegen den Inhaber des Dienstes wegen deiner Inhalte oder deiner Handlungen Ansprüche erhoben, verpflichtest du dich, ihn von Schäden und Kosten freizustellen.",
         "Die Inhalte der Chats erstellen die Nutzer. Der Inhaber des Dienstes prüft sie nicht vorab und haftet nicht für sie; bei Verstößen gegen die Richtlinien kann ein Konto eingeschränkt oder gelöscht werden.",
-        "Die obigen Vorbehalte heben nicht auf, was nach dem Gesetz nicht ausgeschlossen werden kann: die Haftung für Vorsatz und grobe Fahrlässigkeit, für Schäden an Leben und Gesundheit sowie die Verbraucherrechte und die Pflichten des Verantwortlichen für personenbezogene Daten in deinem Land. Wo eine solche Beschränkung unzulässig ist, gilt sie nur in dem geringsten gesetzlich zulässigen Umfang.",
+        "Die obigen Vorbehalte heben nicht auf, was nach dem Gesetz nicht ausgeschlossen werden kann: die Haftung für Vorsatz und grobe Fahrlässigkeit, für Schäden an Leben und Gesundheit sowie die Verbraucherrechte und die Pflichten des Verantwortlichen für personenbezogene Daten in deinem Land. Wo eine Haftungsbeschränkung nicht vollständig zulässig ist, gilt sie in dem größtmöglichen gesetzlich zulässigen Umfang.",
       ],
     },
     {
@@ -164,6 +167,7 @@ export const docs: LegalDocs = {
       body: [
         "KISY ist ein Ort für Unterhaltungen, gemeinsame Gruppen und Communitys. Die folgenden Richtlinien gelten überall, wo du etwas schreibst, hochlädst oder anderen zeigst: in privaten Chats und Gruppenchats, in Communitys und ihrem Feed, in Namen und Beschreibungen von Gruppen, im Namen und Profilbild deines Profils.",
         "Die wichtigste Regel: Tu anderen nichts an, wofür man im normalen Leben vor dem Gesetz oder vor anderen Menschen geradestehen muss. Wenn du unsicher bist – veröffentliche es nicht.",
+        "Für alles, was du schreibst, sendest und veröffentlichst, und für die Folgen davon bist du selbst verantwortlich. KISY prüft Inhalte nicht vorab und ist nicht für sie verantwortlich.",
       ],
     },
     {

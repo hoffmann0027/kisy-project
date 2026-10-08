@@ -2,7 +2,7 @@
 import type { LegalDocs } from "../legalContent";
 
 export const docs: LegalDocs = {
-  privacyUpdated: "2026-10-07",
+  privacyUpdated: "2026-10-08",
   rulesUpdated: "2026-10-08",
   privacy: [
     {
@@ -104,10 +104,13 @@ export const docs: LegalDocs = {
     {
       title: "Sorumluluk",
       body: [
-        "Hizmet “olduğu gibi” ve “mevcut olduğu şekliyle”, hiçbir garanti olmaksızın sunulur: erişilebilirlik, verilerin korunması, belirli bir amaca uygunluk ve hatasızlık konusunda garanti verilmez.",
-        "Yürürlükteki hukukun izin verdiği azami ölçüde, hizmet sahibi şunlardan sorumlu değildir: verilerin ve yazışmaların kaybı veya bozulması, hizmetin erişilemez olması, şifreleme anahtarlarının ve geçmişin kurtarılamaması, kullanıcıların oluşturduğu içerik, diğer kullanıcıların ve üçüncü kişilerin eylemleri, ayrıca dolaylı zararlar, yoksun kalınan kâr ve hizmetin kullanılmasının veya kullanılamamasının her türlü sonucu.",
+        "Hizmet ücretsizdir; “olduğu gibi” ve “mevcut olduğu şekliyle”, açık veya zımni hiçbir garanti olmaksızın sunulur: erişilebilirlik, kesintisiz çalışma, verilerin korunması, belirli bir amaca uygunluk, hata ve güvenlik açığı bulunmaması konusunda garanti verilmez. Hizmeti, riski size ait olmak üzere kullanırsınız.",
+        "Hizmet sahibi; verilerinizi ve yazışmalarınızı saklamak, yedeklemek, kurtarmak veya teslim etmek, içeriği kontrol etmek ve moderasyonunu yapmak, hizmetin veya belirli işlevlerinin çalışmasını sürdürmek zorunda değildir. Hizmet ve hizmetin herhangi bir işlevi, herhangi bir zamanda önceden bildirimde bulunulmaksızın değiştirilebilir, askıya alınabilir veya sonlandırılabilir.",
+        "Yürürlükteki hukukun izin verdiği azami ölçüde, hizmet sahibi şunlardan sorumlu değildir: verilerin ve yazışmaların kaybı veya bozulması, hizmetin erişilemez olması, şifreleme anahtarlarının ve geçmişin kurtarılamaması, kullanıcıların oluşturduğu içerik, diğer kullanıcıların, üçüncü kişilerin ve KISY'nin üzerinde çalıştığı üçüncü taraf hizmetlerin eylemleri, ayrıca doğrudan ve dolaylı zararlar, yoksun kalınan kâr ve hizmetin kullanılmasının veya kullanılamamasının her türlü sonucu.",
+        "Hizmet sahibinin sorumluluğu yine de doğarsa, bu sorumluluğun toplam tutarı, son 12 ay içinde hizmet için ödediğiniz tutarla sınırlıdır. Hizmet ücretsiz olduğundan bu tutar sıfırdır.",
+        "KISY'yi nasıl kullandığınızın tüm sorumluluğu size aittir: oluşturduğunuz, gönderdiğiniz ve paylaştığınız içerikten, yasalara ve başkalarının haklarına uymaktan, şifrenizin, cihazlarınızın ve şifreleme anahtarlarınızın korunmasından siz sorumlusunuz. İçeriğiniz veya eylemleriniz nedeniyle hizmet sahibine karşı talepte bulunulursa, hizmet sahibinin zararlarını ve masraflarını tazmin etmeyi taahhüt edersiniz.",
         "Yazışmaların içeriğini kullanıcılar oluşturur. Hizmet sahibi bu içeriği önceden kontrol etmez ve ondan sorumlu değildir; kurallar ihlal edildiğinde hesap kısıtlanabilir veya silinebilir.",
-        "Yukarıdaki çekinceler, yasa gereği hiçbir çekinceyle kaldırılamayacak olanları ortadan kaldırmaz: kasıtlı eylemlerden ve ağır ihmalden doğan sorumluluk, yaşama ve sağlığa verilen zarardan doğan sorumluluk, ayrıca ülkenizdeki tüketici hakları ve kişisel veri sorumlusunun yükümlülükleri. Böyle bir sınırlamanın kabul edilemediği durumlarda sınırlama, yasanın izin verdiği asgari ölçüde uygulanır.",
+        "Yukarıdaki çekinceler, yasa gereği hiçbir çekinceyle kaldırılamayacak olanları ortadan kaldırmaz: kasıtlı eylemlerden ve ağır ihmalden doğan sorumluluk, yaşama ve sağlığa verilen zarardan doğan sorumluluk, ayrıca ülkenizdeki tüketici hakları ve kişisel veri sorumlusunun yükümlülükleri. Sorumluluğun sınırlandırılmasına tam olarak izin verilmeyen durumlarda sınırlama, yasanın izin verdiği azami ölçüde uygulanır.",
       ],
     },
     {
@@ -164,6 +167,7 @@ export const docs: LegalDocs = {
       body: [
         "KISY; yazışmalar, ortak gruplar ve topluluklar için bir alandır. Aşağıdaki kurallar, bir şey yazdığınız, yüklediğiniz veya başkalarına gösterdiğiniz her yerde geçerlidir: özel ve grup sohbetlerinde, topluluklarda ve akışlarında, grupların adlarında ve açıklamalarında, profilinizdeki ad ve fotoğrafta.",
         "Temel kural: başkalarına, gerçek hayatta yasa ya da insanlar önünde hesabını vermeniz gereken şeyleri yapmayın. Emin değilseniz paylaşmayın.",
+        "Yazdığınız, gönderdiğiniz ve paylaştığınız her şeyden ve bunların sonuçlarından bizzat siz sorumlusunuz. KISY içeriği önceden kontrol etmez ve ondan sorumlu değildir.",
       ],
     },
     {

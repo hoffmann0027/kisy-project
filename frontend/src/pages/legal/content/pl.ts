@@ -2,7 +2,7 @@
 import type { LegalDocs } from "../legalContent";
 
 export const docs: LegalDocs = {
-  privacyUpdated: "2026-10-07",
+  privacyUpdated: "2026-10-08",
   rulesUpdated: "2026-10-08",
   privacy: [
     {
@@ -104,10 +104,13 @@ export const docs: LegalDocs = {
     {
       title: "Odpowiedzialność",
       body: [
-        "Serwis jest udostępniany „tak jak jest” i „w miarę dostępności”, bez jakichkolwiek gwarancji: dostępności, zachowania danych, przydatności do określonego celu i braku błędów.",
-        "W najszerszym zakresie dopuszczalnym przez obowiązujące prawo właściciel serwisu nie ponosi odpowiedzialności za: utratę lub uszkodzenie danych i korespondencji, niedostępność serwisu, brak możliwości odtworzenia kluczy szyfrowania i historii, treści tworzone przez użytkowników, działania innych użytkowników i osób trzecich, a także za szkody pośrednie, utracone korzyści i jakiekolwiek skutki korzystania lub niemożności korzystania z serwisu.",
+        "Serwis jest bezpłatny i udostępniany „tak jak jest” i „w miarę dostępności”, bez jakichkolwiek gwarancji, wyraźnych ani dorozumianych: dostępności, nieprzerwanego działania, zachowania danych, przydatności do określonego celu, braku błędów i luk w zabezpieczeniach. Korzystasz z niego na własne ryzyko.",
+        "Właściciel serwisu nie ma obowiązku przechowywania, tworzenia kopii zapasowych, odtwarzania ani wydawania twoich danych i korespondencji, sprawdzania i moderowania treści ani utrzymywania działania serwisu lub poszczególnych funkcji. Serwis i każda z jego funkcji mogą zostać w dowolnym momencie bez uprzedzenia zmienione, zawieszone lub wycofane.",
+        "W najszerszym zakresie dopuszczalnym przez obowiązujące prawo właściciel serwisu nie ponosi odpowiedzialności za: utratę lub uszkodzenie danych i korespondencji, niedostępność serwisu, brak możliwości odtworzenia kluczy szyfrowania i historii, treści tworzone przez użytkowników, działania innych użytkowników, osób trzecich i zewnętrznych usług, na których działa KISY, a także za szkody bezpośrednie i pośrednie, utracone korzyści i jakiekolwiek skutki korzystania lub niemożności korzystania z serwisu.",
+        "Jeśli odpowiedzialność właściciela serwisu jednak powstanie, jej łączna wysokość jest ograniczona do kwoty zapłaconej przez ciebie za serwis w ciągu ostatnich 12 miesięcy. Serwis jest bezpłatny, więc ta kwota wynosi zero.",
+        "Całą odpowiedzialność za to, jak korzystasz z KISY, ponosisz ty: za treści, które tworzysz, wysyłasz i publikujesz, za przestrzeganie przepisów prawa i praw innych osób, za bezpieczeństwo swojego hasła, urządzeń i kluczy szyfrowania. Jeśli wobec właściciela serwisu zostaną zgłoszone roszczenia z powodu twoich treści lub twoich działań, zobowiązujesz się naprawić mu szkodę i zwrócić poniesione przez niego koszty.",
         "Treść korespondencji tworzą użytkownicy. Właściciel serwisu nie sprawdza jej z góry i nie odpowiada za nią; w razie naruszenia zasad konto może zostać ograniczone lub usunięte.",
-        "Powyższe zastrzeżenia nie wyłączają tego, czego zgodnie z prawem wyłączyć nie można: odpowiedzialności za działania umyślne i rażące niedbalstwo, za szkody na życiu i zdrowiu, a także praw konsumentów i obowiązków administratora danych osobowych w twoim kraju. Tam, gdzie takie ograniczenie jest niedopuszczalne, stosuje się je w minimalnym zakresie dopuszczalnym przez prawo.",
+        "Powyższe zastrzeżenia nie wyłączają tego, czego zgodnie z prawem wyłączyć nie można: odpowiedzialności za działania umyślne i rażące niedbalstwo, za szkody na życiu i zdrowiu, a także praw konsumentów i obowiązków administratora danych osobowych w twoim kraju. Tam, gdzie ograniczenie odpowiedzialności nie jest w całości dopuszczalne, obowiązuje ono w najszerszym zakresie, na jaki pozwala prawo.",
       ],
     },
     {
@@ -164,6 +167,7 @@ export const docs: LegalDocs = {
       body: [
         "KISY to miejsce do korespondencji, wspólnych grup i społeczności. Poniższe zasady obowiązują wszędzie, gdzie coś piszesz, przesyłasz lub pokazujesz innym: w czatach prywatnych i grupowych, w społecznościach i w Aktualnościach, w nazwach i opisach grup, w imieniu i awatarze profilu.",
         "Najważniejsza zasada: nie rób innym tego, za co w zwykłym życiu odpowiada się przed prawem lub przed ludźmi. Jeśli masz wątpliwości — nie publikuj.",
+        "Za wszystko, co piszesz, wysyłasz i publikujesz, oraz za skutki tego odpowiadasz osobiście. KISY nie sprawdza treści z góry i nie odpowiada za nie.",
       ],
     },
     {

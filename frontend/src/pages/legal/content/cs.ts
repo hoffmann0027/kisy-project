@@ -2,7 +2,7 @@
 import type { LegalDocs } from "../legalContent";
 
 export const docs: LegalDocs = {
-  privacyUpdated: "2026-10-07",
+  privacyUpdated: "2026-10-08",
   rulesUpdated: "2026-10-08",
   privacy: [
     {
@@ -104,10 +104,13 @@ export const docs: LegalDocs = {
     {
       title: "Odpovědnost",
       body: [
-        "Služba se poskytuje „tak, jak je“ a „tak, jak je dostupná“, bez jakýchkoli záruk: dostupnosti, zachování dat, vhodnosti pro konkrétní účel a bezchybnosti.",
-        "V maximálním rozsahu, který připouštějí použitelné právní předpisy, vlastník služby neodpovídá za: ztrátu nebo poškození dat a konverzací, nedostupnost služby, nemožnost obnovit šifrovací klíče a historii, obsah vytvořený uživateli, jednání jiných uživatelů a třetích stran, ani za nepřímé škody, ušlý zisk a jakékoli důsledky používání nebo nemožnosti používání služby.",
+        "Služba je zdarma a poskytuje se „tak, jak je“ a „tak, jak je dostupná“, bez jakýchkoli záruk, ať výslovných, nebo implicitních: dostupnosti, nepřetržitého provozu, zachování dat, vhodnosti pro konkrétní účel, bezchybnosti a absence zranitelností. Používáš ji na vlastní riziko.",
+        "Vlastník služby není povinen uchovávat, zálohovat, obnovovat ani vydávat tvoje data a konverzace, kontrolovat a moderovat obsah ani udržovat v provozu službu nebo její jednotlivé funkce. Služba i kterékoli její funkce mohou být kdykoli bez upozornění změněny, pozastaveny nebo ukončeny.",
+        "V maximálním rozsahu, který připouštějí použitelné právní předpisy, vlastník služby neodpovídá za: ztrátu nebo poškození dat a konverzací, nedostupnost služby, nemožnost obnovit šifrovací klíče a historii, obsah vytvořený uživateli, jednání jiných uživatelů, třetích stran a externích služeb, na kterých KISY běží, ani za přímé a nepřímé škody, ušlý zisk a jakékoli důsledky používání nebo nemožnosti používání služby.",
+        "Pokud odpovědnost vlastníka služby přesto vznikne, je její celková výše omezena částkou tvých plateb za službu za posledních 12 měsíců. Služba je zdarma, a proto je tato částka nulová.",
+        "Veškerou odpovědnost za to, jak KISY používáš, neseš ty: za obsah, který vytváříš, odesíláš a zveřejňuješ, za dodržování zákonů a práv jiných lidí, za ochranu svého hesla, zařízení a šifrovacích klíčů. Pokud budou vůči vlastníkovi služby uplatněny nároky kvůli tvému obsahu nebo tvému jednání, zavazuješ se mu nahradit škodu a náklady.",
         "Obsah konverzací vytvářejí uživatelé. Vlastník služby ho předem nekontroluje a neodpovídá za něj; při porušení pravidel může být účet omezen nebo smazán.",
-        "Výše uvedené výhrady neruší to, čeho se podle zákona nelze zbavit: odpovědnost za úmyslné jednání a hrubou nedbalost, za újmu na životě a zdraví, ani práva spotřebitelů a povinnosti správce osobních údajů ve tvé zemi. Tam, kde je takové omezení nepřípustné, uplatní se jen v minimálním rozsahu, který zákon připouští.",
+        "Výše uvedené výhrady neruší to, čeho se podle zákona nelze zbavit: odpovědnost za úmyslné jednání a hrubou nedbalost, za újmu na životě a zdraví, ani práva spotřebitelů a povinnosti správce osobních údajů ve tvé zemi. Tam, kde omezení odpovědnosti není přípustné v plném rozsahu, uplatní se v maximálním rozsahu, který zákon připouští.",
       ],
     },
     {
@@ -164,6 +167,7 @@ export const docs: LegalDocs = {
       body: [
         "KISY je místo pro konverzace, společné skupiny a komunity. Níže uvedená pravidla platí všude, kde něco píšeš, nahráváš nebo ukazuješ ostatním: v soukromých i skupinových chatech, v komunitách a jejich feedu, v názvech a popisech skupin, ve jménu a avataru profilu.",
         "Hlavní pravidlo: nedělej ostatním nic, za co se v běžném životě odpovídá před zákonem nebo před lidmi. V případě pochybností nepublikuj.",
+        "Za vše, co píšeš, odesíláš a zveřejňuješ, i za důsledky toho odpovídáš výhradně ty. KISY obsah předem nekontroluje a neodpovídá za něj.",
       ],
     },
     {

@@ -28,8 +28,8 @@ import (
 // account to accept again at its next sign-in. Keep them equal to
 // PRIVACY_VERSION / RULES_VERSION in frontend/src/shared/config/legalVersions.ts.
 const (
-	PrivacyVersion = "2026-10-07"
-	RulesVersion   = "2026-10-08"
+	PrivacyVersion = "2026-10-08"
+	RulesVersion   = "2026-10-08.2"
 )
 
 // Acceptance is what a client says the person agreed to.

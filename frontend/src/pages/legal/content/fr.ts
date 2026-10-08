@@ -2,7 +2,7 @@
 import type { LegalDocs } from "../legalContent";
 
 export const docs: LegalDocs = {
-  privacyUpdated: "2026-10-07",
+  privacyUpdated: "2026-10-08",
   rulesUpdated: "2026-10-08",
   privacy: [
     {
@@ -104,10 +104,13 @@ export const docs: LegalDocs = {
     {
       title: "Responsabilité",
       body: [
-        "Le service est fourni « en l'état » et « selon disponibilité », sans aucune garantie : de disponibilité, de conservation des données, d'adéquation à un usage particulier ni d'absence d'erreurs.",
-        "Dans toute la mesure permise par la loi applicable, le propriétaire du service n'est pas responsable : de la perte ou de l'altération des données et des conversations, de l'indisponibilité du service, de l'impossibilité de récupérer les clés de chiffrement et l'historique, du contenu créé par les utilisateurs, des actions d'autres utilisateurs et de tiers, ni des dommages indirects, du manque à gagner et de toute conséquence de l'utilisation ou de l'impossibilité d'utiliser le service.",
+        "Le service est gratuit et fourni « en l'état » et « selon disponibilité », sans aucune garantie, expresse ou implicite : de disponibilité, de fonctionnement ininterrompu, de conservation des données, d'adéquation à un usage particulier ni d'absence d'erreurs et de vulnérabilités. Vous l'utilisez à vos risques et périls.",
+        "Le propriétaire du service n'est pas tenu de conserver, de sauvegarder, de restaurer ou de remettre vos données et vos conversations, ni de vérifier et de modérer le contenu, ni de maintenir le fonctionnement du service ou de certaines de ses fonctionnalités. Le service, comme chacune de ses fonctionnalités, peut être modifié, suspendu ou arrêté à tout moment, sans préavis.",
+        "Dans toute la mesure permise par la loi applicable, le propriétaire du service n'est pas responsable : de la perte ou de l'altération des données et des conversations, de l'indisponibilité du service, de l'impossibilité de récupérer les clés de chiffrement et l'historique, du contenu créé par les utilisateurs, des actions d'autres utilisateurs, de tiers et des services tiers sur lesquels KISY fonctionne, ni des dommages directs et indirects, du manque à gagner et de toute conséquence de l'utilisation ou de l'impossibilité d'utiliser le service.",
+        "Si la responsabilité du propriétaire du service est néanmoins engagée, son montant total est limité à la somme que vous avez payée pour le service au cours des 12 derniers mois. Le service étant gratuit, cette somme est égale à zéro.",
+        "Vous assumez l'entière responsabilité de la manière dont vous utilisez KISY : du contenu que vous créez, envoyez et publiez, du respect des lois et des droits d'autrui, de la protection de votre mot de passe, de vos appareils et de vos clés de chiffrement. Si des réclamations sont formulées contre le propriétaire du service en raison de votre contenu ou de vos actions, vous vous engagez à l'indemniser de ses pertes et de ses frais.",
         "Le contenu des conversations est créé par les utilisateurs. Le propriétaire du service ne le vérifie pas à l'avance et n'en est pas responsable ; en cas de violation des règles, le compte peut être restreint ou supprimé.",
-        "Les réserves ci-dessus n'écartent pas ce dont la loi interdit de s'exonérer : la responsabilité pour les actes intentionnels et la faute lourde, pour les atteintes à la vie et à la santé, ainsi que les droits des consommateurs et les obligations du responsable du traitement des données personnelles dans votre pays. Là où une telle limitation n'est pas admise, elle s'applique dans la mesure minimale permise par la loi.",
+        "Les réserves ci-dessus n'écartent pas ce dont la loi interdit de s'exonérer : la responsabilité pour les actes intentionnels et la faute lourde, pour les atteintes à la vie et à la santé, ainsi que les droits des consommateurs et les obligations du responsable du traitement des données personnelles dans votre pays. Là où la limitation de responsabilité n'est pas admise en totalité, elle s'applique dans la mesure maximale permise par la loi.",
       ],
     },
     {
@@ -164,6 +167,7 @@ export const docs: LegalDocs = {
       body: [
         "KISY est un lieu d'échanges, de groupes partagés et de communautés. Les règles ci-dessous s'appliquent partout où vous écrivez, importez ou montrez quelque chose à d'autres : dans les discussions privées et de groupe, dans les communautés et leur fil d'actualité, dans les noms et descriptions des groupes, dans le nom et l'avatar de votre profil.",
         "Règle principale : ne faites pas aux autres ce dont, dans la vie courante, on doit répondre devant la loi ou devant les autres. Dans le doute, ne publiez pas.",
+        "Vous répondez vous-même de tout ce que vous écrivez, envoyez et publiez, ainsi que des conséquences qui en découlent. KISY ne vérifie pas le contenu à l'avance et n'en est pas responsable.",
       ],
     },
     {

@@ -2,7 +2,7 @@
 import type { LegalDocs } from "../legalContent";
 
 export const docs: LegalDocs = {
-  privacyUpdated: "2026-10-07",
+  privacyUpdated: "2026-10-08",
   rulesUpdated: "2026-10-08",
   privacy: [
     {
@@ -104,10 +104,13 @@ export const docs: LegalDocs = {
     {
       title: "Responsabilidad",
       body: [
-        "El servicio se ofrece «tal cual» y «según disponibilidad», sin garantías de ningún tipo: de disponibilidad, de conservación de los datos, de idoneidad para un fin concreto ni de ausencia de errores.",
-        "En la máxima medida permitida por la legislación aplicable, el propietario del servicio no se hace responsable de: la pérdida o el deterioro de datos y conversaciones, la falta de disponibilidad del servicio, la imposibilidad de recuperar las claves de cifrado y el historial, el contenido creado por los usuarios, las acciones de otros usuarios y de terceros, ni de los daños indirectos, el lucro cesante y cualquier consecuencia del uso o de la imposibilidad de usar el servicio.",
+        "El servicio es gratuito y se ofrece «tal cual» y «según disponibilidad», sin garantías de ningún tipo, expresas o implícitas: de disponibilidad, de funcionamiento ininterrumpido, de conservación de los datos, de idoneidad para un fin concreto ni de ausencia de errores y vulnerabilidades. Lo usas por tu cuenta y riesgo.",
+        "El propietario del servicio no está obligado a guardar tus datos y conversaciones ni a hacer copias de seguridad de ellos, recuperarlos o entregarlos, ni a revisar o moderar el contenido, ni a mantener en funcionamiento el servicio o funciones concretas del mismo. El servicio y cualquiera de sus funciones pueden modificarse, suspenderse o suprimirse en cualquier momento sin previo aviso.",
+        "En la máxima medida permitida por la legislación aplicable, el propietario del servicio no se hace responsable de: la pérdida o el deterioro de datos y conversaciones, la falta de disponibilidad del servicio, la imposibilidad de recuperar las claves de cifrado y el historial, el contenido creado por los usuarios, las acciones de otros usuarios, de terceros y de los servicios de terceros sobre los que funciona KISY, ni de los daños directos e indirectos, el lucro cesante y cualquier consecuencia del uso o de la imposibilidad de usar el servicio.",
+        "Si, aun así, el propietario del servicio incurriera en responsabilidad, la cuantía total de esta se limita a la cantidad que hayas pagado por el servicio en los últimos 12 meses. El servicio es gratuito, por lo que esa cantidad es cero.",
+        "Toda la responsabilidad por cómo usas KISY es tuya: por el contenido que creas, envías y publicas, por el cumplimiento de las leyes y el respeto de los derechos de otras personas y por la custodia de tu contraseña, tus dispositivos y tus claves de cifrado. Si se presentan reclamaciones contra el propietario del servicio por tu contenido o tus actos, te comprometes a indemnizarlo por los daños y los gastos.",
         "El contenido de las conversaciones lo crean los usuarios. El propietario del servicio no lo revisa de antemano ni responde de él; si se incumplen las normas, la cuenta puede ser restringida o eliminada.",
-        "Las salvedades anteriores no excluyen lo que por ley no se puede excluir: la responsabilidad por actos dolosos y negligencia grave y por daños a la vida y la salud, ni los derechos de los consumidores y las obligaciones del responsable del tratamiento de datos personales en tu país. Donde tal limitación no esté permitida, se aplica en la mínima medida permitida por la ley.",
+        "Las salvedades anteriores no excluyen lo que por ley no se puede excluir: la responsabilidad por actos dolosos y negligencia grave y por daños a la vida y la salud, ni los derechos de los consumidores y las obligaciones del responsable del tratamiento de datos personales en tu país. Donde la limitación de responsabilidad no esté permitida en su totalidad, se aplica en la máxima medida permitida por la ley.",
       ],
     },
     {
@@ -164,6 +167,7 @@ export const docs: LegalDocs = {
       body: [
         "KISY es un lugar para conversar, para grupos compartidos y para comunidades. Las normas siguientes se aplican allí donde escribas, subas o muestres algo a los demás: en los chats privados y de grupo, en las comunidades y en Novedades, en los nombres y descripciones de los grupos, y en el nombre y la foto de tu perfil.",
         "La norma principal: no hagas a los demás nada por lo que, en la vida real, tendrías que responder ante la ley o ante otras personas. Si tienes dudas, no lo publiques.",
+        "De todo lo que escribes, envías y publicas, y de sus consecuencias, respondes tú mismo. KISY no revisa el contenido de antemano ni responde de él.",
       ],
     },
     {
