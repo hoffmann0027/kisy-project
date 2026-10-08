@@ -1,4 +1,5 @@
 import { ThemeSwitcher } from "@features/profile/ThemeSwitcher";
+import { LanguageSwitcher } from "@features/profile/LanguageSwitcher";
 import { useEffect, useState } from "react";
 import { Button, Input, Modal, VerifiedName, toast } from "@shared/ui";
 import { roleLabel } from "@shared/api/types";
@@ -142,6 +143,8 @@ export function ProfileModal({ open, onClose }: Props) {
       </div>
 
       <ThemeSwitcher />
+
+      <LanguageSwitcher />
 
       <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
         <div style={{ fontWeight: 600, fontSize: 15 }}>Сменить пароль</div>

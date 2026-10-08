@@ -1,7 +1,8 @@
-// Time and text formatting helpers, Russian-first (default language RU).
+// Time and text formatting helpers, in the language on screen.
+import { intlLocale, t } from "@shared/i18n";
 
 export function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString(intlLocale(), { hour: "2-digit", minute: "2-digit" });
 }
 
 export function formatDay(iso: string): string {
@@ -9,19 +10,19 @@ export function formatDay(iso: string): string {
   const now = new Date();
   const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const diffDays = Math.round((startOfDay(now) - startOfDay(d)) / 86_400_000);
-  if (diffDays === 0) return "Сегодня";
-  if (diffDays === 1) return "Вчера";
-  return d.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+  if (diffDays === 0) return t("common.today");
+  if (diffDays === 1) return t("common.yesterday");
+  return d.toLocaleDateString(intlLocale(), { day: "numeric", month: "long" });
 }
 
 export function formatRelative(iso: string): string {
   const d = new Date(iso);
   const now = Date.now();
   const diffSec = Math.round((now - d.getTime()) / 1000);
-  if (diffSec < 60) return "только что";
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)} мин назад`;
-  if (diffSec < 86_400) return `${Math.floor(diffSec / 3600)} ч назад`;
-  return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+  if (diffSec < 60) return t("common.justNow");
+  if (diffSec < 3600) return t("common.minutesAgo", { count: Math.floor(diffSec / 60) });
+  if (diffSec < 86_400) return t("common.hoursAgo", { count: Math.floor(diffSec / 3600) });
+  return d.toLocaleDateString(intlLocale(), { day: "numeric", month: "short" });
 }
 
 export function initials(name: string): string {

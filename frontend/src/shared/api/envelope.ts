@@ -1,6 +1,7 @@
 // Mirrors the response envelope defined in docs/spec/09-api-contracts.md
 // and produced by backend/pkg/httpresponse.
 import { UserFacingError } from "@shared/lib/errors";
+import { t } from "@shared/i18n";
 
 export interface ApiErrorBody {
   code: string;
@@ -63,7 +64,7 @@ const USER_FACING_CODES = new Set(["QUOTA_EXCEEDED", "E2EE_REQUIRED", "QUARANTIN
 
 /** "Слишком часто" with the wait, when the server said how long it is. */
 export function rateLimitedMessage(retryAfterSeconds: number): string {
-  if (!(retryAfterSeconds > 0)) return "Слишком часто. Попробуйте чуть позже";
-  if (retryAfterSeconds < 60) return `Слишком часто. Попробуйте через ${retryAfterSeconds} с`;
-  return `Слишком часто. Попробуйте через ${Math.ceil(retryAfterSeconds / 60)} мин`;
+  if (!(retryAfterSeconds > 0)) return t("common.rateLimited");
+  if (retryAfterSeconds < 60) return t("common.rateLimitedSeconds", { count: retryAfterSeconds });
+  return t("common.rateLimitedMinutes", { count: Math.ceil(retryAfterSeconds / 60) });
 }

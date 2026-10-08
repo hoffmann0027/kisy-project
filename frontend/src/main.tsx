@@ -1,14 +1,10 @@
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { App } from "@app/App";
 import "@shared/config/theme.css";
 import "@shared/ui/ui.css";
+import { initI18n } from "@shared/i18n";
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+// Choose the language and load its words first, then start the app: no screen
+// ever renders in one language and flips to another.
+void initI18n().then(() => import("./bootstrap"));
 
 // Register the service worker in production only, so it never interferes with
 // Vite's dev server / HMR. Enables installability and offline app shell.
