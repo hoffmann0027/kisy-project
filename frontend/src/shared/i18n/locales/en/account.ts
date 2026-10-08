@@ -11,7 +11,7 @@ export const account: Translation<typeof source> = {
   "account.fields.password": "Password",
   "account.fields.namePlaceholder": "Jane Smith",
 
-  "account.login.subtitle": "Corporate messenger",
+  "account.login.subtitle": "Conversations that stay yours",
   "account.login.usernameRequired": "Enter your username",
   "account.login.passwordRequired": "Enter your password",
   "account.login.invalidCredentials": "Incorrect username or password",

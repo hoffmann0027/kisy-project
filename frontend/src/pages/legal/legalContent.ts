@@ -22,7 +22,19 @@ export interface LegalDocs {
 
 export const RUSSIAN_DOCS = ru;
 
-const translations: Partial<Record<Lang, () => Promise<{ docs: LegalDocs }>>> = {};
+// Every language the app speaks has its translation: a new language without
+// one does not compile.
+const translations: Record<Exclude<Lang, "ru">, () => Promise<{ docs: LegalDocs }>> = {
+  en: () => import("./content/en"),
+  de: () => import("./content/de"),
+  es: () => import("./content/es"),
+  fr: () => import("./content/fr"),
+  nl: () => import("./content/nl"),
+  pl: () => import("./content/pl"),
+  cs: () => import("./content/cs"),
+  uk: () => import("./content/uk"),
+  tr: () => import("./content/tr"),
+};
 
 /** The day a document changed, in the reader's language. */
 export function formatLegalDate(iso: string): string {

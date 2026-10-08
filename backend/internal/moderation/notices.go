@@ -82,6 +82,20 @@ func (s *Service) announceRestore(ctx context.Context, g *groupRow) {
 	})
 }
 
+// dateLayouts write a date the way the reader's country does.
+var dateLayouts = map[i18n.Lang]string{
+	"ru": "02.01.2006 15:04",
+	"uk": "02.01.2006 15:04",
+	"de": "02.01.2006 15:04",
+	"pl": "02.01.2006 15:04",
+	"cs": "2. 1. 2006 15:04",
+	"tr": "02.01.2006 15:04",
+	"nl": "02-01-2006 15:04",
+	"es": "02/01/2006 15:04",
+	"fr": "02/01/2006 15:04",
+	"en": "Jan 2, 2006 15:04",
+}
+
 // muteUntil is how long a mute lasts, in the reader's words.
 type muteUntil struct{ at *time.Time }
 
@@ -89,11 +103,7 @@ func (m muteUntil) In(l i18n.Lang) string {
 	if m.at == nil {
 		return i18n.T(l, "moderation.untilForever")
 	}
-	layout := "2006-01-02 15:04"
-	if l == "ru" || l == "uk" {
-		layout = "02.01.2006 15:04"
-	}
-	return i18n.T(l, "moderation.until", m.at.UTC().Format(layout))
+	return i18n.T(l, "moderation.until", m.at.UTC().Format(dateLayouts[l]))
 }
 
 func (s *Service) deliver(ctx context.Context, n Notice) {

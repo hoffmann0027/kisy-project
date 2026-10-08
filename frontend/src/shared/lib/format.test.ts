@@ -33,3 +33,15 @@ describe("formatTime", () => {
     expect(formatTime("2026-07-04T09:05:00Z")).toMatch(/^\d{2}:\d{2}$/);
   });
 });
+
+describe("midSentence", () => {
+  it("lowers the first letter only, and not in German", async () => {
+    const { applyDictionary, loadDictionary } = await import("@shared/i18n");
+    const { ru } = await import("@shared/i18n/locales/ru");
+    const { midSentence } = await import("./format");
+    expect(midSentence("Минимум 12 символов, KISY")).toBe("минимум 12 символов, KISY");
+    applyDictionary("de", await loadDictionary("de"));
+    expect(midSentence("Mindestens 12 Zeichen")).toBe("Mindestens 12 Zeichen");
+    applyDictionary("ru", ru);
+  });
+});

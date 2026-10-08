@@ -1,12 +1,20 @@
 // The languages KISY speaks, and how the first one is chosen.
 
-export const LANGS = ["ru", "en"] as const;
+export const LANGS = ["ru", "en", "de", "es", "fr", "nl", "pl", "cs", "uk", "tr"] as const;
 export type Lang = (typeof LANGS)[number];
 
 /** Each language named in itself: a person looking for theirs reads it. */
 export const LANG_NAMES: Record<Lang, string> = {
   ru: "Русский",
   en: "English",
+  de: "Deutsch",
+  es: "Español",
+  fr: "Français",
+  nl: "Nederlands",
+  pl: "Polski",
+  cs: "Čeština",
+  uk: "Українська",
+  tr: "Türkçe",
 };
 
 /** A device language the app does not speak falls back to this one. */

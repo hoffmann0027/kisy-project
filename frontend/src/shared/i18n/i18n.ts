@@ -12,6 +12,14 @@ let dict: Dict = ru;
 
 const loaders: Record<Exclude<Lang, "ru">, () => Promise<{ messages: Dict }>> = {
   en: () => import("./locales/en"),
+  de: () => import("./locales/de"),
+  es: () => import("./locales/es"),
+  fr: () => import("./locales/fr"),
+  nl: () => import("./locales/nl"),
+  pl: () => import("./locales/pl"),
+  cs: () => import("./locales/cs"),
+  uk: () => import("./locales/uk"),
+  tr: () => import("./locales/tr"),
 };
 
 /** The language on screen now. */

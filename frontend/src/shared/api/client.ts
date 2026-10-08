@@ -2,6 +2,18 @@ import { ApiError, type ApiEnvelope } from "./envelope";
 import { apiOrigin, isNative, loadTokens, nativeAuthHeaders, saveTokens, type NativeTokens } from "@shared/lib/native";
 import { currentLang, t } from "@shared/i18n";
 
+/**
+ * The name the server writes where a deleted account's name was (backend
+ * users.DeletedDisplayName). It is stored once, in Russian; every response
+ * shows it in the language on screen instead.
+ */
+export const DELETED_ACCOUNT_NAME = "Удалённый аккаунт";
+
+/** JSON.parse reviver: a deleted account's name, in the reader's language. */
+export function localizeDeletedNames(_key: string, value: unknown): unknown {
+  return value === DELETED_ACCOUNT_NAME ? t("common.deletedAccount") : value;
+}
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
 // The access token lives 15 minutes; the refresh token 30 days. Without the
@@ -95,7 +107,9 @@ async function request<T>(path: string, init?: RequestInit, allowRefresh = true)
 
   // 204 or empty bodies still return a valid (empty) result.
   const text = await response.text();
-  const envelope: ApiEnvelope<T> = text ? JSON.parse(text) : ({ success: response.ok } as ApiEnvelope<T>);
+  const envelope: ApiEnvelope<T> = text
+    ? JSON.parse(text, currentLang() === "ru" ? undefined : localizeDeletedNames)
+    : ({ success: response.ok } as ApiEnvelope<T>);
 
   if (!envelope.success || !response.ok) {
     const error = envelope.error;

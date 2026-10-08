@@ -2,6 +2,7 @@
 import type { Dict } from "../../types";
 
 export const common = {
+  "common.deletedAccount": "Удалённый аккаунт",
   "common.today": "Сегодня",
   "common.yesterday": "Вчера",
   "common.justNow": "только что",

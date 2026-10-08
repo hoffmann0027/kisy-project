@@ -6,6 +6,7 @@ import { roleLabel } from "@shared/api/types";
 import { authApi, usersApi } from "@shared/api/endpoints";
 import { useAuthStore } from "@shared/store/auth";
 import { passwordProblem, passwordRuleText } from "@shared/lib/password";
+import { midSentence } from "@shared/lib/format";
 import { DeleteAccountDialog } from "./DeleteAccountDialog";
 import { BlockedList } from "@features/blocks/BlockedList";
 import { disablePush, enablePush, pushEnabled, pushSupported } from "@shared/lib/push";
@@ -103,7 +104,7 @@ export function ProfileModal({ open, onClose }: Props) {
   const changePassword = async () => {
     const problem = passwordProblem(newPassword);
     if (problem) {
-      toast.error(t("account.password.newProblem", { problem: problem.toLowerCase() }));
+      toast.error(t("account.password.newProblem", { problem: midSentence(problem) }));
       return;
     }
     setBusy(true);

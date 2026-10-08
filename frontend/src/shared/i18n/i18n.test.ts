@@ -70,6 +70,13 @@ describe.each(dictionaries)("the %s dictionary", (lang, dict) => {
     }
   });
 
+  it("has no Russian left in it", () => {
+    if (lang === "uk") return; // Ukrainian is written in Cyrillic itself
+    for (const [key, msg] of Object.entries(dict)) {
+      expect(JSON.stringify(msg), key).not.toMatch(/[Ѐ-ӿ]/);
+    }
+  });
+
   it("is a language the app knows how to load once registered", () => {
     expect(["ru", "en", "de", "es", "fr", "nl", "pl", "cs", "uk", "tr"]).toContain(lang);
   });

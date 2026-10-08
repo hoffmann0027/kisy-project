@@ -1,7 +1,7 @@
 {
   "name": "KISY Messenger",
   "short_name": "KISY",
-  "description": "Корпоративный мессенджер KISY",
+  "description": "KISY — переписка, которая остаётся вашей",
   "lang": "ru",
   "start_url": "/",
   "scope": "/",

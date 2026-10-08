@@ -2,6 +2,7 @@ import type { Translation } from "../../types";
 import type { common as source } from "../ru/common";
 
 export const common: Translation<typeof source> = {
+  "common.deletedAccount": "Deleted account",
   "common.today": "Today",
   "common.yesterday": "Yesterday",
   "common.justNow": "just now",

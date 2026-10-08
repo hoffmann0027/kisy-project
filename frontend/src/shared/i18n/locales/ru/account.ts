@@ -13,7 +13,7 @@ export const account = {
   "account.fields.namePlaceholder": "Анна Смирнова",
 
   // Sign-in.
-  "account.login.subtitle": "Корпоративный мессенджер",
+  "account.login.subtitle": "Переписка, которая остаётся вашей",
   "account.login.usernameRequired": "Введите имя пользователя",
   "account.login.passwordRequired": "Введите пароль",
   "account.login.invalidCredentials": "Неверное имя пользователя или пароль",

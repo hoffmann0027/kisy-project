@@ -1,5 +1,5 @@
 // Time and text formatting helpers, in the language on screen.
-import { intlLocale, t } from "@shared/i18n";
+import { currentLang, intlLocale, t } from "@shared/i18n";
 
 export function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(intlLocale(), { hour: "2-digit", minute: "2-digit" });
@@ -38,4 +38,15 @@ export function colorFromString(str: string): string {
   for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
   const hue = Math.abs(hash) % 360;
   return `hsl(${hue} 62% 48%)`;
+}
+
+/**
+ * Text that continues a sentence ("New password — at least 12 characters"):
+ * its first letter lowered, by the rules of the language on screen. Not the
+ * whole text — "KISY" stays "KISY" — and not at all in German, where the
+ * nouns that start such phrases keep their capital.
+ */
+export function midSentence(text: string): string {
+  if (!text || currentLang() === "de") return text;
+  return text.charAt(0).toLocaleLowerCase(intlLocale()) + text.slice(1);
 }

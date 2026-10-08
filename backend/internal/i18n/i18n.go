@@ -24,7 +24,7 @@ const Default Lang = "ru"
 
 // Supported lists every language, in the app's order. Must match
 // frontend/src/shared/i18n/langs.ts.
-var Supported = []Lang{"ru", "en"}
+var Supported = []Lang{"ru", "en", "de", "es", "fr", "nl", "pl", "cs", "uk", "tr"}
 
 // Catalog is one language's messages, by key. A countable phrase has one
 // entry per plural category: "key#one", "key#few", "key#many", "key#other".

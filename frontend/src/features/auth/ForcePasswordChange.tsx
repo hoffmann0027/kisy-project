@@ -3,6 +3,7 @@ import { authApi } from "@shared/api/endpoints";
 import { useAuthStore } from "@shared/store/auth";
 import { Button, Input, toast } from "@shared/ui";
 import { passwordProblem, passwordRuleText } from "@shared/lib/password";
+import { midSentence } from "@shared/lib/format";
 import { ApiError } from "@shared/api/envelope";
 import { t } from "@shared/i18n";
 
@@ -22,7 +23,7 @@ export function ForcePasswordChange() {
   const submit = async () => {
     const problem = passwordProblem(newPassword);
     if (problem) {
-      toast.error(t("account.password.newProblem", { problem: problem.toLowerCase() }));
+      toast.error(t("account.password.newProblem", { problem: midSentence(problem) }));
       return;
     }
     if (newPassword !== confirm) {
