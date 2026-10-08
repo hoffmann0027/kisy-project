@@ -72,8 +72,7 @@ func run() error {
 	// from a web console: paste the UPDATE there instead.
 	if *hashOnly {
 		fmt.Printf("password: %s\nhash:     %s\n\n", newPassword, hash)
-		fmt.Printf("UPDATE users SET password_hash = '%s', must_change_password = true,\n"+
-			"       failed_login_attempts = 0, locked_until = NULL\n"+
+		fmt.Printf("UPDATE users SET password_hash = '%s', must_change_password = true\n"+
 			" WHERE username = '%s';\n", hash, *username)
 		return nil
 	}
@@ -101,14 +100,13 @@ func run() error {
 	}
 	defer tx.Rollback(ctx)
 
-	// Clearing the lockout matters as much as the hash: a forgotten password
-	// is usually discovered by guessing at it until the account locks.
+	// A forgotten password is usually discovered by guessing at it until the
+	// sign-in locks; that lock is per address and lifts by itself within
+	// auth.LockoutDuration — or sign in from another network right away.
 	tag, err := tx.Exec(ctx, `
 		UPDATE users
 		   SET password_hash = $2,
-		       must_change_password = true,
-		       failed_login_attempts = 0,
-		       locked_until = NULL
+		       must_change_password = true
 		 WHERE username = $1`, *username, hash)
 	if err != nil {
 		return fmt.Errorf("update user: %w", err)

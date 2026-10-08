@@ -116,6 +116,20 @@ func AdminURL(t *testing.T) string {
 	return url
 }
 
+// RedisURL returns TEST_REDIS_URL under the same rule as AdminURL: skipped
+// on a developer's machine without it, fatal in CI.
+func RedisURL(t *testing.T) string {
+	t.Helper()
+	url := os.Getenv("TEST_REDIS_URL")
+	if url == "" {
+		if missingURLIsFatal(os.Getenv("CI")) {
+			t.Fatal("testdb: TEST_REDIS_URL is not set in CI — the integration suite would report success without running")
+		}
+		t.Skip("TEST_REDIS_URL not set; skipping integration test")
+	}
+	return url
+}
+
 // missingURLIsFatal decides what an unset TEST_DATABASE_URL means, from the
 // value of the CI environment variable (GitHub Actions sets CI=true).
 //

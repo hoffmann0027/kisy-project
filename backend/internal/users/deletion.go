@@ -328,8 +328,6 @@ func anonymise(ctx context.Context, q db.DBTX, u *User) error {
 			last_seen_at = NULL,
 			is_active = false,
 			must_change_password = false,
-			failed_login_attempts = 0,
-			locked_until = NULL,
 			verified_at = NULL,
 			verified_by = NULL,
 			deleted_at = now()

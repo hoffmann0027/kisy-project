@@ -20,11 +20,26 @@ var (
 )
 
 // Login/lockout policy per docs/spec/06-security.md ("Account lockout
-// after repeated failures").
+// after repeated failures"). Failures are counted per name and per source
+// address, not per account (audit A-33): an account-wide lock let anyone
+// who knew a name — the CEO's, say — keep its owner out for good with five
+// wrong passwords every quarter of an hour. Now the guesser locks out only
+// themselves, and the owner signs in from their own network as usual.
 const (
 	MaxLoginAttempts = 5
 	LockoutDuration  = 15 * time.Minute
 )
+
+// LoginLockedError is a sign-in refused because this name failed too often
+// from this address. Unknown names lock exactly like real ones, so the answer
+// says nothing about whether an account exists.
+type LoginLockedError struct {
+	RetryAfter time.Duration
+}
+
+func (e *LoginLockedError) Error() string { return ErrAccountLocked.Error() }
+
+func (e *LoginLockedError) Is(target error) bool { return target == ErrAccountLocked }
 
 // DefaultRegisteredRoleLevel is the clearance assigned to accounts created
 // through an invitation. The spec does not attach a role to invitations,
@@ -58,7 +73,10 @@ func (s *Session) Active(now time.Time) bool {
 // ClientMeta carries per-request client attributes recorded on sessions
 // and audit events.
 type ClientMeta struct {
-	IPHash     string
+	IPHash string
+	// Source is the hashed rate-limit bucket of the client address (an IPv6
+	// client is its /64): what failed sign-ins are counted against.
+	Source     string
 	UserAgent  string
 	DeviceName string
 	RequestID  string

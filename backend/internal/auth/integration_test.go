@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"kisy-backend/internal/access"
 	"kisy-backend/internal/audit"
@@ -22,6 +23,7 @@ import (
 	"kisy-backend/internal/consent"
 	"kisy-backend/internal/invitations"
 	"kisy-backend/internal/platform/postgres"
+	"kisy-backend/internal/platform/ratelimit"
 	"kisy-backend/internal/platform/testdb"
 	"kisy-backend/internal/users"
 )
@@ -30,6 +32,7 @@ import (
 // database. Run with:
 //
 //	TEST_DATABASE_URL=postgres://kisy:<pass>@localhost:5432/kisy \
+//	TEST_REDIS_URL=redis://localhost:6379/0 \
 //	go test -tags integration ./internal/auth/
 //
 // The URL must point at the maintenance database; the suite creates and
@@ -51,6 +54,23 @@ func setup(t *testing.T) *env {
 	adminURL := testdb.AdminURL(t)
 
 	ctx := context.Background()
+
+	// Failed sign-ins are counted in Redis; every test starts with none.
+	ropts, err := redis.ParseURL(testdb.RedisURL(t))
+	if err != nil {
+		t.Fatalf("parse TEST_REDIS_URL: %v", err)
+	}
+	rdb := redis.NewClient(ropts)
+	t.Cleanup(func() { _ = rdb.Close() })
+	stale, err := rdb.Keys(ctx, "rl:login-fail:*").Result()
+	if err != nil {
+		t.Fatalf("redis: %v", err)
+	}
+	if len(stale) > 0 {
+		if err := rdb.Del(ctx, stale...).Err(); err != nil {
+			t.Fatalf("redis: %v", err)
+		}
+	}
 
 	admin, err := pgxpool.New(ctx, adminURL)
 	if err != nil {
@@ -89,7 +109,8 @@ func setup(t *testing.T) *env {
 	invitesRepo := invitations.NewPostgresRepository()
 	tokens := token.NewManager("integration-test-secret-32-chars-min", 15*time.Minute)
 
-	svc, err := auth.NewService(pool, usersRepo, sessionsRepo, invitesRepo, rec, tokens, 24*time.Hour, true)
+	svc, err := auth.NewService(pool, usersRepo, sessionsRepo, invitesRepo, rec, tokens, 24*time.Hour, true,
+		ratelimit.NewLimiter(rdb, log))
 	if err != nil {
 		t.Fatalf("auth service: %v", err)
 	}
@@ -111,7 +132,7 @@ func (e *env) createUser(t *testing.T, username, plain string, level int) *users
 	return u
 }
 
-var testMeta = auth.ClientMeta{IPHash: "test-ip-hash", UserAgent: "go-test", RequestID: "req-test"}
+var testMeta = auth.ClientMeta{IPHash: "test-ip-hash", Source: "test-source", UserAgent: "go-test", RequestID: "req-test"}
 
 func TestLoginSuccessAndSessionLifecycle(t *testing.T) {
 	e := setup(t)
@@ -147,22 +168,86 @@ func TestLoginSuccessAndSessionLifecycle(t *testing.T) {
 	}
 }
 
+// failUntilLocked makes MaxLoginAttempts wrong guesses and returns what the
+// last one answered.
+func failUntilLocked(t *testing.T, e *env, username string, meta auth.ClientMeta) error {
+	t.Helper()
+	var err error
+	for i := 1; i <= auth.MaxLoginAttempts; i++ {
+		_, err = e.svc.Login(context.Background(), username, "wrong-password-xx1", meta)
+		if i < auth.MaxLoginAttempts && !errors.Is(err, auth.ErrInvalidCredentials) {
+			t.Fatalf("attempt %d: %v, want ErrInvalidCredentials", i, err)
+		}
+	}
+	return err
+}
+
 func TestLoginLockoutAfterRepeatedFailures(t *testing.T) {
 	e := setup(t)
 	ctx := context.Background()
 	e.createUser(t, "victim", "correct-password-1", 5)
 
-	var lastErr error
-	for i := 0; i < auth.MaxLoginAttempts; i++ {
-		_, lastErr = e.svc.Login(ctx, "victim", "wrong-password-xx1", testMeta)
+	err := failUntilLocked(t, e, "victim", testMeta)
+	var locked *auth.LoginLockedError
+	if !errors.As(err, &locked) || !errors.Is(err, auth.ErrAccountLocked) {
+		t.Fatalf("attempt %d error = %v, want a LoginLockedError", auth.MaxLoginAttempts, err)
 	}
-	if !errors.Is(lastErr, auth.ErrAccountLocked) {
-		t.Fatalf("attempt %d error = %v, want ErrAccountLocked", auth.MaxLoginAttempts, lastErr)
+	if locked.RetryAfter <= 0 || locked.RetryAfter > auth.LockoutDuration {
+		t.Fatalf("RetryAfter = %v", locked.RetryAfter)
 	}
 
 	// Correct password is also rejected while locked.
 	if _, err := e.svc.Login(ctx, "victim", "correct-password-1", testMeta); !errors.Is(err, auth.ErrAccountLocked) {
 		t.Fatalf("locked login error = %v, want ErrAccountLocked", err)
+	}
+}
+
+// Audit A-33: five wrong passwords locked the account itself, so anyone who
+// knew a name could keep its owner out for good — the CEO included, who has
+// no way back but a database console. The lock now holds the guesser's
+// address only.
+func TestLockoutDoesNotLockTheOwnerOut(t *testing.T) {
+	e := setup(t)
+	e.createUser(t, "the_ceo", "correct-password-1", 1)
+	attacker := testMeta
+	attacker.Source = "attacker-network"
+
+	if err := failUntilLocked(t, e, "the_ceo", attacker); !errors.Is(err, auth.ErrAccountLocked) {
+		t.Fatalf("attacker not locked out: %v", err)
+	}
+	if _, err := e.svc.Login(context.Background(), "the_ceo", "correct-password-1", testMeta); err != nil {
+		t.Fatalf("owner from their own network: %v", err)
+	}
+}
+
+// Audit A-33: an existing account locked after five failures while an unknown
+// name answered "invalid credentials" forever — a way to tell which names
+// exist. Both lock now.
+func TestUnknownNamesLockLikeRealOnes(t *testing.T) {
+	e := setup(t)
+	e.createUser(t, "real_person", "correct-password-1", 5)
+
+	real := failUntilLocked(t, e, "real_person", testMeta)
+	unknown := failUntilLocked(t, e, "who_is_this", testMeta)
+	if !errors.Is(real, auth.ErrAccountLocked) || !errors.Is(unknown, auth.ErrAccountLocked) {
+		t.Fatalf("real: %v, unknown: %v — both must lock", real, unknown)
+	}
+}
+
+func TestLoginSuccessForgetsEarlierFailures(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	e.createUser(t, "typist", "correct-password-1", 5)
+
+	for round := 0; round < 2; round++ {
+		for i := 1; i < auth.MaxLoginAttempts; i++ {
+			if _, err := e.svc.Login(ctx, "typist", "wrong-password-xx1", testMeta); !errors.Is(err, auth.ErrInvalidCredentials) {
+				t.Fatalf("round %d attempt %d: %v", round, i, err)
+			}
+		}
+		if _, err := e.svc.Login(ctx, "typist", "correct-password-1", testMeta); err != nil {
+			t.Fatalf("round %d: %v", round, err)
+		}
 	}
 }
 

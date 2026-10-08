@@ -146,7 +146,8 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 
 	tokens := token.NewManager(cfg.JWTAccessSecret, cfg.JWTAccessTTL)
 
-	authSvc, err := auth.NewService(pool, usersRepo, sessionsRepo, invitesRepo, auditRec, tokens, cfg.JWTRefreshTTL, cfg.RegistrationOpen)
+	authSvc, err := auth.NewService(pool, usersRepo, sessionsRepo, invitesRepo, auditRec, tokens, cfg.JWTRefreshTTL, cfg.RegistrationOpen,
+		ratelimit.NewLimiter(rdb, log))
 	if err != nil {
 		return nil, err
 	}

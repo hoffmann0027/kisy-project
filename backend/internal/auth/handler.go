@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"kisy-backend/internal/auth/password"
 	"kisy-backend/internal/consent"
 	"kisy-backend/internal/platform/clientip"
+	"kisy-backend/internal/platform/ratelimit"
 	"kisy-backend/internal/platform/turnstile"
 	"kisy-backend/internal/users"
 	"kisy-backend/pkg/httpjson"
@@ -95,6 +97,7 @@ func (h *Handler) Routes(r chi.Router) {
 func (h *Handler) ClientMeta(r *http.Request) ClientMeta {
 	return ClientMeta{
 		IPHash:     h.HashIP(clientIP(r)),
+		Source:     h.HashIP(ratelimit.Bucket(clientIP(r))),
 		UserAgent:  r.UserAgent(),
 		DeviceName: r.Header.Get("X-Device-Name"),
 		RequestID:  middleware.GetReqID(r.Context()),
@@ -328,7 +331,11 @@ func (h *Handler) writeAuthError(w http.ResponseWriter, r *http.Request, err err
 	case errors.Is(err, ErrInvalidCredentials):
 		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidCredentials, "invalid username or password")
 	case errors.Is(err, ErrAccountLocked):
-		httpresponse.Fail(w, r, http.StatusTooManyRequests, httpresponse.ErrRateLimited, "account temporarily locked, try again later")
+		var locked *LoginLockedError
+		if errors.As(err, &locked) {
+			w.Header().Set("Retry-After", strconv.Itoa(ratelimit.RetryAfterSeconds(locked.RetryAfter)))
+		}
+		httpresponse.Fail(w, r, http.StatusTooManyRequests, httpresponse.ErrRateLimited, "too many failed sign-in attempts, try again later")
 	case errors.Is(err, ErrInvalidInvite):
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrAuthInvalidToken, "invitation token is invalid or expired")
 	case errors.Is(err, ErrRegistrationClosed):

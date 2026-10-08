@@ -220,7 +220,13 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429':
-          description: Rate limited or account temporarily locked
+          description: >
+            Rate limited, or too many failed sign-ins for this username from
+            this address (MaxLoginAttempts in 15 min; an unknown username locks
+            the same way, so the answer reveals nothing). Carries Retry-After.
+            Other addresses are unaffected.
+          headers:
+            Retry-After: { schema: { type: integer }, description: Seconds until the next attempt is accepted }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Envelope' }

@@ -33,19 +33,17 @@ const (
 // does compare as "better than CEO" under <=, which is why no level check is
 // written as a bare comparison; they all go through internal/access.
 type User struct {
-	ID                  uuid.UUID
-	Username            string
-	DisplayName         string
-	PasswordHash        string
-	RoleID              int
-	AccountKind         string
-	AvatarURL           *string
-	Status              string
-	LastSeenAt          *time.Time
-	IsActive            bool
-	FailedLoginAttempts int
-	LockedUntil         *time.Time
-	MustChangePassword  bool
+	ID                 uuid.UUID
+	Username           string
+	DisplayName        string
+	PasswordHash       string
+	RoleID             int
+	AccountKind        string
+	AvatarURL          *string
+	Status             string
+	LastSeenAt         *time.Time
+	IsActive           bool
+	MustChangePassword bool
 	// DisplayNameNeedsChange is set by migration 46 on accounts whose existing
 	// name broke the display-name rule or collided with an earlier account's.
 	// Cleared by choosing a new name.

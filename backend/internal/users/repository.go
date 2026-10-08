@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -67,11 +66,6 @@ type Repository interface {
 	// themselves. What that means depends on whether the actor has a level at
 	// all — see the implementation.
 	Search(ctx context.Context, q db.DBTX, actorID uuid.UUID, actorLevel int, query string, limit int) ([]User, error)
-	// RegisterLoginFailure atomically increments the failure counter and,
-	// when maxAttempts is reached, sets locked_until to lockUntil.
-	// Returns the resulting lock timestamp (nil if not locked).
-	RegisterLoginFailure(ctx context.Context, q db.DBTX, id uuid.UUID, maxAttempts int, lockUntil time.Time) (*time.Time, error)
-	ResetLoginFailures(ctx context.Context, q db.DBTX, id uuid.UUID) error
 }
 
 type PostgresRepository struct{}
@@ -83,7 +77,7 @@ func NewPostgresRepository() *PostgresRepository { return &PostgresRepository{} 
 // are what give zero its meaning.
 const userColumns = `
 	id, username::text, display_name, password_hash, COALESCE(role_id, 0), account_kind,
-	avatar_url, status, last_seen_at, is_active, failed_login_attempts, locked_until,
+	avatar_url, status, last_seen_at, is_active,
 	must_change_password, display_name_needs_change, verified_at, created_at, updated_at,
 	privacy_version, rules_version`
 
@@ -93,8 +87,8 @@ const userColumns = `
 func scanUserInto(row pgx.Row, u *User) error {
 	return row.Scan(
 		&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &u.RoleID, &u.AccountKind,
-		&u.AvatarURL, &u.Status, &u.LastSeenAt, &u.IsActive, &u.FailedLoginAttempts,
-		&u.LockedUntil, &u.MustChangePassword, &u.DisplayNameNeedsChange, &u.VerifiedAt, &u.CreatedAt, &u.UpdatedAt,
+		&u.AvatarURL, &u.Status, &u.LastSeenAt, &u.IsActive,
+		&u.MustChangePassword, &u.DisplayNameNeedsChange, &u.VerifiedAt, &u.CreatedAt, &u.UpdatedAt,
 		&u.PrivacyVersion, &u.RulesVersion,
 	)
 }
@@ -126,9 +120,9 @@ func (r *PostgresRepository) Create(ctx context.Context, q db.DBTX, u *User) err
 	err := q.QueryRow(ctx, `
 		INSERT INTO users (username, display_name, password_hash, role_id, account_kind, must_change_password, display_name_needs_change)
 		VALUES ($1, $2, $3, NULLIF($4, 0), $5, $6, $7)
-		RETURNING id, status, is_active, failed_login_attempts, must_change_password, created_at, updated_at`,
+		RETURNING id, status, is_active, must_change_password, created_at, updated_at`,
 		u.Username, u.DisplayName, u.PasswordHash, u.RoleID, u.AccountKind, u.MustChangePassword, u.DisplayNameNeedsChange,
-	).Scan(&u.ID, &u.Status, &u.IsActive, &u.FailedLoginAttempts, &u.MustChangePassword, &u.CreatedAt, &u.UpdatedAt)
+	).Scan(&u.ID, &u.Status, &u.IsActive, &u.MustChangePassword, &u.CreatedAt, &u.UpdatedAt)
 
 	if err := uniqueViolation(err); err != nil {
 		return err
@@ -246,8 +240,7 @@ func (r *PostgresRepository) UpdatePasswordHash(ctx context.Context, q db.DBTX, 
 
 func (r *PostgresRepository) AdminResetPasswordHash(ctx context.Context, q db.DBTX, id uuid.UUID, hash string) error {
 	tag, err := q.Exec(ctx, `
-		UPDATE users SET password_hash = $2, must_change_password = true,
-			failed_login_attempts = 0, locked_until = NULL
+		UPDATE users SET password_hash = $2, must_change_password = true
 		WHERE id = $1`, id, hash)
 	if err != nil {
 		return fmt.Errorf("users: admin reset password: %w", err)
@@ -415,37 +408,6 @@ func (r *PostgresRepository) searchByFullName(
 		out = append(out, u)
 	}
 	return out, rows.Err()
-}
-
-func (r *PostgresRepository) RegisterLoginFailure(ctx context.Context, q db.DBTX, id uuid.UUID, maxAttempts int, lockUntil time.Time) (*time.Time, error) {
-	var lockedUntil *time.Time
-	err := q.QueryRow(ctx, `
-		UPDATE users SET
-			failed_login_attempts = failed_login_attempts + 1,
-			locked_until = CASE
-				WHEN failed_login_attempts + 1 >= $2 THEN $3
-				ELSE locked_until
-			END
-		WHERE id = $1
-		RETURNING locked_until`,
-		id, maxAttempts, lockUntil,
-	).Scan(&lockedUntil)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("users: register login failure: %w", err)
-	}
-	return lockedUntil, nil
-}
-
-func (r *PostgresRepository) ResetLoginFailures(ctx context.Context, q db.DBTX, id uuid.UUID) error {
-	if _, err := q.Exec(ctx, `
-		UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = $1`, id,
-	); err != nil {
-		return fmt.Errorf("users: reset login failures: %w", err)
-	}
-	return nil
 }
 
 // notBlockedUser hides accounts the viewer blocked and accounts that blocked

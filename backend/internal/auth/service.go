@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -17,6 +19,7 @@ import (
 	"kisy-backend/internal/auth/token"
 	"kisy-backend/internal/consent"
 	"kisy-backend/internal/invitations"
+	"kisy-backend/internal/platform/ratelimit"
 	"kisy-backend/internal/users"
 )
 
@@ -40,6 +43,28 @@ type Service struct {
 
 	// kick ends the sockets of revoked sessions (see SessionKicker).
 	kick SessionKicker
+
+	// failures counts failed sign-ins per (name, source); see
+	// MaxLoginAttempts.
+	failures FailureCounter
+}
+
+// FailureCounter is the fixed-window counter failed sign-ins are kept in.
+// Satisfied by *ratelimit.Limiter.
+type FailureCounter interface {
+	Take(ctx context.Context, scope, key string, max int, window time.Duration) ratelimit.Decision
+	Peek(ctx context.Context, scope, key string) (int, time.Duration, error)
+	Forget(ctx context.Context, scope, key string) error
+}
+
+const loginFailureScope = "login-fail"
+
+// loginFailureKey names a sign-in source: the name as typed (normalized the
+// way usernames are) and the client's address bucket. Hashed, so no name
+// lies in Redis in the clear.
+func loginFailureKey(username, source string) string {
+	sum := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(username)) + "|" + source))
+	return hex.EncodeToString(sum[:])
 }
 
 func NewService(
@@ -51,12 +76,14 @@ func NewService(
 	tokens *token.Manager,
 	refreshTTL time.Duration,
 	registrationOpen bool,
+	failures FailureCounter,
 ) (*Service, error) {
 	dummy, err := password.Hash(uuid.NewString())
 	if err != nil {
 		return nil, fmt.Errorf("auth: prepare dummy hash: %w", err)
 	}
 	return &Service{
+		failures:         failures,
 		kick:             noKick{},
 		pool:             pool,
 		users:            usersRepo,
@@ -90,12 +117,24 @@ type LoginResult struct {
 // device session.
 func (s *Service) Login(ctx context.Context, username, plainPassword string, meta ClientMeta) (*LoginResult, error) {
 	now := time.Now().UTC()
+	failKey := loginFailureKey(username, meta.Source)
+
+	// Locked before anything is looked up or verified: the same answer for a
+	// name that exists and one that does not, and no password check — not even
+	// a correct one — while the source is locked out.
+	n, wait, err := s.failures.Peek(ctx, loginFailureScope, failKey)
+	if err != nil {
+		return nil, fmt.Errorf("auth: login failure counter: %w", err)
+	}
+	if n >= MaxLoginAttempts && wait > 0 {
+		return nil, &LoginLockedError{RetryAfter: wait}
+	}
 
 	u, err := s.users.GetByUsername(ctx, s.pool, username)
 	if errors.Is(err, users.ErrNotFound) {
 		// Burn comparable CPU time before rejecting (user enumeration).
 		_, _ = password.Verify(plainPassword, s.dummyHash)
-		return nil, ErrInvalidCredentials
+		return nil, s.handleFailedLogin(ctx, nil, failKey, meta)
 	}
 	if err != nil {
 		return nil, err
@@ -103,10 +142,7 @@ func (s *Service) Login(ctx context.Context, username, plainPassword string, met
 
 	if !u.IsActive {
 		_, _ = password.Verify(plainPassword, s.dummyHash)
-		return nil, ErrInvalidCredentials
-	}
-	if u.LockedUntil != nil && u.LockedUntil.After(now) {
-		return nil, ErrAccountLocked
+		return nil, s.handleFailedLogin(ctx, nil, failKey, meta)
 	}
 
 	ok, err := password.Verify(plainPassword, u.PasswordHash)
@@ -114,11 +150,12 @@ func (s *Service) Login(ctx context.Context, username, plainPassword string, met
 		return nil, err
 	}
 	if !ok {
-		return nil, s.handleFailedLogin(ctx, u, meta, now)
+		return nil, s.handleFailedLogin(ctx, u, failKey, meta)
 	}
 
-	if err := s.users.ResetLoginFailures(ctx, s.pool, u.ID); err != nil {
-		return nil, err
+	// The failures before a success were the owner's typos.
+	if err := s.failures.Forget(ctx, loginFailureScope, failKey); err != nil {
+		return nil, fmt.Errorf("auth: login failure counter: %w", err)
 	}
 
 	pair, err := s.openSession(ctx, u, meta, audit.ActionUserLogin, now)
@@ -128,15 +165,22 @@ func (s *Service) Login(ctx context.Context, username, plainPassword string, met
 	return &LoginResult{User: u, Tokens: *pair}, nil
 }
 
-// handleFailedLogin increments the failure counter, applies the lockout
-// policy and audits; it always returns an error for the caller to relay.
-func (s *Service) handleFailedLogin(ctx context.Context, u *users.User, meta ClientMeta, now time.Time) error {
-	lockedUntil, err := s.users.RegisterLoginFailure(ctx, s.pool, u.ID, MaxLoginAttempts, now.Add(LockoutDuration))
-	if err != nil {
-		return err
+// handleFailedLogin counts the failure against (name, source), locks the
+// source out on the last allowed one and audits attempts on real accounts;
+// it always returns an error for the caller to relay. u is nil for a name
+// with no active account, which counts and locks all the same.
+func (s *Service) handleFailedLogin(ctx context.Context, u *users.User, failKey string, meta ClientMeta) error {
+	d := s.failures.Take(ctx, loginFailureScope, failKey, MaxLoginAttempts-1, LockoutDuration)
+	if !d.Available {
+		return errors.New("auth: login failure counter unavailable")
 	}
-
-	justLocked := lockedUntil != nil && lockedUntil.After(now)
+	justLocked := !d.Within
+	if u == nil {
+		if justLocked {
+			return &LoginLockedError{RetryAfter: d.RetryAfter}
+		}
+		return ErrInvalidCredentials
+	}
 	action := audit.ActionUserLoginFailed
 	if justLocked {
 		action = audit.ActionUserLocked
@@ -151,7 +195,7 @@ func (s *Service) handleFailedLogin(ctx context.Context, u *users.User, meta Cli
 	})
 
 	if justLocked {
-		return ErrAccountLocked
+		return &LoginLockedError{RetryAfter: d.RetryAfter}
 	}
 	return ErrInvalidCredentials
 }

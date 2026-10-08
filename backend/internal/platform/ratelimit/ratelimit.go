@@ -6,6 +6,7 @@ package ratelimit
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -126,6 +127,35 @@ func (l *Limiter) Take(ctx context.Context, scope, key string, max int, window t
 		d.RetryAfter = time.Duration(res[1]) * time.Millisecond
 	}
 	return d
+}
+
+// Peek reports the hits (scope, key) has in its current window and how long
+// until that window resets, without counting one. A key with no hits is 0, 0.
+func (l *Limiter) Peek(ctx context.Context, scope, key string) (int, time.Duration, error) {
+	rkey := "rl:" + scope + ":" + key
+	pipe := l.rdb.Pipeline()
+	get := pipe.Get(ctx, rkey)
+	pttl := pipe.PTTL(ctx, rkey)
+	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
+		return 0, 0, err
+	}
+	n, err := get.Int()
+	if errors.Is(err, redis.Nil) {
+		return 0, 0, nil
+	}
+	if err != nil {
+		return 0, 0, err
+	}
+	ttl := pttl.Val()
+	if ttl < 0 {
+		ttl = 0
+	}
+	return n, ttl, nil
+}
+
+// Forget clears (scope, key): the window starts over on its next hit.
+func (l *Limiter) Forget(ctx context.Context, scope, key string) error {
+	return l.rdb.Del(ctx, "rl:"+scope+":"+key).Err()
 }
 
 // Bucket is the rate-limit key for a client address. IPv4 is per address.
