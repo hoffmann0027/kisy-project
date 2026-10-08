@@ -1,5 +1,6 @@
 import { ApiError, type ApiEnvelope } from "./envelope";
 import { apiOrigin, isNative, loadTokens, nativeAuthHeaders, saveTokens, type NativeTokens } from "@shared/lib/native";
+import { currentLang, t } from "@shared/i18n";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
@@ -32,7 +33,7 @@ export function refreshSession(): Promise<RefreshOutcome> {
       const response = await fetch(`${apiOrigin()}${API_BASE_URL}/auth/refresh`, {
         method: "POST",
         credentials: isNative() ? "omit" : "include",
-        headers: { "Content-Type": "application/json", ...nativeAuthHeaders() },
+        headers: { "Content-Type": "application/json", "X-Kisy-Lang": currentLang(), ...nativeAuthHeaders() },
         // Native holds the refresh token itself; the browser has it as an
         // HttpOnly cookie and must send nothing.
         body: isNative() ? JSON.stringify({ refreshToken: loadTokens()?.refreshToken ?? "" }) : undefined,
@@ -70,6 +71,9 @@ async function request<T>(path: string, init?: RequestInit, allowRefresh = true)
     ...init,
     headers: {
       "Content-Type": "application/json",
+      // The language on screen: what the server itself says (a refusal, a
+      // new board's columns) comes back in it, and pushes follow it.
+      "X-Kisy-Lang": currentLang(),
       ...nativeAuthHeaders(),
       ...init?.headers,
     },
@@ -85,7 +89,7 @@ async function request<T>(path: string, init?: RequestInit, allowRefresh = true)
       // The access token expired and the exchange never reached the server, so
       // whether this session is still good is unknown. Reported as a transport
       // failure — callers retry those, and only a "rejected" ends a session.
-      throw new ApiError("NETWORK_ERROR", "Не удалось обновить сессию", "", 0);
+      throw new ApiError("NETWORK_ERROR", t("common.session.refreshFailed"), "", 0);
     }
   }
 

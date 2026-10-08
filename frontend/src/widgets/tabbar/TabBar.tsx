@@ -3,6 +3,7 @@ import { cn } from "@shared/lib/cn";
 import { Icon } from "@shared/ui/icons";
 import { useCapabilities } from "@shared/lib/useCapabilities";
 import { communitiesDestination, messagesDestination, ratingOrFeed } from "@shared/lib/nav";
+import { t } from "@shared/i18n";
 import "./tabbar.css";
 
 // Bottom navigation for the phone layout (design_handoff_kisy_mobile §6): a
@@ -41,7 +42,7 @@ export function TabBar({ onProfile }: Props) {
     ratingOrFeed(caps),
     {
       key: "profile",
-      label: "Профиль",
+      label: t("hub.tabbar.profile"),
       icon: Icon.User,
       onSelect: onProfile,
       match: () => false, // a modal, never an active route
@@ -79,13 +80,13 @@ export function TabBar({ onProfile }: Props) {
   };
 
   return (
-    <nav className="tabbar" aria-label="Основная навигация">
+    <nav className="tabbar" aria-label={t("hub.tabbar.nav")}>
       {left.map(renderSlot)}
 
       <button
         type="button"
         className={cn("tabbar__orb", hubActive && "tabbar__orb--active")}
-        aria-label="Хаб"
+        aria-label={t("hub.tabbar.hub")}
         aria-current={hubActive ? "page" : undefined}
         onClick={() => navigate("/hub")}
       >

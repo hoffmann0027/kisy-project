@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Button, Logo, Modal } from "@shared/ui";
+import { t } from "@shared/i18n";
 import { LegalSections } from "./LegalPage";
 import { LAST_UPDATED, PRIVACY_SECTIONS } from "./privacyContent";
 import { RULES_LAST_UPDATED, RULES_SECTIONS } from "./rulesContent";
@@ -29,6 +30,19 @@ interface Props {
 
 type Doc = "privacy" | "rules" | null;
 
+/** A sentence with a link inside, kept whole for the translator: "{link}" marks where it goes. */
+function WithLink({ text, link }: { text: string; link: ReactNode }) {
+  const at = text.indexOf("{link}");
+  if (at < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      {link}
+      {text.slice(at + "{link}".length)}
+    </>
+  );
+}
+
 export function ConsentScreen({ onAccept, reason = "first-run", busy = false }: Props) {
   const [privacy, setPrivacy] = useState(false);
   const [rules, setRules] = useState(false);
@@ -41,11 +55,9 @@ export function ConsentScreen({ onAccept, reason = "first-run", busy = false }: 
       <article className="legal-card glass-surface consent">
         <header className="legal-head">
           <Logo size={56} className="legal-logo" />
-          <h1 className="legal-title">Добро пожаловать в KISY</h1>
+          <h1 className="legal-title">{t("account.consent.title")}</h1>
           <p className="legal-subtitle">
-            {reason === "account"
-              ? "Правила или политика обновились. Чтобы продолжить, примите их."
-              : "Прежде чем войти или зарегистрироваться, примите два документа."}
+            {reason === "account" ? t("account.consent.updated") : t("account.consent.firstRun")}
           </p>
         </header>
 
@@ -57,32 +69,40 @@ export function ConsentScreen({ onAccept, reason = "first-run", busy = false }: 
             onChange={(e) => setPrivacy(e.target.checked)}
           />
           <span>
-            Я прочитал(а) и принимаю{" "}
-            <button type="button" className="consent__link" onClick={() => setReading("privacy")}>
-              Политику конфиденциальности
-            </button>
+            <WithLink
+              text={t("account.consent.acceptPrivacy")}
+              link={
+                <button type="button" className="consent__link" onClick={() => setReading("privacy")}>
+                  {t("account.consent.privacyLink")}
+                </button>
+              }
+            />
           </span>
         </label>
 
         <label className="consent__row">
           <input type="checkbox" className="consent__box" checked={rules} onChange={(e) => setRules(e.target.checked)} />
           <span>
-            Я прочитал(а) и принимаю{" "}
-            <button type="button" className="consent__link" onClick={() => setReading("rules")}>
-              Правила сообщества
-            </button>
+            <WithLink
+              text={t("account.consent.acceptRules")}
+              link={
+                <button type="button" className="consent__link" onClick={() => setReading("rules")}>
+                  {t("account.consent.rulesLink")}
+                </button>
+              }
+            />
           </span>
         </label>
 
         <Button block disabled={!both} loading={busy} onClick={() => void onAccept()}>
-          Продолжить
+          {t("account.consent.continue")}
         </Button>
-        {!both && <p className="consent__hint">Отметьте оба пункта, чтобы продолжить.</p>}
+        {!both && <p className="consent__hint">{t("account.consent.hint")}</p>}
       </article>
 
       <Modal
         open={reading === "privacy"}
-        title={`Политика конфиденциальности · ${LAST_UPDATED}`}
+        title={`${t("account.legal.privacyTitle")} · ${LAST_UPDATED}`}
         onClose={() => setReading(null)}
       >
         <div className="consent__doc">
@@ -91,7 +111,7 @@ export function ConsentScreen({ onAccept, reason = "first-run", busy = false }: 
       </Modal>
       <Modal
         open={reading === "rules"}
-        title={`Правила сообщества · ${RULES_LAST_UPDATED}`}
+        title={`${t("account.legal.rulesTitle")} · ${RULES_LAST_UPDATED}`}
         onClose={() => setReading(null)}
       >
         <div className="consent__doc">

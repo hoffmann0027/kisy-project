@@ -4,7 +4,8 @@ import { Avatar, Button, Input, Modal, Spinner, toast } from "@shared/ui";
 import { adminApi } from "@shared/api/endpoints";
 import { ROLE_LABELS, roleLabel, type AdminUserFilter, type User } from "@shared/api/types";
 import { useAuthStore } from "@shared/store/auth";
-import { PASSWORD_RULE_TEXT, passwordProblem } from "@shared/lib/password";
+import { passwordProblem, passwordRuleText } from "@shared/lib/password";
+import { t } from "@shared/i18n";
 
 const PAGE = 100;
 
@@ -42,30 +43,30 @@ export function UsersTab() {
   const changeRole = useMutation({
     mutationFn: (args: { id: string; role: number }) => adminApi.changeRole(args.id, args.role),
     onSuccess: () => {
-      toast.success("Роль изменена");
+      toast.success(t("admin.users.roleChanged"));
       qc.invalidateQueries({ queryKey: ["admin", "users"] });
     },
-    onError: () => toast.error("Не удалось изменить роль"),
+    onError: () => toast.error(t("admin.users.roleChangeFailed")),
   });
 
   const toggleActive = useMutation({
     mutationFn: (u: User) => (u.isActive ? adminApi.deactivate(u.id) : adminApi.activate(u.id)),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "users"] }),
-    onError: () => toast.error("Не удалось изменить статус"),
+    onError: () => toast.error(t("admin.users.statusChangeFailed")),
   });
 
   const filters = (
     <div className="admin-users__filters">
       <input
         className="ui-input"
-        placeholder="Логин или имя"
-        aria-label="Поиск пользователей"
+        placeholder={t("admin.users.searchPlaceholder")}
+        aria-label={t("admin.users.searchLabel")}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
-      <select className="ui-input" aria-label="Роль" value={role} onChange={(e) => setRole(e.target.value)}>
-        <option value="">Все роли</option>
-        <option value="basic">Без уровня (basic)</option>
+      <select className="ui-input" aria-label={t("admin.users.roleFilter")} value={role} onChange={(e) => setRole(e.target.value)}>
+        <option value="">{t("admin.users.allRoles")}</option>
+        <option value="basic">{t("admin.users.basicOption")}</option>
         {Object.entries(ROLE_LABELS).map(([lvl, label]) => (
           <option key={lvl} value={lvl}>
             {lvl}. {label}
@@ -74,13 +75,13 @@ export function UsersTab() {
       </select>
       <select
         className="ui-input"
-        aria-label="Статус"
+        aria-label={t("admin.users.statusFilter")}
         value={status}
         onChange={(e) => setStatus(e.target.value as "" | "active" | "inactive")}
       >
-        <option value="">Любой статус</option>
-        <option value="active">Активные</option>
-        <option value="inactive">Отключённые</option>
+        <option value="">{t("admin.users.anyStatus")}</option>
+        <option value="active">{t("admin.users.statusActive")}</option>
+        <option value="inactive">{t("admin.users.statusInactive")}</option>
       </select>
     </div>
   );
@@ -100,17 +101,16 @@ export function UsersTab() {
     <>
       {filters}
       <p className="admin-users__count">
-        {data?.length ?? 0}
-        {hasNextPage ? "+" : ""} {filtered ? "найдено" : "всего"}
+        {t(filtered ? "admin.users.countFound" : "admin.users.countTotal", { n: `${data?.length ?? 0}${hasNextPage ? "+" : ""}` })}
       </p>
-      {data?.length === 0 && <p className="admin-verify__empty">Никого не найдено</p>}
+      {data?.length === 0 && <p className="admin-verify__empty">{t("admin.users.empty")}</p>}
       <table className="table">
         <thead>
           <tr>
-            <th>Пользователь</th>
-            <th>Роль</th>
-            <th>Статус</th>
-            <th style={{ textAlign: "right" }}>Действия</th>
+            <th>{t("admin.users.colUser")}</th>
+            <th>{t("admin.users.colRole")}</th>
+            <th>{t("admin.users.colStatus")}</th>
+            <th style={{ textAlign: "right" }}>{t("admin.users.colActions")}</th>
           </tr>
         </thead>
         <tbody>
@@ -134,9 +134,9 @@ export function UsersTab() {
                   // account that nobody invited, and the server refuses it.
                   <span
                     style={{ color: "var(--color-text-tertiary)" }}
-                    title="Аккаунт зарегистрирован без приглашения и не входит в иерархию уровней"
+                    title={t("admin.users.noLevelHint")}
                   >
-                    Без уровня
+                    {t("admin.users.noLevel")}
                   </span>
                 ) : (
                   <select
@@ -154,20 +154,20 @@ export function UsersTab() {
               </td>
               <td>
                 <span className={u.isActive ? "pill pill--active" : "pill pill--inactive"}>
-                  {u.isActive ? "активен" : "отключён"}
+                  {u.isActive ? t("admin.users.active") : t("admin.users.inactive")}
                 </span>
               </td>
               <td style={{ textAlign: "right" }}>
                 {u.id !== me.id && (
                   <div style={{ display: "inline-flex", gap: 8 }}>
                     <Button variant="ghost" onClick={() => setResetFor(u)}>
-                      Сбросить пароль
+                      {t("admin.users.resetPassword")}
                     </Button>
                     <Button
                       variant={u.isActive ? "danger" : "secondary"}
                       onClick={() => toggleActive.mutate(u)}
                     >
-                      {u.isActive ? "Отключить" : "Включить"}
+                      {u.isActive ? t("admin.users.deactivate") : t("admin.users.activate")}
                     </Button>
                   </div>
                 )}
@@ -178,7 +178,7 @@ export function UsersTab() {
       </table>
       {hasNextPage && (
         <Button variant="ghost" loading={isFetchingNextPage} onClick={() => void fetchNextPage()}>
-          Показать ещё
+          {t("admin.users.loadMore")}
         </Button>
       )}
 
@@ -195,25 +195,25 @@ function ResetPasswordModal({ user, onClose }: { user: User | null; onClose: () 
   const reset = useMutation({
     mutationFn: (id: string) => adminApi.resetPassword(id, pw),
     onSuccess: () => {
-      toast.success("Пароль сброшен, сессии пользователя завершены");
+      toast.success(t("admin.users.resetDone"));
       setPw("");
       onClose();
     },
-    onError: () => toast.error(`Не удалось сбросить пароль (${PASSWORD_RULE_TEXT})`),
+    onError: () => toast.error(t("admin.users.resetFailed", { rule: passwordRuleText() })),
   });
 
   return (
-    <Modal open={!!user} title={`Сброс пароля: ${user?.displayName ?? ""}`} onClose={onClose}>
+    <Modal open={!!user} title={t("admin.users.resetTitle", { name: user?.displayName ?? "" })} onClose={onClose}>
       <Input
-        label="Новый пароль"
+        label={t("admin.users.newPassword")}
         type="text"
         value={pw}
         onChange={(e) => setPw(e.target.value)}
-        hint={PASSWORD_RULE_TEXT}
+        hint={passwordRuleText()}
         error={pw ? (problem ?? undefined) : undefined}
       />
       <Button block disabled={!!problem} loading={reset.isPending} onClick={() => user && reset.mutate(user.id)}>
-        Сбросить пароль
+        {t("admin.users.resetPassword")}
       </Button>
     </Modal>
   );

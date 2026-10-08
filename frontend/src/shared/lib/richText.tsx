@@ -4,6 +4,7 @@
 // HTML-injection surface. The source text is stored as-is; formatting is a
 // render concern.
 import { Fragment, type ReactNode } from "react";
+import { t } from "@shared/i18n";
 
 const MENTION = /@[A-Za-z0-9_]{3,32}/;
 const URL = /https?:\/\/[^\s<]+/;
@@ -96,13 +97,13 @@ function CodeBlock({ code }: { code: string }) {
     <span className="rt-codeblock">
       <button
         className="rt-codeblock__copy"
-        title="Копировать"
+        title={t("common.code.copy")}
         onClick={(e) => {
           e.stopPropagation();
           void navigator.clipboard?.writeText(code).catch(() => {});
         }}
       >
-        Копировать
+        {t("common.code.copy")}
       </button>
       <code>{code}</code>
     </span>

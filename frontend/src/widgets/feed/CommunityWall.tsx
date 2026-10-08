@@ -1,4 +1,5 @@
 import { Button, Spinner } from "@shared/ui";
+import { t } from "@shared/i18n";
 import type { Group } from "@shared/api/types";
 import { useCommunityPosts } from "@entities/post/queries";
 import { PostComposer } from "@features/post-compose/PostComposer";
@@ -27,19 +28,13 @@ export function CommunityWall({
       {canPost && <PostComposer communityId={group.id} />}
 
       {membersOnly ? (
-        <div className="feed__empty">
-          Сообщество закрытое: записи видят только участники. Подайте заявку, чтобы вступить.
-        </div>
+        <div className="feed__empty">{t("work.feed.membersOnly")}</div>
       ) : wall.isPending ? (
         <div style={{ display: "flex", justifyContent: "center", padding: 32 }}>
           <Spinner size={28} />
         </div>
       ) : posts.length === 0 ? (
-        <div className="feed__empty">
-          {canPost
-            ? "Пока пусто. Напишите первый пост — его увидят участники сообщества."
-            : "Пока здесь нет постов."}
-        </div>
+        <div className="feed__empty">{canPost ? t("work.feed.wallEmptyCanPost") : t("work.feed.wallEmpty")}</div>
       ) : (
         <>
           {posts.map((post) => (
@@ -51,7 +46,7 @@ export function CommunityWall({
               onClick={() => void wall.fetchNextPage()}
               loading={wall.isFetchingNextPage}
             >
-              Показать ещё
+              {t("work.feed.showMore")}
             </Button>
           )}
         </>

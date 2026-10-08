@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@shared/lib/cn";
 import { useBackHandler } from "@shared/lib/backStack";
 import { handleDownloadClick } from "@shared/lib/mediaSrc";
+import { t } from "@shared/i18n";
 import {
   IDENTITY,
   clampPan,
@@ -265,7 +266,7 @@ export function MediaViewer({ items, index, onClose, onIndexChange }: Props) {
           {index + 1} / {items.length}
         </span>
         {zoomed && (
-          <button className="mviewer__btn" onClick={() => setView(IDENTITY)} title="Вернуть масштаб (0)">
+          <button className="mviewer__btn" onClick={() => setView(IDENTITY)} title={t("common.media.resetZoom")}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="11" cy="11" r="7" />
               <path d="M8 11h6M20 20l-4.35-4.35" strokeLinecap="round" />
@@ -276,14 +277,14 @@ export function MediaViewer({ items, index, onClose, onIndexChange }: Props) {
           className="mviewer__btn"
           href={item.url}
           download={item.fileName}
-          title="Скачать"
+          title={t("common.media.download")}
           onClick={(e) => handleDownloadClick(e, item.url, item.fileName)}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" strokeLinecap="round" />
           </svg>
         </a>
-        <button className="mviewer__btn" onClick={onClose} title="Закрыть (Esc)">
+        <button className="mviewer__btn" onClick={onClose} title={t("common.media.close")}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M18 6 6 18M6 6l12 12" strokeLinecap="round" />
           </svg>
@@ -291,12 +292,12 @@ export function MediaViewer({ items, index, onClose, onIndexChange }: Props) {
       </div>
 
       {index > 0 && !zoomed && (
-        <button className="mviewer__nav mviewer__nav--prev" onClick={prev} aria-label="Предыдущее">
+        <button className="mviewer__nav mviewer__nav--prev" onClick={prev} aria-label={t("common.media.previous")}>
           ‹
         </button>
       )}
       {index < items.length - 1 && !zoomed && (
-        <button className="mviewer__nav mviewer__nav--next" onClick={next} aria-label="Следующее">
+        <button className="mviewer__nav mviewer__nav--next" onClick={next} aria-label={t("common.media.next")}>
           ›
         </button>
       )}

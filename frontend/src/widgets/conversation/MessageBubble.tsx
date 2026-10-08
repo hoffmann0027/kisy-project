@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, useState } from "react";
+import { t, type Key } from "@shared/i18n";
 import { cn } from "@shared/lib/cn";
 import { formatTime } from "@shared/lib/format";
 import { handleDownloadClick } from "@shared/lib/mediaSrc";
@@ -50,29 +51,33 @@ const QUICK_EMOJI = ["👍", "❤️", "😂", "🔥", "👏"];
 // action bar.
 const BUBBLE_CONTROLS = "a, button, input, textarea, audio, video, label, [role='button'], .bubble__actions";
 
-const TIMER_OPTIONS: { ttl: number; label: string }[] = [
-  { ttl: 3600, label: "1 час" },
-  { ttl: 86400, label: "24 часа" },
-  { ttl: 7 * 86400, label: "7 дней" },
+const TIMER_OPTIONS: { ttl: number; label: Key }[] = [
+  { ttl: 3600, label: "chat.timer.hour" },
+  { ttl: 86400, label: "chat.timer.day" },
+  { ttl: 7 * 86400, label: "chat.timer.week" },
 ];
 
 // expiresIn renders a compact countdown label ("исчезнет через 5 мин").
 function expiresIn(iso: string): string {
   const ms = new Date(iso).getTime() - Date.now();
-  if (ms <= 0) return "исчезает…";
+  if (ms <= 0) return t("chat.bubble.expiring");
   const min = Math.round(ms / 60000);
-  if (min < 1) return "исчезнет менее чем через минуту";
-  if (min < 60) return `исчезнет через ${min} мин`;
+  if (min < 1) return t("chat.bubble.expiresUnderMinute");
+  if (min < 60) return t("chat.bubble.expiresInMinutes", { count: min });
   const h = Math.round(min / 60);
-  if (h < 48) return `исчезнет через ${h} ч.`;
-  return `исчезнет через ${Math.round(h / 24)} дн.`;
+  if (h < 48) return t("chat.bubble.expiresInHours", { count: h });
+  return t("chat.bubble.expiresInDays", { count: Math.round(h / 24) });
+}
+
+function forwardedLabel(senderName: string | null | undefined): string {
+  return senderName ? t("chat.bubble.forwardedFrom", { name: senderName }) : t("chat.bubble.forwardedFromUser");
 }
 
 function StatusTick({ status }: { status: DeliveryStatus }) {
-  if (status === "pending") return <span className="tick tick--pending" title="Отправляется">🕓</span>;
-  if (status === "failed") return <span className="tick tick--failed" title="Не отправлено">!</span>;
+  if (status === "pending") return <span className="tick tick--pending" title={t("chat.bubble.statusPending")}>🕓</span>;
+  if (status === "failed") return <span className="tick tick--failed" title={t("chat.bubble.statusFailed")}>!</span>;
   return (
-    <span className={cn("tick", status === "read" && "tick--read")} title={status === "read" ? "Прочитано" : "Отправлено"}>
+    <span className={cn("tick", status === "read" && "tick--read")} title={status === "read" ? t("chat.bubble.statusRead") : t("chat.bubble.statusSent")}>
       <Icon.Check size={14} />
       <Icon.Check size={14} />
     </span>
@@ -175,7 +180,7 @@ export const MessageBubble = memo(function MessageBubble({
   if (message.isDeleted) {
     return (
       <div className={cn("bubble-row", mine ? "bubble-row--out" : "bubble-row--in")}>
-        <div className="bubble bubble--deleted">Сообщение удалено</div>
+        <div className="bubble bubble--deleted">{t("chat.bubble.deleted")}</div>
       </div>
     );
   }
@@ -193,9 +198,9 @@ export const MessageBubble = memo(function MessageBubble({
         </span>
         <div className={cn("bubble", mine ? "bubble--out" : "bubble--in")}>
           {message.forwardedFrom && (
-            <div className="bubble__forwarded">Переслано от {message.forwardedFrom.senderName || "пользователя"}</div>
+            <div className="bubble__forwarded">{forwardedLabel(message.forwardedFrom.senderName)}</div>
           )}
-          <span>{message.text ? renderRichText(message.text) : isLocked ? "🔒 Зашифрованное сообщение" : ""}</span>
+          <span>{message.text ? renderRichText(message.text) : isLocked ? t("chat.bubble.encrypted") : ""}</span>
         </div>
       </div>
     );
@@ -211,7 +216,7 @@ export const MessageBubble = memo(function MessageBubble({
         {actionsOpen && (
         <div className="bubble__actions">
           {QUICK_EMOJI.map((e) => (
-            <button key={e} className="bubble__action" onClick={done(() => onReact(message, e))} title={`Реакция ${e}`}>
+            <button key={e} className="bubble__action" onClick={done(() => onReact(message, e))} title={t("chat.bubble.react", { emoji: e })}>
               {e}
             </button>
           ))}
@@ -220,7 +225,7 @@ export const MessageBubble = memo(function MessageBubble({
               ref={moreRef}
               className="bubble__action bubble__emoji-more"
               onClick={() => setEmojiOpen((v) => !v)}
-              title="Больше эмодзи"
+              title={t("chat.bubble.moreEmoji")}
             >
               <Icon.Plus size={15} />
             </button>
@@ -236,23 +241,23 @@ export const MessageBubble = memo(function MessageBubble({
               />
             )}
           </div>
-          <button className="bubble__action" onClick={done(() => onReply(message))} title="Ответить">
+          <button className="bubble__action" onClick={done(() => onReply(message))} title={t("chat.bubble.reply")}>
             <Icon.Reply size={15} />
           </button>
           {onOpenThread && !message.threadRootId && (
-            <button className="bubble__action" onClick={done(() => onOpenThread(message))} title="Обсудить в треде">
+            <button className="bubble__action" onClick={done(() => onOpenThread(message))} title={t("chat.bubble.discussInThread")}>
               <Icon.Chat size={15} />
             </button>
           )}
           {!message.undecryptable && (
-            <button className="bubble__action" onClick={done(() => onForward(message))} title="Переслать">
+            <button className="bubble__action" onClick={done(() => onForward(message))} title={t("chat.action.forward")}>
               <Icon.Forward size={15} />
             </button>
           )}
           <button
             className="bubble__action"
             onClick={done(() => onPin(message, !message.pinnedAt))}
-            title={message.pinnedAt ? "Открепить" : "Закрепить"}
+            title={message.pinnedAt ? t("chat.action.unpin") : t("chat.action.pin")}
           >
             <Icon.Pin size={15} />
           </button>
@@ -261,7 +266,7 @@ export const MessageBubble = memo(function MessageBubble({
               <button
                 className="bubble__action bubble__timer-toggle"
                 onClick={() => setTimerOpen((v) => !v)}
-                title={message.expiresAt ? expiresIn(message.expiresAt) : "Таймер исчезновения"}
+                title={message.expiresAt ? expiresIn(message.expiresAt) : t("chat.bubble.timer")}
               >
                 <Icon.Timer size={15} />
               </button>
@@ -273,7 +278,7 @@ export const MessageBubble = memo(function MessageBubble({
                       className="chatmenu__item"
                       onClick={done(() => onSetExpiry(message, o.ttl))}
                     >
-                      {o.label}
+                      {t(o.label)}
                     </button>
                   ))}
                   {message.expiresAt && (
@@ -281,7 +286,7 @@ export const MessageBubble = memo(function MessageBubble({
                       className="chatmenu__item"
                       onClick={done(() => onSetExpiry(message, null))}
                     >
-                      Убрать таймер
+                      {t("chat.bubble.removeTimer")}
                     </button>
                   )}
                 </div>
@@ -289,19 +294,19 @@ export const MessageBubble = memo(function MessageBubble({
             </div>
           )}
           {canEdit && (
-            <button className="bubble__action" onClick={done(startEdit)} title="Изменить">
+            <button className="bubble__action" onClick={done(startEdit)} title={t("chat.action.edit")}>
               <Icon.Edit size={15} />
             </button>
           )}
           {canDelete && (
-            <button className="bubble__action" onClick={done(() => onDelete(message))} title="Удалить">
+            <button className="bubble__action" onClick={done(() => onDelete(message))} title={t("chat.action.delete")}>
               <Icon.Trash size={15} />
             </button>
           )}
           {/* Жалоба — только на чужое сообщение: на своё жаловаться незачем,
               и сервер такую жалобу всё равно отклонит. */}
           {!mine && (
-            <button className="bubble__action" onClick={done(() => setReportOpen(true))} title="Пожаловаться">
+            <button className="bubble__action" onClick={done(() => setReportOpen(true))} title={t("chat.action.report")}>
               <Icon.Flag size={15} />
             </button>
           )}
@@ -312,14 +317,14 @@ export const MessageBubble = memo(function MessageBubble({
         )}
 
         {message.forwardedFrom && (
-          <div className="bubble__forwarded">Переслано от {message.forwardedFrom.senderName || "пользователя"}</div>
+          <div className="bubble__forwarded">{forwardedLabel(message.forwardedFrom.senderName)}</div>
         )}
 
         {replyPreview && (
           <button
             className="bubble__reply bubble__reply--btn"
             onClick={() => onJumpToReply?.(replyTargetId ?? null)}
-            title="Перейти к сообщению"
+            title={t("chat.bubble.goToMessage")}
           >
             {replyPreview}
           </button>
@@ -370,16 +375,16 @@ export const MessageBubble = memo(function MessageBubble({
             />
             <div className="bubble__edit-actions">
               <button className="bubble__edit-btn" onClick={() => setEditing(false)}>
-                Отмена
+                {t("chat.action.cancel")}
               </button>
               <button className="bubble__edit-btn bubble__edit-btn--save" onClick={saveEdit}>
-                Сохранить
+                {t("chat.action.save")}
               </button>
             </div>
           </div>
         ) : isLocked ? (
-          <span className="bubble__locked" title="Сообщение зашифровано ключом, которого нет на этом устройстве">
-            🔒 Зашифрованное сообщение
+          <span className="bubble__locked" title={t("chat.bubble.encryptedHint")}>
+            {t("chat.bubble.encrypted")}
           </span>
         ) : (
           <span>{message.text ? renderRichText(message.text) : null}</span>
@@ -393,11 +398,11 @@ export const MessageBubble = memo(function MessageBubble({
               <Icon.Timer size={12} />
             </span>
           )}
-          {message.editedAt && <span className="bubble__edited">изменено</span>}
+          {message.editedAt && <span className="bubble__edited">{t("chat.bubble.edited")}</span>}
           {formatTime(message.createdAt)}
           {mine && status && <StatusTick status={status} />}
           {mine && message.readTotal != null && (
-            <span className="bubble__reads" title={`Прочитали ${message.readCount} из ${message.readTotal}`}>
+            <span className="bubble__reads" title={t("chat.bubble.readBy", { read: message.readCount ?? 0, total: message.readTotal })}>
               <Icon.Check size={13} />
               {message.readCount}/{message.readTotal}
             </span>
@@ -422,7 +427,7 @@ export const MessageBubble = memo(function MessageBubble({
         {onOpenThread && (message.threadReplyCount ?? 0) > 0 && (
           <button className="bubble__thread" onClick={() => onOpenThread(message)}>
             <Icon.Chat size={13} />
-            {message.threadReplyCount === 1 ? "1 ответ" : `Ответы: ${message.threadReplyCount}`}
+            {t("chat.bubble.threadReplies", { count: message.threadReplyCount ?? 0 })}
             {message.threadLastReplyAt && <span className="bubble__thread-time">· {formatTime(message.threadLastReplyAt)}</span>}
           </button>
         )}

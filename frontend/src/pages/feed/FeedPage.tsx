@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button, Spinner } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import type { FeedSort } from "@shared/api/types";
+import { t } from "@shared/i18n";
 import { useFeed } from "@entities/post/queries";
 import { PostCard } from "@widgets/feed/PostCard";
 import "@widgets/feed/feed.css";
@@ -22,8 +23,8 @@ export function FeedPage() {
   return (
     <div className="feed">
       <header className="feed__head">
-        <h1 className="feed__title">Лента</h1>
-        <div className="feed__sort" role="tablist" aria-label="Сортировка ленты">
+        <h1 className="feed__title">{t("work.feed.title")}</h1>
+        <div className="feed__sort" role="tablist" aria-label={t("work.feed.sortLabel")}>
           {(["popular", "new"] as FeedSort[]).map((value) => (
             <button
               key={value}
@@ -33,7 +34,7 @@ export function FeedPage() {
               className={`feed__sort-btn${sort === value ? " feed__sort-btn--active" : ""}`}
               onClick={() => setSort(value)}
             >
-              {value === "popular" ? "Популярные" : "Новые"}
+              {value === "popular" ? t("work.feed.sortPopular") : t("work.feed.sortNew")}
             </button>
           ))}
         </div>
@@ -49,8 +50,7 @@ export function FeedPage() {
             <div style={{ marginBottom: 10, color: "var(--color-text-tertiary)" }}>
               <Icon.Board size={36} />
             </div>
-            Здесь появятся посты открытых сообществ. Вступите в сообщество или создайте своё — и лента
-            оживёт.
+            {t("work.feed.empty")}
           </div>
         ) : (
           <>
@@ -63,7 +63,7 @@ export function FeedPage() {
                 onClick={() => void feed.fetchNextPage()}
                 loading={feed.isFetchingNextPage}
               >
-                Показать ещё
+                {t("work.feed.showMore")}
               </Button>
             )}
           </>

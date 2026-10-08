@@ -3,16 +3,17 @@
 // mode (every participant sees the change); expired messages are
 // hard-deleted server-side and purged from local caches.
 import { useEffect, useRef, useState } from "react";
+import { t, type Key } from "@shared/i18n";
 import { Icon } from "@shared/ui/icons";
 import { useBackHandler } from "@shared/lib/backStack";
 import { toast } from "@shared/ui";
 import type { ChatType } from "@shared/api/types";
 import { ttlLabel, useDisappearSetting, useSetDisappearing } from "@entities/chat/disappearing";
 
-const OPTIONS: { ttl: number; label: string }[] = [
-  { ttl: 3600, label: "1 час" },
-  { ttl: 86400, label: "24 часа" },
-  { ttl: 7 * 86400, label: "7 дней" },
+const OPTIONS: { ttl: number; label: Key }[] = [
+  { ttl: 3600, label: "chat.timer.hour" },
+  { ttl: 86400, label: "chat.timer.day" },
+  { ttl: 7 * 86400, label: "chat.timer.week" },
 ];
 
 interface Props {
@@ -41,8 +42,8 @@ export function DisappearMenu({ chatType, chatId }: Props) {
   const apply = (ttl: number | null) => {
     setDisappearing.mutate(ttl, {
       onSuccess: () =>
-        toast.success(ttl ? `Новые сообщения исчезают через ${ttlLabel(ttl)}` : "Исчезающие сообщения выключены"),
-      onError: () => toast.error("Не удалось изменить таймер"),
+        toast.success(ttl ? t("chat.disappear.enabled", { ttl: ttlLabel(ttl) }) : t("chat.disappear.disabled")),
+      onError: () => toast.error(t("chat.timer.changeFailed")),
     });
     setOpen(false);
   };
@@ -52,7 +53,7 @@ export function DisappearMenu({ chatType, chatId }: Props) {
       <button
         className={`conv__call mutemenu__toggle${active ? " disappear-toggle--active" : ""}`}
         title={
-          active ? `Исчезающие сообщения: ${ttlLabel(setting!.ttlSeconds!)}` : "Исчезающие сообщения"
+          active ? t("chat.disappear.activeTitle", { ttl: ttlLabel(setting!.ttlSeconds!) }) : t("chat.disappear.title")
         }
         onClick={() => setOpen((v) => !v)}
       >
@@ -60,18 +61,19 @@ export function DisappearMenu({ chatType, chatId }: Props) {
       </button>
       {open && (
         <div className="mutemenu__dropdown" role="menu">
-          <div className="schedpick__title">Исчезающие сообщения</div>
+          <div className="schedpick__title">{t("chat.disappear.title")}</div>
           {OPTIONS.map((o) => (
             <button key={o.ttl} className="mutemenu__item" onClick={() => apply(o.ttl)}>
-              {o.label}
+              {t(o.label)}
               {setting?.ttlSeconds === o.ttl && " ✓"}
             </button>
           ))}
           <button className="mutemenu__item" onClick={() => apply(null)}>
-            Выключить{!active && " ✓"}
+            {t("chat.disappear.off")}
+            {!active && " ✓"}
           </button>
           <p className="schedpick__warn" style={{ color: "var(--color-text-tertiary)" }}>
-            Таймер общий для чата: новые сообщения будут удалены безвозвратно по истечении срока.
+            {t("chat.disappear.hint")}
           </p>
         </div>
       )}

@@ -1,6 +1,7 @@
 // Voice note player bubble: play/pause, waveform progress (click to seek),
 // duration, playback speed and the "unlistened" dot.
 import { useMemo } from "react";
+import { t } from "@shared/i18n";
 import { cn } from "@shared/lib/cn";
 import type { Attachment } from "@shared/api/types";
 import { useVoicePlayer } from "./player";
@@ -32,7 +33,7 @@ export function VoiceBubble({ attachment, mine }: Props) {
       <button
         className="voice__play"
         onClick={() => toggle(attachment.id, attachment.url)}
-        aria-label={isPlaying ? "Пауза" : "Слушать голосовое сообщение"}
+        aria-label={isPlaying ? t("chat.voice.pause") : t("chat.voice.play")}
       >
         {isPlaying ? (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -49,7 +50,7 @@ export function VoiceBubble({ attachment, mine }: Props) {
       <div
         className="voice__wave"
         role="slider"
-        aria-label="Позиция воспроизведения"
+        aria-label={t("chat.voice.position")}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round((isActive ? progress : 0) * 100)}
@@ -76,14 +77,14 @@ export function VoiceBubble({ attachment, mine }: Props) {
 
       <div className="voice__meta">
         <span className="voice__time">{formatDuration(shownMs)}</span>
-        {unlistened && <span className="voice__dot" title="Не прослушано" />}
+        {unlistened && <span className="voice__dot" title={t("chat.voice.unplayed")} />}
       </div>
 
       {/* Speed belongs to playback, so it appears only on the note actually
           loaded. Shown on every bubble it pushed the row past the screen edge
           on a 360px phone and just sat there being clipped. */}
       {isActive && (
-        <button className="voice__rate" onClick={cycleRate} title="Скорость воспроизведения">
+        <button className="voice__rate" onClick={cycleRate} title={t("chat.voice.speed")}>
           ×{rate}
         </button>
       )}

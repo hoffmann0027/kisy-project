@@ -4,6 +4,7 @@ import { Button, Spinner, toast } from "@shared/ui";
 import { reportsApi } from "@shared/api/endpoints";
 import type { Report, ReportReason, ReportTargetKind } from "@shared/api/types";
 import { formatRelative } from "@shared/lib/format";
+import { t, type Key } from "@shared/i18n";
 import { reportsKeys } from "./reportsKeys";
 
 // The report queue (E-02). Two things it has to be honest about:
@@ -11,26 +12,26 @@ import { reportsKeys } from "./reportsKeys";
 // five), and that a private message is not readable here — it is encrypted,
 // and a report does not change that.
 
-const REASON_LABEL: Record<ReportReason, string> = {
-  spam: "Спам",
-  abuse: "Оскорбления",
-  fraud: "Мошенничество",
-  illegal: "Запрещённый контент",
-  other: "Другое",
+const REASON_LABEL: Record<ReportReason, Key> = {
+  spam: "admin.reportReason.spam",
+  abuse: "admin.reportReason.abuse",
+  fraud: "admin.reportReason.fraud",
+  illegal: "admin.reportReason.illegal",
+  other: "admin.reportReason.other",
 };
 
-const KIND_LABEL: Record<ReportTargetKind, string> = {
-  user: "Пользователь",
-  message: "Сообщение",
-  post: "Запись",
-  community: "Сообщество",
+const KIND_LABEL: Record<ReportTargetKind, Key> = {
+  user: "admin.reports.kind.user",
+  message: "admin.reports.kind.message",
+  post: "admin.reports.kind.post",
+  community: "admin.reports.kind.community",
 };
 
 const STATUSES = [
-  { value: "open", label: "Открытые" },
-  { value: "resolved", label: "Обработанные" },
-  { value: "rejected", label: "Отклонённые" },
-] as const;
+  { value: "open", label: "admin.reports.status.open" },
+  { value: "resolved", label: "admin.reports.status.resolved" },
+  { value: "rejected", label: "admin.reports.status.rejected" },
+] as const satisfies readonly { value: string; label: Key }[];
 
 export function ReportsTab() {
   const [status, setStatus] = useState<(typeof STATUSES)[number]["value"]>("open");
@@ -46,9 +47,9 @@ export function ReportsTab() {
     mutationFn: ({ id, rejected }: { id: string; rejected: boolean }) => reportsApi.resolve(id, rejected),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "reports"] });
-      toast.success("Жалоба закрыта");
+      toast.success(t("admin.reports.closed"));
     },
-    onError: () => toast.error("Не удалось закрыть жалобу"),
+    onError: () => toast.error(t("admin.reports.closeFailed")),
   });
 
   const counts = summary?.counts;
@@ -58,15 +59,15 @@ export function ReportsTab() {
     <div className="admin__section">
       {counts && (
         <p className="admin__hint">
-          Открытых: {counts.open} · обработанных: {counts.resolved} · отклонённых: {counts.rejected}
-          {counts.hidden > 0 && ` · скрыто записей до решения: ${counts.hidden}`}
+          {t("admin.reports.counts", { open: counts.open, resolved: counts.resolved, rejected: counts.rejected })}
+          {counts.hidden > 0 && ` · ${t("admin.reports.hiddenCount", { hidden: counts.hidden })}`}
         </p>
       )}
 
       <div className="admin__filters">
         {STATUSES.map((s) => (
           <Button key={s.value} variant={status === s.value ? "primary" : "secondary"} onClick={() => setStatus(s.value)}>
-            {s.label}
+            {t(s.label)}
           </Button>
         ))}
       </div>
@@ -74,7 +75,7 @@ export function ReportsTab() {
       {isLoading ? (
         <Spinner />
       ) : reports.length === 0 ? (
-        <p className="admin__empty">Жалоб нет.</p>
+        <p className="admin__empty">{t("admin.reports.empty")}</p>
       ) : (
         <ul className="reports">
           {reports.map((r) => (
@@ -103,8 +104,8 @@ function ReportRow({
   return (
     <li className="reports__row">
       <div className="reports__head">
-        <span className="reports__kind">{KIND_LABEL[report.targetKind]}</span>
-        <span className="reports__reason">{REASON_LABEL[report.reason]}</span>
+        <span className="reports__kind">{t(KIND_LABEL[report.targetKind])}</span>
+        <span className="reports__reason">{t(REASON_LABEL[report.reason])}</span>
         <span className="reports__time">{formatRelative(report.createdAt)}</span>
       </div>
 
@@ -114,28 +115,28 @@ function ReportRow({
         ) : (
           <p className="reports__content reports__content--hidden">
             {report.targetKind === "message"
-              ? "Текст недоступен — личные сообщения зашифрованы"
-              : "Содержимое недоступно"}
+              ? t("admin.reports.messageHidden")
+              : t("admin.reports.contentHidden")}
           </p>
         )}
-        {report.comment && <p className="reports__comment">«{report.comment}»</p>}
+        {report.comment && <p className="reports__comment">{t("admin.reports.comment", { comment: report.comment })}</p>}
       </div>
 
       <div className="reports__meta">
-        <span>Жалоб на это: {report.sameTarget}</span>
-        <span>На автора: {report.againstOwner}</span>
+        <span>{t("admin.reports.sameTarget", { n: report.sameTarget })}</span>
+        <span>{t("admin.reports.againstOwner", { n: report.againstOwner })}</span>
         {report.sameTarget >= 5 && report.targetKind === "post" && (
-          <span className="reports__flag">скрыто из ленты</span>
+          <span className="reports__flag">{t("admin.reports.hiddenFromFeed")}</span>
         )}
       </div>
 
       {report.status === "open" && (
         <div className="reports__actions">
           <Button variant="secondary" disabled={busy} onClick={() => onResolve(true)}>
-            Отклонить
+            {t("admin.reports.reject")}
           </Button>
           <Button disabled={busy} onClick={() => onResolve(false)}>
-            Закрыть как обработанную
+            {t("admin.reports.resolve")}
           </Button>
         </div>
       )}

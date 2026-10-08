@@ -11,6 +11,7 @@ import { FeedbackModal } from "@features/feedback/FeedbackModal";
 import { NewGroupModal } from "@features/new-chat/NewGroupModal";
 import { ConditionsModal } from "@features/conditions/ConditionsModal";
 import { CallHistoryModal } from "@features/call/CallHistoryModal";
+import { t } from "@shared/i18n";
 import "./hub.css";
 
 // The Hub (design_handoff_kisy_mobile §5): the phone layout has room for four
@@ -30,8 +31,8 @@ export function HubPage() {
   const cards = [
     {
       key: "notifications" as const,
-      title: "Уведомления",
-      hint: unread > 0 ? `${unread} ${plural(unread, "новое", "новых", "новых")}` : "Всё прочитано",
+      title: t("hub.page.notifications"),
+      hint: unread > 0 ? t("hub.page.unread", { count: unread }) : t("hub.page.allRead"),
       icon: Icon.Bell,
       tint: "violet",
     },
@@ -39,7 +40,7 @@ export function HubPage() {
     // votes. An account that nobody invited is not part of that body — and the
     // server refuses /polls for it, so the card would only lead to an error.
     ...(caps.canVoteLevels
-      ? [{ key: "voting" as const, title: "Голосования", hint: "Опросы команды", icon: Icon.Vote, tint: "orange" }]
+      ? [{ key: "voting" as const, title: t("hub.page.voting"), hint: t("hub.page.votingHint"), icon: Icon.Vote, tint: "orange" }]
       : []),
     // The feed's one door. An account without a rating board reaches it from
     // the tab bar and the rail instead, and then it must not also sit here —
@@ -48,43 +49,43 @@ export function HubPage() {
       ? [
           {
             key: "feed" as const,
-            title: "Лента",
-            hint: "Посты сообществ",
+            title: t("hub.page.feed"),
+            hint: t("hub.page.feedHint"),
             icon: Icon.Board,
             tint: "green",
             run: () => navigate("/feed"),
           },
         ]
       : []),
-    { key: "notes" as const, title: "Заметки", hint: "Личные записи", icon: Icon.Note, tint: "amber" },
-    { key: "feedback" as const, title: "Отзывы", hint: "Идеи и проблемы", icon: Icon.Feedback, tint: "green" },
+    { key: "notes" as const, title: t("hub.page.notes"), hint: t("hub.page.notesHint"), icon: Icon.Note, tint: "amber" },
+    { key: "feedback" as const, title: t("hub.page.feedback"), hint: t("hub.page.feedbackHint"), icon: Icon.Feedback, tint: "green" },
     // Used to be reachable only from the desktop rail, i.e. not at all on a
     // phone.
-    { key: "calls" as const, title: "Звонки", hint: "История вызовов", icon: Icon.Phone, tint: "violet" },
+    { key: "calls" as const, title: t("hub.page.calls"), hint: t("hub.page.callsHint"), icon: Icon.Phone, tint: "violet" },
   ];
 
   const actions = [
-    { key: "group", label: "Новая группа", icon: Icon.FolderPlus, run: () => setModal("group") },
+    { key: "group", label: t("hub.page.newGroup"), icon: Icon.FolderPlus, run: () => setModal("group") },
     ...(caps.canVoteLevels
-      ? [{ key: "poll", label: "Создать опрос", icon: Icon.Vote, run: () => setModal("voting") }]
+      ? [{ key: "poll", label: t("hub.page.newPoll"), icon: Icon.Vote, run: () => setModal("voting") }]
       : []),
-    { key: "note", label: "Новая заметка", icon: Icon.Edit, run: () => setModal("notes") },
+    { key: "note", label: t("hub.page.newNote"), icon: Icon.Edit, run: () => setModal("notes") },
     // Promotion is movement inside the role hierarchy, so it only exists for
     // accounts that are in it.
     ...(caps.canSeeConditions
-      ? [{ key: "levels", label: "Условия повышения", icon: Icon.Levels, run: () => setModal("conditions") }]
+      ? [{ key: "levels", label: t("hub.page.conditions"), icon: Icon.Levels, run: () => setModal("conditions") }]
       : []),
     // Invites and user management: the phone has no side rail, so the Hub and
     // the drawer are the two ways in. CEO only, as on the desktop.
     ...(caps.canAdmin
-      ? [{ key: "admin", label: "Администрирование", icon: Icon.Shield, run: () => navigate("/admin") }]
+      ? [{ key: "admin", label: t("hub.page.admin"), icon: Icon.Shield, run: () => navigate("/admin") }]
       : []),
   ];
 
   return (
     <div className="hub">
       <div className="hub__scroll">
-        <h1 className="hub__title">Хаб</h1>
+        <h1 className="hub__title">{t("hub.page.title")}</h1>
 
         <div className="hub__grid">
           {cards.map((c) => (
@@ -107,7 +108,7 @@ export function HubPage() {
           ))}
         </div>
 
-        <div className="hub__section">Быстрые действия</div>
+        <div className="hub__section">{t("hub.page.quickActions")}</div>
         <div className="hub__actions">
           {actions.map((a) => (
             <button key={a.key} type="button" className="hub-action" onClick={a.run}>
@@ -136,13 +137,4 @@ export function HubPage() {
       />
     </div>
   );
-}
-
-/** Russian plural for the unread counter (1 новое, 2 новых, 5 новых). */
-function plural(n: number, one: string, few: string, many: string): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return one;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
-  return many;
 }

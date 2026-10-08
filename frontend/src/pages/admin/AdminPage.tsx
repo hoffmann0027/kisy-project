@@ -6,6 +6,7 @@ import { Button, IconButton, Logo } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import { adminApi } from "@shared/api/endpoints";
 import { useAuthStore } from "@shared/store/auth";
+import { t, type Key } from "@shared/i18n";
 import { AnnouncementsModal } from "@features/announcements/AnnouncementsModal";
 import { UsersTab } from "./UsersTab";
 import { InvitesTab } from "./InvitesTab";
@@ -21,16 +22,16 @@ import { UpdatesTab } from "./UpdatesTab";
 // strip across the top on a phone — with "Обзор" first, and the three things
 // done most often as buttons in the header.
 
-const SECTIONS: { id: AdminSection; label: string; icon: ReactNode }[] = [
-  { id: "overview", label: "Обзор", icon: <Icon.Grid /> },
-  { id: "users", label: "Пользователи", icon: <Icon.Users /> },
-  { id: "invites", label: "Приглашения", icon: <Icon.Plus /> },
-  { id: "verification", label: "Верификация", icon: <Icon.Check /> },
-  { id: "communities", label: "Сообщества", icon: <Icon.Community /> },
-  { id: "reports", label: "Жалобы", icon: <Icon.Flag /> },
-  { id: "updates", label: "Обновления", icon: <Icon.Send /> },
-  { id: "deleted", label: "Удалённые", icon: <Icon.Trash /> },
-  { id: "audit", label: "Аудит", icon: <Icon.Shield /> },
+const SECTIONS: { id: AdminSection; label: Key; icon: ReactNode }[] = [
+  { id: "overview", label: "admin.nav.overview", icon: <Icon.Grid /> },
+  { id: "users", label: "admin.nav.users", icon: <Icon.Users /> },
+  { id: "invites", label: "admin.nav.invites", icon: <Icon.Plus /> },
+  { id: "verification", label: "admin.nav.verification", icon: <Icon.Check /> },
+  { id: "communities", label: "admin.nav.communities", icon: <Icon.Community /> },
+  { id: "reports", label: "admin.nav.reports", icon: <Icon.Flag /> },
+  { id: "updates", label: "admin.nav.updates", icon: <Icon.Send /> },
+  { id: "deleted", label: "admin.nav.deleted", icon: <Icon.Trash /> },
+  { id: "audit", label: "admin.nav.audit", icon: <Icon.Shield /> },
 ];
 
 export function AdminPage() {
@@ -53,12 +54,12 @@ export function AdminPage() {
 
   return (
     <div className="admin admin--panel">
-      <aside className="admin-nav" aria-label="Разделы администрирования">
+      <aside className="admin-nav" aria-label={t("admin.nav.ariaLabel")}>
         <div className="admin-nav__brand">
           <Logo size={36} />
           <div>
             <div className="admin-nav__name">KISY</div>
-            <div className="admin-nav__role">Панель CEO</div>
+            <div className="admin-nav__role">{t("admin.nav.role")}</div>
           </div>
         </div>
         <nav className="admin-nav__list">
@@ -72,7 +73,7 @@ export function AdminPage() {
               <span className="admin-nav__icon" aria-hidden="true">
                 {s.icon}
               </span>
-              <span>{s.label}</span>
+              <span>{t(s.label)}</span>
               {s.id === "reports" && openReports > 0 && <span className="admin-nav__badge">{openReports}</span>}
             </button>
           ))}
@@ -82,20 +83,20 @@ export function AdminPage() {
       <main className="admin-main">
         <header className="admin-main__head">
           <div>
-            <h1 className="admin__title">С возвращением, {me.displayName}</h1>
-            <p className="admin-main__sub">Что происходит в KISY сегодня</p>
+            <h1 className="admin__title">{t("admin.header.welcome", { name: me.displayName })}</h1>
+            <p className="admin-main__sub">{t("admin.header.subtitle")}</p>
           </div>
           <div className="admin-main__actions">
             <Button variant="secondary" onClick={() => setBroadcast(true)}>
-              Рассылка
+              {t("admin.header.broadcast")}
             </Button>
             <Button variant="secondary" onClick={() => setSection("updates")}>
-              Новая версия
+              {t("admin.header.newVersion")}
             </Button>
             <Button variant="secondary" onClick={showStatus}>
-              Состояние систем
+              {t("admin.header.systemStatus")}
             </Button>
-            <IconButton label="Назад к чатам" onClick={() => navigate("/")}>
+            <IconButton label={t("admin.header.backToChats")} onClick={() => navigate("/")}>
               <Icon.Back />
             </IconButton>
           </div>

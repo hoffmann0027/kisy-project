@@ -1,3 +1,4 @@
+import { t } from "@shared/i18n";
 import "./VerifiedBadge.css";
 
 // The verification mark: an octagonal seal with a check.
@@ -27,7 +28,7 @@ interface Props {
 
 export function VerifiedBadge({ size = 14, subject = "user", className }: Props) {
   const detailed = size >= 20;
-  const label = subject === "group" ? "Подтверждённое сообщество" : "Подтверждённый аккаунт";
+  const label = subject === "group" ? t("common.verified.community") : t("common.verified.account");
   return (
     <svg
       className={["verified-badge", className].filter(Boolean).join(" ")}

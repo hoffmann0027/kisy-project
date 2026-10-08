@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { currentLang } from "@shared/i18n";
 
 // Cloudflare Turnstile on the sign-up form. The server refuses a sign-up
 // without a token this widget produced (403 CAPTCHA_FAILED), so the page
@@ -102,7 +103,7 @@ export const TurnstileWidget = forwardRef<TurnstileHandle, Props>(function Turns
           sitekey: siteKey,
           theme: currentScheme(),
           appearance: "interaction-only",
-          language: "ru",
+          language: currentLang(),
           callback: (token) => handlers.current.onToken(token),
           "expired-callback": () => handlers.current.onToken(null),
           "error-callback": () => {

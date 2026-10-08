@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar, Button, Spinner, VerifiedName, toast } from "@shared/ui";
 import { adminApi } from "@shared/api/endpoints";
 import { formatRelative } from "@shared/lib/format";
+import { t } from "@shared/i18n";
 
 // The verification mark: find an account or a group/community, give the mark
 // or take it away. Every change lands in the audit log (the "Аудит" tab) with
@@ -32,26 +33,26 @@ export function VerificationTab() {
   const setUser = useMutation({
     mutationFn: (a: { id: string; verified: boolean }) => adminApi.setUserVerified(a.id, a.verified),
     onSuccess: (_r, a) => {
-      toast.success(a.verified ? "Галочка выдана" : "Галочка снята");
+      toast.success(a.verified ? t("admin.verification.granted") : t("admin.verification.revoked"));
       void refresh();
     },
-    onError: () => toast.error("Не удалось изменить верификацию"),
+    onError: () => toast.error(t("admin.verification.failed")),
   });
   const setGroup = useMutation({
     mutationFn: (a: { id: string; verified: boolean }) => adminApi.setGroupVerified(a.id, a.verified),
     onSuccess: (_r, a) => {
-      toast.success(a.verified ? "Галочка выдана" : "Галочка снята");
+      toast.success(a.verified ? t("admin.verification.granted") : t("admin.verification.revoked"));
       void refresh();
     },
-    onError: () => toast.error("Не удалось изменить верификацию"),
+    onError: () => toast.error(t("admin.verification.failed")),
   });
 
   return (
     <div className="admin-verify">
       <input
         className="ui-input"
-        placeholder="Логин, имя или название сообщества"
-        aria-label="Поиск для верификации"
+        placeholder={t("admin.verification.searchPlaceholder")}
+        aria-label={t("admin.verification.searchLabel")}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
@@ -62,8 +63,8 @@ export function VerificationTab() {
         </div>
       ) : (
         <>
-          <h3 className="admin-verify__heading">Пользователи</h3>
-          {data?.users.length === 0 && <p className="admin-verify__empty">Никого не найдено</p>}
+          <h3 className="admin-verify__heading">{t("admin.verification.users")}</h3>
+          {data?.users.length === 0 && <p className="admin-verify__empty">{t("admin.verification.noUsers")}</p>}
           <ul className="admin-verify__list">
             {data?.users.map((u) => (
               <li key={u.id} className="admin-verify__row">
@@ -72,7 +73,7 @@ export function VerificationTab() {
                   <VerifiedName name={u.displayName} verified={!!u.verifiedAt} />
                   <span className="admin-verify__sub">
                     @{u.username}
-                    {u.verifiedAt && ` · с ${formatRelative(u.verifiedAt)}`}
+                    {u.verifiedAt && ` · ${t("admin.verification.since", { when: formatRelative(u.verifiedAt) })}`}
                   </span>
                 </div>
                 <Button
@@ -80,14 +81,14 @@ export function VerificationTab() {
                   loading={setUser.isPending && setUser.variables?.id === u.id}
                   onClick={() => setUser.mutate({ id: u.id, verified: !u.verifiedAt })}
                 >
-                  {u.verifiedAt ? "Снять" : "Выдать"}
+                  {u.verifiedAt ? t("admin.verification.revoke") : t("admin.verification.grant")}
                 </Button>
               </li>
             ))}
           </ul>
 
-          <h3 className="admin-verify__heading">Группы и сообщества</h3>
-          {data?.groups.length === 0 && <p className="admin-verify__empty">Ничего не найдено</p>}
+          <h3 className="admin-verify__heading">{t("admin.verification.groups")}</h3>
+          {data?.groups.length === 0 && <p className="admin-verify__empty">{t("admin.verification.noGroups")}</p>}
           <ul className="admin-verify__list">
             {data?.groups.map((g) => (
               <li key={g.id} className="admin-verify__row">
@@ -95,8 +96,8 @@ export function VerificationTab() {
                 <div className="admin-verify__who">
                   <VerifiedName name={g.name} verified={!!g.verifiedAt} subject="group" />
                   <span className="admin-verify__sub">
-                    {g.kind === "community" ? "Сообщество" : "Группа"}
-                    {g.verifiedAt && ` · с ${formatRelative(g.verifiedAt)}`}
+                    {g.kind === "community" ? t("admin.groupKind.community") : t("admin.groupKind.group")}
+                    {g.verifiedAt && ` · ${t("admin.verification.since", { when: formatRelative(g.verifiedAt) })}`}
                   </span>
                 </div>
                 <Button
@@ -104,7 +105,7 @@ export function VerificationTab() {
                   loading={setGroup.isPending && setGroup.variables?.id === g.id}
                   onClick={() => setGroup.mutate({ id: g.id, verified: !g.verifiedAt })}
                 >
-                  {g.verifiedAt ? "Снять" : "Выдать"}
+                  {g.verifiedAt ? t("admin.verification.revoke") : t("admin.verification.grant")}
                 </Button>
               </li>
             ))}

@@ -1,5 +1,6 @@
 import { Avatar } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
+import { t } from "@shared/i18n";
 import type { CallPeer } from "./useCall";
 
 export function IncomingCallCard({
@@ -18,19 +19,19 @@ export function IncomingCallCard({
           <Avatar name={peer.displayName} url={peer.avatarUrl} size={96} />
         </div>
         <div className="call-card__name">{peer.displayName}</div>
-        <div className="call-card__status">Входящий аудиозвонок…</div>
+        <div className="call-card__status">{t("hub.call.incoming")}</div>
         <div className="call-actions">
           <div className="call-btn-group">
-            <button className="call-btn call-btn--decline" onClick={onReject} aria-label="Отклонить">
+            <button className="call-btn call-btn--decline" onClick={onReject} aria-label={t("hub.call.decline")}>
               <Icon.PhoneOff size={26} />
             </button>
-            <span className="call-btn__label">Отклонить</span>
+            <span className="call-btn__label">{t("hub.call.decline")}</span>
           </div>
           <div className="call-btn-group">
-            <button className="call-btn call-btn--accept" onClick={onAccept} aria-label="Принять">
+            <button className="call-btn call-btn--accept" onClick={onAccept} aria-label={t("hub.call.accept")}>
               <Icon.Phone size={26} />
             </button>
-            <span className="call-btn__label">Принять</span>
+            <span className="call-btn__label">{t("hub.call.accept")}</span>
           </div>
         </div>
       </div>

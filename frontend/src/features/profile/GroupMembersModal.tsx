@@ -20,6 +20,7 @@ import { useCapabilities } from "@shared/lib/useCapabilities";
 import { ApiError, userFacingError } from "@shared/api/envelope";
 import { AvatarCropper } from "./AvatarCropper";
 import { ReportButton } from "@features/reports/ReportButton";
+import { t, type Key } from "@shared/i18n";
 
 interface Props {
   group: Group;
@@ -30,12 +31,12 @@ interface Props {
 
 const EDITOR_TIER: GroupRole[] = ["owner", "editor", "moderator"];
 
-// Human labels for the in-group roles.
-const GROUP_ROLE_LABEL: Record<GroupRole, string> = {
-  owner: "владелец",
-  editor: "редактор",
-  moderator: "модератор",
-  member: "участник",
+// Human labels for the in-group roles (keys, resolved at render).
+const GROUP_ROLE_LABEL: Record<GroupRole, Key> = {
+  owner: "account.groupMembers.roleOwner",
+  editor: "account.groupMembers.roleEditor",
+  moderator: "account.groupMembers.roleModerator",
+  member: "account.groupMembers.roleMember",
 };
 
 export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
@@ -49,7 +50,7 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
   const updateSettings = useUpdateGroupSettings();
   const setRole = useSetMemberRole();
   const caps = useCapabilities();
-  const noun = group.kind === "community" ? "сообщество" : "группа";
+  const isCommunity = group.kind === "community";
   // The CEO may manage any group; the founder their own.
   const isCEO = caps.canAdmin;
   const isOwner = isCEO || me.id === group.createdBy;
@@ -66,7 +67,10 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
     if (level === group.minRoleLevel) return;
     updateLevel.mutate(
       { groupId: group.id, minRoleLevel: level },
-      { onSuccess: () => toast.success("Уровень группы изменён"), onError: () => toast.error("Не удалось изменить уровень") },
+      {
+        onSuccess: () => toast.success(t("account.groupMembers.levelChanged")),
+        onError: () => toast.error(t("account.groupMembers.levelChangeFailed")),
+      },
     );
   };
 
@@ -75,7 +79,10 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
     if (joinPolicy === group.joinPolicy && postPolicy === group.postPolicy) return;
     updateSettings.mutate(
       { groupId: group.id, joinPolicy, postPolicy },
-      { onSuccess: () => toast.success("Настройки доступа обновлены"), onError: () => toast.error("Не удалось обновить доступ") },
+      {
+        onSuccess: () => toast.success(t("account.groupMembers.accessUpdated")),
+        onError: () => toast.error(t("account.groupMembers.accessUpdateFailed")),
+      },
     );
   };
 
@@ -83,7 +90,7 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
     const role: GroupRole = current === "editor" ? "member" : "editor";
     setRole.mutate(
       { groupId: group.id, userId, role },
-      { onError: () => toast.error("Не удалось изменить роль") },
+      { onError: () => toast.error(t("account.groupMembers.roleChangeFailed")) },
     );
   };
 
@@ -93,22 +100,22 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
   };
 
   const removeGroup = () => {
-    const what = group.kind === "community" ? "сообщество" : "группу";
-    if (!window.confirm(`Удалить ${what} «${group.name}»? Это удалит её чат и доску задач.`)) return;
+    const question = isCommunity ? "account.groupMembers.confirmDeleteCommunity" : "account.groupMembers.confirmDeleteGroup";
+    if (!window.confirm(t(question, { name: group.name }))) return;
     del.mutate(group.id, {
       onSuccess: () => {
-        toast.success(group.kind === "community" ? "Сообщество удалено" : "Группа удалена");
+        toast.success(isCommunity ? t("account.groupMembers.communityDeleted") : t("account.groupMembers.groupDeleted"));
         onClose();
         navigate("/", { replace: true });
       },
-      onError: (e) => toast.error(userFacingError(e, "Не удалось удалить группу")),
+      onError: (e) => toast.error(userFacingError(e, t("account.groupMembers.deleteFailed"))),
     });
   };
 
   const pendingCount = requests?.length ?? 0;
 
   return (
-    <Modal open={open} title={`Участники · ${group.name}`} onClose={onClose}>
+    <Modal open={open} title={t("account.groupMembers.title", { name: group.name })} onClose={onClose}>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         {canManage ? (
           <AvatarCropper name={group.name} url={group.avatarUrl} size={56} onUpload={uploadGroupAvatar} />
@@ -120,7 +127,11 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
             <VerifiedName name={group.name} verified={!!group.verifiedAt} size={20} subject="group" />
           </div>
           <div style={{ color: "var(--color-text-secondary)", fontSize: 14 }}>
-            {canManage ? "Нажмите на аватар, чтобы изменить" : noun[0].toUpperCase() + noun.slice(1)}
+            {canManage
+              ? t("account.groupMembers.tapAvatar")
+              : isCommunity
+                ? t("account.groupMembers.kindCommunity")
+                : t("account.groupMembers.kindGroup")}
           </div>
         </div>
       </div>
@@ -130,13 +141,13 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
           can see is one without a threshold — so it is not shown at all. */}
       {caps.canSeeLevels && (
       <div className="ui-field">
-        <label className="ui-field__label">Уровень доступа</label>
+        <label className="ui-field__label">{t("account.groupMembers.accessLevel")}</label>
         {group.minRoleLevel === null ? (
           // No threshold at all. Not shown as a level, because it is not one:
           // this group is open to everyone, accounts outside the hierarchy
           // included.
           <div className="ui-input" style={{ display: "flex", alignItems: "center" }}>
-            Без ограничения по уровню
+            {t("account.groupMembers.noLevel")}
           </div>
         ) : isCEO ? (
           <select className="ui-input" value={group.minRoleLevel} disabled={updateLevel.isPending} onChange={(e) => changeLevel(Number(e.target.value))}>
@@ -153,38 +164,38 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
         )}
         <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
           {group.minRoleLevel === null
-            ? "Группа открыта всем."
+            ? t("account.groupMembers.openToAll")
             : isCEO
-              ? "Как CEO вы можете менять уровень группы. Она видна пользователям выбранного уровня и выше."
-              : "Группа видна пользователям этого уровня и выше."}
+              ? t("account.groupMembers.ceoLevelHint")
+              : t("account.groupMembers.levelHint")}
         </span>
       </div>
       )}
 
       {canManage && (
         <div className="ui-field">
-          <label className="ui-field__label">Доступ</label>
+          <label className="ui-field__label">{t("account.groupMembers.access")}</label>
           <select
             className="ui-input"
             value={`${group.joinPolicy}:${group.postPolicy}`}
             disabled={updateSettings.isPending}
             onChange={(e) => changeAccess(e.target.value)}
           >
-            <option value="open:all">Публичная · пишут все</option>
-            <option value="open:editors">Публичная · пишут редакторы (канал)</option>
-            <option value="request:all">Закрытая (по заявке) · пишут все</option>
-            <option value="request:editors">Закрытая (по заявке) · пишут редакторы (канал)</option>
+            <option value="open:all">{t("account.groupMembers.accessOpenAll")}</option>
+            <option value="open:editors">{t("account.groupMembers.accessOpenEditors")}</option>
+            <option value="request:all">{t("account.groupMembers.accessRequestAll")}</option>
+            <option value="request:editors">{t("account.groupMembers.accessRequestEditors")}</option>
           </select>
           <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
-            Публичная — вступают сразу; закрытая — по заявке. «Пишут редакторы» — остальные только читают.
-            {caps.canSeeLevels && " Клиренс всегда сильнее этих настроек."}
+            {t("account.groupMembers.accessHint")}
+            {caps.canSeeLevels && ` ${t("account.groupMembers.clearanceHint")}`}
           </span>
         </div>
       )}
 
       {canApprove && pendingCount > 0 && (
         <div className="ui-field">
-          <label className="ui-field__label">Заявки на вступление · {pendingCount}</label>
+          <label className="ui-field__label">{t("account.groupMembers.requests", { count: pendingCount })}</label>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             {requests?.map((u) => (
               <div key={u.id} className="user-row" style={{ cursor: "default" }}>
@@ -197,10 +208,10 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
                   <Button variant="secondary" loading={decide.isPending} onClick={() => decide.mutate({ groupId: group.id, userId: u.id, approve: true })}>
-                    Принять
+                    {t("account.groupMembers.accept")}
                   </Button>
                   <Button variant="ghost" onClick={() => decide.mutate({ groupId: group.id, userId: u.id, approve: false })}>
-                    Отклонить
+                    {t("account.groupMembers.decline")}
                   </Button>
                 </div>
               </div>
@@ -211,7 +222,7 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
 
       {canAdd && !adding && (
         <Button variant="secondary" onClick={() => setAdding(true)}>
-          Добавить участника
+          {t("account.groupMembers.addMember")}
         </Button>
       )}
       {adding && <AddMemberPicker group={group} onDone={() => setAdding(false)} />}
@@ -233,12 +244,16 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
                 </div>
                 <div className="user-row__role">
                   {userSubtitle(m.user)}
-                  {founder ? " · основатель" : m.role !== "member" ? ` · ${GROUP_ROLE_LABEL[m.role]}` : ""}
+                  {founder
+                    ? ` · ${t("account.groupMembers.founder")}`
+                    : m.role !== "member"
+                      ? ` · ${t(GROUP_ROLE_LABEL[m.role])}`
+                      : ""}
                 </div>
               </div>
               {canManage && !founder && (
                 <Button variant="ghost" loading={setRole.isPending} onClick={() => toggleEditor(m.user.id, m.role)}>
-                  {m.role === "editor" ? "Снять редактора" : "Сделать редактором"}
+                  {m.role === "editor" ? t("account.groupMembers.removeEditor") : t("account.groupMembers.makeEditor")}
                 </Button>
               )}
               {/* The one place someone you have never written to is visible:
@@ -248,7 +263,7 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
                 <ReportButton
                   targetKind="user"
                   targetId={m.user.id}
-                  label={`Пожаловаться на ${m.user.displayName}`}
+                  label={t("account.groupMembers.report", { name: m.user.displayName })}
                   className="ui-icon-btn"
                   size={16}
                 />
@@ -261,7 +276,7 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
       {canDelete && (
         <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 14 }}>
           <Button variant="danger" block loading={del.isPending} onClick={removeGroup}>
-            {group.kind === "community" ? "Удалить сообщество" : "Удалить группу"}
+            {isCommunity ? t("account.groupMembers.deleteCommunity") : t("account.groupMembers.deleteGroup")}
           </Button>
         </div>
       )}
@@ -282,16 +297,16 @@ function AddMemberPicker({ group, onDone }: { group: Group; onDone: () => void }
       { groupId: group.id, userId },
       {
         onSuccess: () => {
-          toast.success("Участник добавлен");
+          toast.success(t("account.groupMembers.memberAdded"));
           onDone();
         },
         onError: (e) =>
           toast.error(
             e instanceof ApiError && e.status === 409
-              ? "Уже в группе"
+              ? t("account.groupMembers.alreadyMember")
               : e instanceof ApiError && e.status === 403
-                ? "Добавлять участников может только владелец группы"
-                : "Не удалось добавить (проверьте уровень доступа)",
+                ? t("account.groupMembers.ownerOnly")
+                : t("account.groupMembers.addFailed"),
           ),
       },
     );
@@ -299,7 +314,7 @@ function AddMemberPicker({ group, onDone }: { group: Group; onDone: () => void }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <input className="ui-input" placeholder="Поиск по имени" autoFocus value={query} onChange={(e) => setQuery(e.target.value)} />
+      <input className="ui-input" placeholder={t("account.groupMembers.searchPlaceholder")} autoFocus value={query} onChange={(e) => setQuery(e.target.value)} />
       <div style={{ maxHeight: 200, overflowY: "auto" }}>
         {data?.map((u) => (
           <button key={u.id} className="user-row" onClick={() => pick(u.id)} disabled={add.isPending}>
@@ -316,7 +331,7 @@ function AddMemberPicker({ group, onDone }: { group: Group; onDone: () => void }
         ))}
       </div>
       <Button variant="ghost" onClick={onDone}>
-        Готово
+        {t("account.groupMembers.done")}
       </Button>
     </div>
   );

@@ -6,6 +6,7 @@ import { ChatList } from "@widgets/chat-list/ChatList";
 import { Conversation } from "@widgets/conversation/Conversation";
 import { GroupView } from "@widgets/conversation/GroupView";
 import { AppDrawer } from "@widgets/drawer/AppDrawer";
+import { t } from "@shared/i18n";
 import { Icon } from "@shared/ui/icons";
 import { formatRelative } from "@shared/lib/format";
 import type { Chat, Group } from "@shared/api/types";
@@ -47,7 +48,9 @@ export function MessengerPage() {
 
   const other = activeChat?.otherUser;
   const chatOnline = other ? online.has(other.id) || other.status === "online" : false;
-  const offlineLabel = other?.lastSeen ? `был(а) в сети ${formatRelative(other.lastSeen)}` : "не в сети";
+  const offlineLabel = other?.lastSeen
+    ? t("chat.presence.lastSeen", { when: formatRelative(other.lastSeen) })
+    : t("chat.conv.offline");
 
   return (
     <div className={activeId ? "msgr msgr--chat-open" : "msgr"}>
@@ -86,8 +89,8 @@ export function MessengerPage() {
           <div style={{ opacity: 0.4 }}>
             <Icon.Chat size={64} />
           </div>
-          <div style={{ fontSize: 17, fontWeight: 600, color: "var(--color-text-primary)" }}>Выберите чат</div>
-          <div>Откройте диалог, группу или начните новый</div>
+          <div style={{ fontSize: 17, fontWeight: 600, color: "var(--color-text-primary)" }}>{t("chat.messenger.selectChat")}</div>
+          <div>{t("chat.messenger.selectChatHint")}</div>
         </div>
       )}
 

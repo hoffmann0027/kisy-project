@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button, Modal, Spinner } from "@shared/ui";
-import { PERMISSION_COPY, stateLabel } from "./copy";
+import { permissionCopy, stateLabel } from "./copy";
+import { t } from "@shared/i18n";
 import { actionFor, permissionsFor, type AppPermission } from "./sequence";
 import { usePermissionStates } from "./usePermissionStates";
 import "./permissions.css";
@@ -22,7 +23,7 @@ export function PermissionsModal({ open, onClose }: { open: boolean; onClose: ()
   };
 
   return (
-    <Modal open={open} title="Разрешения" onClose={onClose}>
+    <Modal open={open} title={t("account.permissions.title")} onClose={onClose}>
       {!states ? (
         <div style={{ display: "flex", justifyContent: "center", padding: 24 }}>
           <Spinner />
@@ -31,7 +32,7 @@ export function PermissionsModal({ open, onClose }: { open: boolean; onClose: ()
         <ul className="perm-list">
           {permissionsFor(platform).map((permission) => {
             const state = states[permission];
-            const copy = PERMISSION_COPY[permission];
+            const copy = permissionCopy(permission);
             const action = state ? actionFor(permission, state, platform) : "done";
             const badge = state === "granted" ? " perm-badge--ok" : state === "denied" ? " perm-badge--no" : "";
             return (
@@ -47,7 +48,7 @@ export function PermissionsModal({ open, onClose }: { open: boolean; onClose: ()
                   </p>
                   {(action === "request" || action === "settings") && (
                     <Button variant="secondary" loading={busy === permission} onClick={() => void run(permission)}>
-                      {action === "request" ? "Разрешить" : "Открыть настройки"}
+                      {action === "request" ? t("account.permissions.allow") : t("account.permissions.openSettings")}
                     </Button>
                   )}
                 </div>

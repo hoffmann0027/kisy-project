@@ -3,6 +3,7 @@
 // (right-click / long-press friendly), closes on outside click or Escape.
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { t } from "@shared/i18n";
 import { Icon } from "@shared/ui/icons";
 import { useBackHandler } from "@shared/lib/backStack";
 import { toast } from "@shared/ui";
@@ -58,8 +59,8 @@ export function ChatContextMenu({ target, onClose }: Props) {
     archiveChat.mutate(
       { chatType: target.chatType, chatId: target.chatId, archive: !archived },
       {
-        onSuccess: () => toast.success(archived ? "Чат возвращён из архива" : "Чат в архиве"),
-        onError: () => toast.error("Не удалось изменить архив"),
+        onSuccess: () => toast.success(archived ? t("chat.folders.unarchived") : t("chat.folders.archived")),
+        onError: () => toast.error(t("chat.folders.archiveFailed")),
       },
     );
     onClose();
@@ -68,7 +69,7 @@ export function ChatContextMenu({ target, onClose }: Props) {
   const toggleFolder = (folderId: string, inFolder: boolean) => {
     folderItem.mutate(
       { folderId, chatType: target.chatType, chatId: target.chatId, add: !inFolder },
-      { onError: () => toast.error("Не удалось изменить папку") },
+      { onError: () => toast.error(t("chat.folders.folderFailed")) },
     );
   };
 
@@ -86,7 +87,7 @@ export function ChatContextMenu({ target, onClose }: Props) {
     <div className="chatmenu" style={style} ref={rootRef} role="menu">
       <button className="chatmenu__item" onClick={toggleArchive}>
         <Icon.Archive size={16} />
-        {archived ? "Вернуть из архива" : "В архив"}
+        {archived ? t("chat.folders.unarchive") : t("chat.folders.archive")}
       </button>
       {folders.length > 0 && <div className="chatmenu__divider" />}
       {folders.map((f) => {

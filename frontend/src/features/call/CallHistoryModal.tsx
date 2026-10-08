@@ -5,6 +5,7 @@ import { cn } from "@shared/lib/cn";
 import { formatRelative } from "@shared/lib/format";
 import type { CallLogItem } from "@shared/api/types";
 import { useCallHistory } from "@entities/call/queries";
+import { t } from "@shared/i18n";
 
 interface Props {
   open: boolean;
@@ -15,22 +16,22 @@ function duration(seconds: number): string {
   if (seconds <= 0) return "";
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
-  return m > 0 ? `${m} мин ${s} с` : `${s} с`;
+  return m > 0 ? t("hub.call.durationMinSec", { min: m, sec: s }) : t("hub.call.durationSec", { sec: s });
 }
 
 // statusLabel describes the outcome from the viewer's perspective.
 function statusLabel(c: CallLogItem): string {
   switch (c.status) {
     case "completed":
-      return duration(c.durationSeconds) || "Завершён";
+      return duration(c.durationSeconds) || t("hub.call.logCompleted");
     case "missed":
-      return c.direction === "incoming" ? "Пропущенный" : "Нет ответа";
+      return c.direction === "incoming" ? t("hub.call.logMissed") : t("hub.call.logNoAnswer");
     case "rejected":
-      return c.direction === "incoming" ? "Отклонён вами" : "Отклонён";
+      return c.direction === "incoming" ? t("hub.call.logDeclinedByYou") : t("hub.call.logDeclined");
     case "canceled":
-      return "Отменён";
+      return t("hub.call.logCanceled");
     default:
-      return "Сбой";
+      return t("hub.call.logFailed");
   }
 }
 
@@ -38,7 +39,7 @@ export function CallHistoryModal({ open, onClose }: Props) {
   const { data: calls, isPending } = useCallHistory(open);
 
   return (
-    <Modal open={open} title="История звонков" onClose={onClose}>
+    <Modal open={open} title={t("hub.call.historyTitle")} onClose={onClose}>
       <div className="callhist">
         {isPending && (
           <div style={{ display: "flex", justifyContent: "center", padding: 24 }}>
@@ -46,7 +47,7 @@ export function CallHistoryModal({ open, onClose }: Props) {
           </div>
         )}
         {!isPending && (calls?.length ?? 0) === 0 && (
-          <div className="callhist__empty">Звонков пока нет.</div>
+          <div className="callhist__empty">{t("hub.call.historyEmpty")}</div>
         )}
         {calls?.map((c) => {
           const missed = c.status === "missed" || c.status === "failed";

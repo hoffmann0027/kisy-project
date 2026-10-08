@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { IconButton } from "./IconButton";
 import { useVisualViewport } from "@shared/lib/useVisualViewport";
 import { useBackHandler } from "@shared/lib/backStack";
+import { t } from "@shared/i18n";
 
 interface Props {
   open: boolean;
@@ -74,7 +75,7 @@ export function Modal({ open, title, onClose, children }: Props) {
       >
         <div className="ui-modal__header">
           <h2 className="ui-modal__title">{title}</h2>
-          <IconButton label="Закрыть" onClick={onClose}>
+          <IconButton label={t("common.modal.close")} onClick={onClose}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M18 6 6 18M6 6l12 12" strokeLinecap="round" />
             </svg>

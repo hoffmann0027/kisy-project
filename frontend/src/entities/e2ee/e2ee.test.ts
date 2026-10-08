@@ -189,7 +189,7 @@ import {
   resetMLSState,
   setJoinWaitForTests,
   syncChatDevices,
-  DEVICE_NOT_IN_CHAT,
+  deviceNotInChatText,
   DEVICE_SYNC_INTERVAL_MS,
 } from "./chats";
 
@@ -455,7 +455,7 @@ describe("E2EE private chat orchestration", () => {
 
     const tablet = await makeSession("user-bob");
     await publishPool(tablet, 3);
-    await expect(encryptForChat(tablet, chatId, "user-alice", "никого нет")).rejects.toThrow(DEVICE_NOT_IN_CHAT);
+    await expect(encryptForChat(tablet, chatId, "user-alice", "никого нет")).rejects.toThrow(deviceNotInChatText());
     expect(server.joinRequests).toHaveLength(1);
     // And it built no group of its own.
     expect(server.handshake.filter((h) => h.senderDevice === tablet.identity.deviceId)).toHaveLength(0);

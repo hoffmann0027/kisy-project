@@ -3,6 +3,7 @@
 // (path A, docs/security.md): a scheduled encrypted message can become
 // unreadable if the chat's keys rotate before send time.
 import { useEffect, useRef, useState } from "react";
+import { intlLocale, t } from "@shared/i18n";
 import { Button } from "@shared/ui";
 import { useBackHandler } from "@shared/lib/backStack";
 
@@ -17,6 +18,11 @@ interface Props {
 function toLocalInput(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** A preset's clock time ("20:00", "8:00 PM") in the language on screen. */
+function clock(hours: number): string {
+  return new Date(2000, 0, 1, hours).toLocaleTimeString(intlLocale(), { hour: "numeric", minute: "2-digit" });
 }
 
 function presetTonight(): Date {
@@ -63,15 +69,15 @@ export function SchedulePicker({ e2eeWarning, onPick, onClose }: Props) {
 
   return (
     <div className="schedpick" ref={rootRef} role="menu">
-      <div className="schedpick__title">Отправить позже</div>
+      <div className="schedpick__title">{t("chat.composer.sendLater")}</div>
       <button className="schedpick__item" onClick={() => pick(new Date(Date.now() + 60 * 60 * 1000))}>
-        Через час
+        {t("chat.schedule.inAnHour")}
       </button>
       <button className="schedpick__item" onClick={() => pick(presetTonight())}>
-        Сегодня в 20:00
+        {t("chat.schedule.tonight", { time: clock(20) })}
       </button>
       <button className="schedpick__item" onClick={() => pick(presetTomorrowMorning())}>
-        Завтра в 9:00
+        {t("chat.schedule.tomorrowMorning", { time: clock(9) })}
       </button>
       <div className="schedpick__custom">
         <input
@@ -82,13 +88,12 @@ export function SchedulePicker({ e2eeWarning, onPick, onClose }: Props) {
           onChange={(e) => setCustom(e.target.value)}
         />
         <Button disabled={!customValid} onClick={() => pick(customDate)}>
-          ОК
+          {t("chat.schedule.ok")}
         </Button>
       </div>
       {e2eeWarning && (
         <p className="schedpick__warn">
-          Чат зашифрован: текст шифруется сейчас. Если ключи чата обновятся до отправки, сообщение может
-          прийти нечитаемым.
+          {t("chat.schedule.e2eeWarning")}
         </p>
       )}
     </div>

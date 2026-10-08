@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Avatar, Button, toast } from "@shared/ui";
 import { formatKopecks, parseRublesToKopecks } from "@shared/lib/money";
+import { t } from "@shared/i18n";
 import type { RatingBoard, RatingProject, RatingTask } from "@shared/api/types";
 import { useAuthStore } from "@shared/store/auth";
 import { useRatingMutations } from "@entities/rating/queries";
@@ -9,8 +10,8 @@ type Mutations = ReturnType<typeof useRatingMutations>;
 
 function LevelBadge({ level }: { level: number }) {
   return (
-    <span className="rating-diff rating-diff--level" title={`Доступ: уровень ${level} и выше`}>
-      Ур. {level}
+    <span className="rating-diff rating-diff--level" title={t("work.rating.levelBadgeTitle", { level })}>
+      {t("work.rating.levelShort", { level })}
     </span>
   );
 }
@@ -23,7 +24,7 @@ function LevelControl({ project, m, isCEO }: { project: RatingProject; m: Mutati
   return (
     <select
       className="rating-level-select"
-      title="Уровень доступа (виден с этого уровня и выше)"
+      title={t("work.rating.accessLevelHint")}
       value={project.minLevel}
       onClick={(e) => e.stopPropagation()}
       onChange={(e) => {
@@ -31,13 +32,13 @@ function LevelControl({ project, m, isCEO }: { project: RatingProject; m: Mutati
         if (minLevel === project.minLevel) return;
         m.setProjectLevel.mutate(
           { id: project.id, minLevel },
-          { onError: () => toast.error("Не удалось изменить уровень") },
+          { onError: () => toast.error(t("work.rating.levelChangeFailed")) },
         );
       }}
     >
       {Array.from({ length: 10 }, (_, i) => i + 1).map((lvl) => (
         <option key={lvl} value={lvl}>
-          Ур. {lvl}
+          {t("work.rating.levelShort", { level: lvl })}
         </option>
       ))}
     </select>
@@ -64,29 +65,29 @@ export function RatingKanban({ board, m }: Props) {
     const doneProjects = board.projects
       .filter((p) => p.status === "done")
       .sort((a, b) => b.totalProfitKopecks - a.totalProfitKopecks);
-    const inProgress = active.flatMap((p) => p.tasks.filter((t) => t.status !== "backlog"));
+    const inProgress = active.flatMap((p) => p.tasks.filter((task) => task.status !== "backlog"));
     return { active, inProgress, done: doneProjects };
   }, [board]);
 
   return (
     <div className="rating-board">
-      <Column title="Проекты" count={active.length}>
+      <Column title={t("work.rating.columnProjects")} count={active.length}>
         {isCEO && <CreateProjectForm m={m} />}
-        {active.length === 0 && <Empty text="Пока нет проектов" />}
+        {active.length === 0 && <Empty text={t("work.rating.emptyProjects")} />}
         {active.map((p) => (
           <ProjectCard key={p.id} project={p} m={m} isCEO={isCEO} />
         ))}
       </Column>
 
-      <Column title="В работе" count={inProgress.length}>
-        {inProgress.length === 0 && <Empty text="Нет задач в работе" />}
-        {inProgress.map((t) => (
-          <InProgressCard key={t.id} task={t} m={m} mine={t.assignee?.id === me.id} isCEO={isCEO} />
+      <Column title={t("work.rating.columnInProgress")} count={inProgress.length}>
+        {inProgress.length === 0 && <Empty text={t("work.rating.emptyInProgress")} />}
+        {inProgress.map((task) => (
+          <InProgressCard key={task.id} task={task} m={m} mine={task.assignee?.id === me.id} isCEO={isCEO} />
         ))}
       </Column>
 
-      <Column title="Завершено" count={done.length}>
-        {done.length === 0 && <Empty text="Нет завершённых проектов" />}
+      <Column title={t("work.rating.columnDone")} count={done.length}>
+        {done.length === 0 && <Empty text={t("work.rating.emptyDone")} />}
         {done.map((p) => (
           <DoneProjectCard key={p.id} project={p} m={m} isCEO={isCEO} />
         ))}
@@ -115,7 +116,7 @@ function ProjectCard({ project, m, isCEO }: { project: RatingProject; m: Mutatio
   const [expanded, setExpanded] = useState(false);
   const [taskTitle, setTaskTitle] = useState("");
   const [addingTask, setAddingTask] = useState(false);
-  const backlog = project.tasks.filter((t) => t.status === "backlog");
+  const backlog = project.tasks.filter((task) => task.status === "backlog");
   const activeTasks = project.tasks.length;
 
   const addTask = () => {
@@ -128,18 +129,18 @@ function ProjectCard({ project, m, isCEO }: { project: RatingProject; m: Mutatio
           setTaskTitle("");
           setAddingTask(false);
         },
-        onError: () => toast.error("Не удалось добавить задачу"),
+        onError: () => toast.error(t("work.rating.addTaskFailed")),
       },
     );
   };
 
   const remove = () => {
-    if (!window.confirm(`Удалить проект «${project.title}» со всеми задачами и финансами?`)) return;
-    m.deleteProject.mutate(project.id, { onError: () => toast.error("Не удалось удалить проект") });
+    if (!window.confirm(t("work.rating.confirmDeleteProject", { title: project.title }))) return;
+    m.deleteProject.mutate(project.id, { onError: () => toast.error(t("work.rating.deleteProjectFailed")) });
   };
 
   const take = (taskId: string) =>
-    m.assign.mutate(taskId, { onError: () => toast.error("Задачу уже кто-то взял") });
+    m.assign.mutate(taskId, { onError: () => toast.error(t("work.rating.taskTaken")) });
 
   return (
     <div className="rating-card">
@@ -147,7 +148,7 @@ function ProjectCard({ project, m, isCEO }: { project: RatingProject; m: Mutatio
         <button className="rating-card__header" onClick={() => setExpanded((v) => !v)}>
           <span className={"rating-chevron" + (expanded ? " rating-chevron--open" : "")}>▸</span>
           <span className="rating-card__title">{project.title}</span>
-          <span className="rating-card__count-chip" title="Задач">
+          <span className="rating-card__count-chip" title={t("work.rating.taskCount")}>
             {activeTasks}
           </span>
         </button>
@@ -159,22 +160,26 @@ function ProjectCard({ project, m, isCEO }: { project: RatingProject; m: Mutatio
           {project.description && <div className="rating-card__desc">{project.description}</div>}
 
           <div className="rating-tasks">
-            {backlog.map((t) => (
-              <div key={t.id} className="rating-task">
-                <span className="rating-task__title">{t.title}</span>
+            {backlog.map((task) => (
+              <div key={task.id} className="rating-task">
+                <span className="rating-task__title">{task.title}</span>
                 <div className="rating-inline">
-                  <Button variant="secondary" onClick={() => take(t.id)} loading={m.assign.isPending}>
-                    Взять
+                  <Button variant="secondary" onClick={() => take(task.id)} loading={m.assign.isPending}>
+                    {t("work.rating.take")}
                   </Button>
                   {isCEO && (
-                    <button className="rating-x" title="Удалить задачу" onClick={() => m.deleteTask.mutate(t.id)}>
+                    <button
+                      className="rating-x"
+                      title={t("work.rating.deleteTask")}
+                      onClick={() => m.deleteTask.mutate(task.id)}
+                    >
                       ✕
                     </button>
                   )}
                 </div>
               </div>
             ))}
-            {backlog.length === 0 && <div className="rating-tasks__none">Все задачи разобраны</div>}
+            {backlog.length === 0 && <div className="rating-tasks__none">{t("work.rating.allTasksTaken")}</div>}
           </div>
 
           {isCEO && (
@@ -183,7 +188,7 @@ function ProjectCard({ project, m, isCEO }: { project: RatingProject; m: Mutatio
                 <div className="rating-inline">
                   <input
                     className="ui-input"
-                    placeholder="Название задачи"
+                    placeholder={t("work.rating.taskTitlePlaceholder")}
                     autoFocus
                     value={taskTitle}
                     onChange={(e) => setTaskTitle(e.target.value)}
@@ -195,11 +200,11 @@ function ProjectCard({ project, m, isCEO }: { project: RatingProject; m: Mutatio
                 </div>
               ) : (
                 <button className="rating-link" onClick={() => setAddingTask(true)}>
-                  + Задача
+                  {t("work.rating.addTask")}
                 </button>
               )}
               <button className="rating-link rating-link--danger" onClick={remove}>
-                Удалить проект
+                {t("work.rating.deleteProject")}
               </button>
             </div>
           )}
@@ -225,7 +230,7 @@ function InProgressCard({
     if (next === task.progress) return;
     m.setProgress.mutate(
       { taskId: task.id, progress: next },
-      { onError: () => toast.error("Прогресс меняет только исполнитель") },
+      { onError: () => toast.error(t("work.rating.progressOnlyAssignee")) },
     );
   };
 
@@ -258,12 +263,12 @@ function InProgressCard({
         )}
         {(mine || isCEO) && (
           <button className="rating-link" onClick={() => m.returnTask.mutate(task.id)}>
-            Вернуть
+            {t("work.rating.returnTask")}
           </button>
         )}
         {isCEO && (
           <button className="rating-link rating-link--danger" onClick={() => m.deleteTask.mutate(task.id)}>
-            Удалить
+            {t("work.rating.delete")}
           </button>
         )}
       </div>
@@ -281,11 +286,11 @@ function DoneProjectCard({ project, m, isCEO }: { project: RatingProject; m: Mut
     const inc = parseRublesToKopecks(income);
     const exp = parseRublesToKopecks(expense);
     if (inc === null || exp === null) {
-      toast.error("Введите корректные суммы");
+      toast.error(t("work.rating.invalidAmounts"));
       return;
     }
     if (inc === 0 && exp === 0) {
-      toast.error("Укажите доход или расход");
+      toast.error(t("work.rating.noAmounts"));
       return;
     }
     m.addFinance.mutate(
@@ -297,14 +302,14 @@ function DoneProjectCard({ project, m, isCEO }: { project: RatingProject; m: Mut
           setNote("");
           setOpen(false);
         },
-        onError: () => toast.error("Не удалось внести данные"),
+        onError: () => toast.error(t("work.rating.addFinanceFailed")),
       },
     );
   };
 
   const remove = () => {
-    if (!window.confirm(`Удалить завершённый проект «${project.title}» и его финансы?`)) return;
-    m.deleteProject.mutate(project.id, { onError: () => toast.error("Не удалось удалить проект") });
+    if (!window.confirm(t("work.rating.confirmDeleteDoneProject", { title: project.title }))) return;
+    m.deleteProject.mutate(project.id, { onError: () => toast.error(t("work.rating.deleteProjectFailed")) });
   };
 
   return (
@@ -314,7 +319,7 @@ function DoneProjectCard({ project, m, isCEO }: { project: RatingProject; m: Mut
         <LevelControl project={project} m={m} isCEO={isCEO} />
       </div>
       <div className="rating-profit">
-        <span>Прибыль за всё время</span>
+        <span>{t("work.rating.profitAllTime")}</span>
         <strong className={project.totalProfitKopecks < 0 ? "rating-profit--neg" : "rating-profit--pos"}>
           {formatKopecks(project.totalProfitKopecks)}
         </strong>
@@ -322,25 +327,42 @@ function DoneProjectCard({ project, m, isCEO }: { project: RatingProject; m: Mut
       {isCEO &&
         (open ? (
           <div className="rating-finance">
-            <input className="ui-input" placeholder="Доход, €" inputMode="decimal" value={income} onChange={(e) => setIncome(e.target.value)} />
-            <input className="ui-input" placeholder="Расход, €" inputMode="decimal" value={expense} onChange={(e) => setExpense(e.target.value)} />
-            <input className="ui-input" placeholder="Комментарий (необязательно)" value={note} onChange={(e) => setNote(e.target.value)} />
+            <input
+              className="ui-input"
+              placeholder={t("work.rating.incomePlaceholder")}
+              inputMode="decimal"
+              value={income}
+              onChange={(e) => setIncome(e.target.value)}
+            />
+            <input
+              className="ui-input"
+              placeholder={t("work.rating.expensePlaceholder")}
+              inputMode="decimal"
+              value={expense}
+              onChange={(e) => setExpense(e.target.value)}
+            />
+            <input
+              className="ui-input"
+              placeholder={t("work.rating.notePlaceholder")}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
             <div className="rating-inline">
               <Button variant="ghost" onClick={() => setOpen(false)}>
-                Отмена
+                {t("work.rating.cancel")}
               </Button>
               <Button variant="primary" onClick={submit} loading={m.addFinance.isPending}>
-                Внести
+                {t("work.rating.submitFinance")}
               </Button>
             </div>
           </div>
         ) : (
           <div className="rating-card__actions">
             <button className="rating-link" onClick={() => setOpen(true)}>
-              + Внести доход/расход
+              {t("work.rating.addFinance")}
             </button>
             <button className="rating-link rating-link--danger" onClick={remove}>
-              Удалить
+              {t("work.rating.delete")}
             </button>
           </div>
         ))}
@@ -355,10 +377,10 @@ function CreateProjectForm({ m }: { m: Mutations }) {
   const [description, setDescription] = useState("");
 
   const submit = () => {
-    const t = title.trim();
-    if (!t) return;
+    const name = title.trim();
+    if (!name) return;
     m.createProject.mutate(
-      { title: t, minLevel, description: description.trim() || undefined },
+      { title: name, minLevel, description: description.trim() || undefined },
       {
         onSuccess: () => {
           setTitle("");
@@ -366,7 +388,7 @@ function CreateProjectForm({ m }: { m: Mutations }) {
           setMinLevel(10);
           setOpen(false);
         },
-        onError: () => toast.error("Не удалось создать проект"),
+        onError: () => toast.error(t("work.rating.createProjectFailed")),
       },
     );
   };
@@ -374,31 +396,43 @@ function CreateProjectForm({ m }: { m: Mutations }) {
   if (!open) {
     return (
       <button className="rating-add" onClick={() => setOpen(true)}>
-        + Новый проект
+        {t("work.rating.newProject")}
       </button>
     );
   }
 
   return (
     <div className="rating-card rating-create">
-      <input className="ui-input" placeholder="Название проекта" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} />
-      <textarea className="ui-input" placeholder="Описание (необязательно)" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
+      <input
+        className="ui-input"
+        placeholder={t("work.rating.projectTitlePlaceholder")}
+        autoFocus
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+      />
+      <textarea
+        className="ui-input"
+        placeholder={t("work.rating.descriptionPlaceholder")}
+        rows={2}
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+      />
       <label className="rating-level-label">
-        Уровень доступа (виден с этого уровня и выше)
+        {t("work.rating.accessLevelHint")}
         <select className="ui-input" value={minLevel} onChange={(e) => setMinLevel(Number(e.target.value))}>
           {Array.from({ length: 10 }, (_, i) => i + 1).map((lvl) => (
             <option key={lvl} value={lvl}>
-              Уровень {lvl}
+              {t("work.rating.levelOption", { level: lvl })}
             </option>
           ))}
         </select>
       </label>
       <div className="rating-inline">
         <Button variant="ghost" onClick={() => setOpen(false)}>
-          Отмена
+          {t("work.rating.cancel")}
         </Button>
         <Button variant="primary" onClick={submit} loading={m.createProject.isPending}>
-          Создать
+          {t("work.rating.create")}
         </Button>
       </div>
     </div>

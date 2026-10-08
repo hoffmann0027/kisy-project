@@ -2,6 +2,7 @@ import { useState } from "react";
 import "./voting.css";
 import { Avatar, Button, Modal, Spinner, toast } from "@shared/ui";
 import { cn } from "@shared/lib/cn";
+import { t } from "@shared/i18n";
 import type { Poll, PollOption } from "@shared/api/types";
 import { useAuthStore } from "@shared/store/auth";
 import { usePollMutations, usePolls } from "@entities/poll/queries";
@@ -20,7 +21,7 @@ export function VotingModal({ open, onClose }: Props) {
   const m = usePollMutations();
 
   return (
-    <Modal open={open} title="Голосование" onClose={onClose}>
+    <Modal open={open} title={t("work.poll.title")} onClose={onClose}>
       <div className="poll">
         {isCEO && <CreatePollForm m={m} />}
 
@@ -31,7 +32,7 @@ export function VotingModal({ open, onClose }: Props) {
         )}
         {!isPending && (polls?.length ?? 0) === 0 && (
           <div className="poll__empty">
-            {isCEO ? "Создайте первое голосование выше." : "Пока нет голосований."}
+            {isCEO ? t("work.poll.emptyCeo") : t("work.poll.empty")}
           </div>
         )}
         {polls?.map((p) => (
@@ -63,23 +64,23 @@ function CreatePollForm({ m }: { m: Mutations }) {
     const q = question.trim();
     const opts = options.map((o) => o.trim()).filter(Boolean);
     if (!q) {
-      toast.error("Введите вопрос");
+      toast.error(t("work.poll.enterQuestion"));
       return;
     }
     if (opts.length < 2) {
-      toast.error("Нужно минимум два варианта");
+      toast.error(t("work.poll.minTwoOptions"));
       return;
     }
     m.create.mutate(
       { question: q, options: opts },
-      { onSuccess: reset, onError: () => toast.error("Не удалось создать голосование") },
+      { onSuccess: reset, onError: () => toast.error(t("work.poll.createFailed")) },
     );
   };
 
   if (!open) {
     return (
       <button className="poll__add" onClick={() => setOpen(true)}>
-        + Новое голосование
+        {t("work.poll.new")}
       </button>
     );
   }
@@ -88,7 +89,7 @@ function CreatePollForm({ m }: { m: Mutations }) {
     <div className="poll__create">
       <input
         className="ui-input"
-        placeholder="Вопрос голосования"
+        placeholder={t("work.poll.questionPlaceholder")}
         autoFocus
         maxLength={500}
         value={question}
@@ -99,13 +100,13 @@ function CreatePollForm({ m }: { m: Mutations }) {
           <div key={i} className="poll__option-edit">
             <input
               className="ui-input"
-              placeholder={`Вариант ${i + 1}`}
+              placeholder={t("work.poll.optionPlaceholder", { n: i + 1 })}
               maxLength={200}
               value={o}
               onChange={(e) => setOption(i, e.target.value)}
             />
             {options.length > 2 && (
-              <button className="poll__opt-remove" title="Убрать вариант" onClick={() => removeOption(i)}>
+              <button className="poll__opt-remove" title={t("work.poll.removeOption")} onClick={() => removeOption(i)}>
                 ✕
               </button>
             )}
@@ -115,15 +116,15 @@ function CreatePollForm({ m }: { m: Mutations }) {
       <div className="poll__create-actions">
         {options.length < 10 && (
           <button className="poll__link" onClick={addOption}>
-            + Вариант
+            {t("work.poll.addOption")}
           </button>
         )}
         <div className="poll__spacer" />
         <Button variant="ghost" onClick={reset}>
-          Отмена
+          {t("work.poll.cancel")}
         </Button>
         <Button variant="primary" onClick={submit} loading={m.create.isPending}>
-          Создать
+          {t("work.poll.create")}
         </Button>
       </div>
     </div>
@@ -135,17 +136,17 @@ function PollCard({ poll, m, isCEO }: { poll: Poll; m: Mutations; isCEO: boolean
 
   const vote = (optionId: string) => {
     if (closed || optionId === poll.myOptionId) return;
-    m.vote.mutate(optionId, { onError: () => toast.error("Не удалось проголосовать") });
+    m.vote.mutate(optionId, { onError: () => toast.error(t("work.poll.voteFailed")) });
   };
 
   const close = () => {
-    if (!window.confirm("Завершить голосование? Результат попадёт в логи.")) return;
-    m.close.mutate(poll.id, { onError: () => toast.error("Не удалось завершить") });
+    if (!window.confirm(t("work.poll.confirmClose"))) return;
+    m.close.mutate(poll.id, { onError: () => toast.error(t("work.poll.closeFailed")) });
   };
 
   const remove = () => {
-    if (!window.confirm("Удалить голосование?")) return;
-    m.del.mutate(poll.id, { onError: () => toast.error("Не удалось удалить") });
+    if (!window.confirm(t("work.poll.confirmDelete"))) return;
+    m.del.mutate(poll.id, { onError: () => toast.error(t("work.poll.deleteFailed")) });
   };
 
   return (
@@ -153,7 +154,7 @@ function PollCard({ poll, m, isCEO }: { poll: Poll; m: Mutations; isCEO: boolean
       <div className="poll__card-head">
         <div className="poll__question">{poll.question}</div>
         <span className={cn("poll__status", closed ? "poll__status--closed" : "poll__status--open")}>
-          {closed ? "Завершено" : "Открыто"}
+          {closed ? t("work.poll.statusClosed") : t("work.poll.statusOpen")}
         </span>
       </div>
 
@@ -171,18 +172,16 @@ function PollCard({ poll, m, isCEO }: { poll: Poll; m: Mutations; isCEO: boolean
       </div>
 
       <div className="poll__card-foot">
-        <span className="poll__total">
-          Голосов: {poll.totalVotes}
-        </span>
+        <span className="poll__total">{t("work.poll.totalVotes", { total: poll.totalVotes })}</span>
         {isCEO && (
           <div className="poll__admin">
             {!closed && (
               <button className="poll__link" onClick={close}>
-                Завершить
+                {t("work.poll.close")}
               </button>
             )}
             <button className="poll__link poll__link--danger" onClick={remove}>
-              Удалить
+              {t("work.poll.delete")}
             </button>
           </div>
         )}

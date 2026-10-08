@@ -7,6 +7,7 @@ import { useCapabilities } from "@shared/lib/useCapabilities";
 import { communitiesDestination, ratingOrFeed } from "@shared/lib/nav";
 import { useNotifications } from "@entities/notification/queries";
 import { useChats } from "@entities/chat/queries";
+import { t } from "@shared/i18n";
 
 interface Props {
   onProfile: () => void;
@@ -52,7 +53,7 @@ export function Rail({ onProfile }: Props) {
         >
           <third.icon />
         </button>
-        <button className={cn("rail__item", onChats && "rail__item--active")} title="Чаты" onClick={() => navigate("/")}>
+        <button className={cn("rail__item", onChats && "rail__item--active")} title={t("hub.rail.chats")} onClick={() => navigate("/")}>
           <Icon.Chat />
           {chatUnread > 0 && (
             <span className="rail__item-badge">
@@ -62,14 +63,14 @@ export function Rail({ onProfile }: Props) {
         </button>
         <button
           className={cn("rail__item", onCommunities && "rail__item--active")}
-          title="Сообщества"
+          title={t("hub.rail.communities")}
           onClick={() => navigate("/communities")}
         >
           <Icon.Community />
         </button>
         <button
           className={cn("rail__item", pathname.startsWith("/hub") && "rail__item--active")}
-          title="Хаб"
+          title={t("hub.rail.hub")}
           onClick={() => navigate("/hub")}
         >
           <Icon.Grid />
@@ -80,10 +81,10 @@ export function Rail({ onProfile }: Props) {
           )}
         </button>
       </div>
-      <button className="rail__item" title="Профиль" onClick={onProfile}>
+      <button className="rail__item" title={t("hub.rail.profile")} onClick={onProfile}>
         <Avatar name={user.displayName} url={user.avatarUrl} size={38} />
       </button>
-      <button className="rail__item" title="Выйти" onClick={() => void logout()}>
+      <button className="rail__item" title={t("hub.rail.logout")} onClick={() => void logout()}>
         <Icon.Logout />
       </button>
     </nav>

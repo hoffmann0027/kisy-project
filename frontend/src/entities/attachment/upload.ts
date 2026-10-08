@@ -3,6 +3,7 @@
 // and cancellation. The server decides the limits — nothing is hardcoded.
 import { attachmentsApi } from "@shared/api/endpoints";
 import type { Attachment, AttachmentMeta } from "@shared/api/types";
+import { t } from "@shared/i18n";
 
 /** Files at or below this size skip the chunked flow entirely. */
 export const SINGLE_SHOT_MAX_BYTES = 4 << 20;
@@ -71,8 +72,8 @@ export function fileTypeLabel(fileName: string): string {
 }
 
 export function formatBytes(n: number): string {
-  if (n >= 1 << 30) return `${(n / (1 << 30)).toFixed(1)} ГБ`;
-  if (n >= 1 << 20) return `${(n / (1 << 20)).toFixed(1)} МБ`;
-  if (n >= 1 << 10) return `${Math.round(n / (1 << 10))} КБ`;
-  return `${n} Б`;
+  if (n >= 1 << 30) return t("common.units.gb", { value: (n / (1 << 30)).toFixed(1) });
+  if (n >= 1 << 20) return t("common.units.mb", { value: (n / (1 << 20)).toFixed(1) });
+  if (n >= 1 << 10) return t("common.units.kb", { value: Math.round(n / (1 << 10)) });
+  return t("common.units.bytes", { value: n });
 }

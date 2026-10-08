@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Avatar } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
+import { t, type Key } from "@shared/i18n";
 import type { CallView } from "./useCall";
 import type { CallQuality } from "./quality";
 import { SpeakerControl } from "./SpeakerControl";
@@ -12,32 +13,32 @@ function formatDuration(seconds: number): string {
 }
 
 function connLabel(view: CallView): { text: string; warn: boolean } {
-  if (view.phase === "connecting") return { text: "Соединение…", warn: false };
-  if (view.reconnecting) return { text: "Восстановление связи…", warn: true };
+  if (view.phase === "connecting") return { text: t("hub.call.connecting"), warn: false };
+  if (view.reconnecting) return { text: t("hub.call.reconnecting"), warn: true };
   switch (view.conn) {
     case "connected":
-      if (view.quality === "poor") return { text: "Плохая связь", warn: true };
-      if (view.quality === "fair") return { text: "Связь нестабильна", warn: false };
+      if (view.quality === "poor") return { text: t("hub.call.qualityPoor"), warn: true };
+      if (view.quality === "fair") return { text: t("hub.call.qualityFair"), warn: false };
       return { text: "", warn: false };
     case "disconnected":
-      return { text: "Восстановление связи…", warn: true };
+      return { text: t("hub.call.reconnecting"), warn: true };
     case "failed":
-      return { text: "Соединение потеряно", warn: true };
+      return { text: t("hub.call.connectionLost"), warn: true };
     default:
-      return { text: "Соединение…", warn: false };
+      return { text: t("hub.call.connecting"), warn: false };
   }
 }
 
-const QUALITY_LABEL: Record<CallQuality, string> = {
-  good: "Хорошая связь",
-  fair: "Связь нестабильна",
-  poor: "Плохая связь",
+const QUALITY_LABEL: Record<CallQuality, Key> = {
+  good: "hub.call.qualityGood",
+  fair: "hub.call.qualityFair",
+  poor: "hub.call.qualityPoor",
 };
 
 function QualityBars({ quality }: { quality: CallQuality }) {
   const lit = quality === "good" ? 3 : quality === "fair" ? 2 : 1;
   return (
-    <span className={`call-quality call-quality--${quality}`} role="img" aria-label={QUALITY_LABEL[quality]}>
+    <span className={`call-quality call-quality--${quality}`} role="img" aria-label={t(QUALITY_LABEL[quality])}>
       {[1, 2, 3].map((n) => (
         <span key={n} className={"call-quality__bar" + (n <= lit ? " call-quality__bar--lit" : "")} />
       ))}
@@ -85,7 +86,7 @@ export function OngoingCall({
             {view.quality && !view.reconnecting && <QualityBars quality={view.quality} />}
           </div>
         ) : (
-          <div className="call-card__status">Соединение…</div>
+          <div className="call-card__status">{t("hub.call.connecting")}</div>
         )}
         <div className={"call-card__conn" + (conn.warn ? " call-card__conn--warn" : "")}>{conn.text}</div>
 
@@ -94,18 +95,18 @@ export function OngoingCall({
             <button
               className={"call-btn call-btn--toggle" + (view.muted ? " call-btn--on" : "")}
               onClick={onToggleMute}
-              aria-label={view.muted ? "Включить микрофон" : "Выключить микрофон"}
+              aria-label={view.muted ? t("hub.call.unmuteMic") : t("hub.call.muteMic")}
             >
               {view.muted ? <Icon.MicOff size={22} /> : <Icon.Mic size={22} />}
             </button>
-            <span className="call-btn__label">{view.muted ? "Вкл. микр." : "Микрофон"}</span>
+            <span className="call-btn__label">{view.muted ? t("hub.call.unmuteShort") : t("hub.call.microphone")}</span>
           </div>
           {onToggleSpeaker && <SpeakerControl view={view} onToggle={onToggleSpeaker} />}
           <div className="call-btn-group">
-            <button className="call-btn call-btn--decline" onClick={onHangup} aria-label="Завершить">
+            <button className="call-btn call-btn--decline" onClick={onHangup} aria-label={t("hub.call.hangup")}>
               <Icon.PhoneOff size={26} />
             </button>
-            <span className="call-btn__label">Завершить</span>
+            <span className="call-btn__label">{t("hub.call.hangup")}</span>
           </div>
         </div>
       </div>

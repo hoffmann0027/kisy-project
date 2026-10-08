@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import { Icon } from "@shared/ui/icons";
 import type { Capabilities } from "@shared/lib/useCapabilities";
+import { t } from "@shared/i18n";
 
 /**
  * First-level destinations, in one place.
@@ -19,8 +20,11 @@ import type { Capabilities } from "@shared/lib/useCapabilities";
 
 export interface NavDestination {
   key: string;
-  /** Title on the desktop rail, aria-label on the phone. */
-  label: string;
+  /**
+   * Title on the desktop rail, aria-label on the phone. A getter on each
+   * destination, so it is read in the language on screen at render time.
+   */
+  readonly label: string;
   icon: (p: { size?: number }) => ReactElement;
   to: string;
   /** Whether a pathname lights this destination up. */
@@ -29,7 +33,9 @@ export interface NavDestination {
 
 export const messagesDestination: NavDestination = {
   key: "messages",
-  label: "Сообщения",
+  get label() {
+    return t("common.nav.messages");
+  },
   icon: Icon.Chat,
   to: "/",
   match: (p) => p === "/" || p.startsWith("/chat/"),
@@ -37,7 +43,9 @@ export const messagesDestination: NavDestination = {
 
 export const communitiesDestination: NavDestination = {
   key: "communities",
-  label: "Сообщества",
+  get label() {
+    return t("common.nav.communities");
+  },
   icon: Icon.Community,
   // Groups live under communities, so a group route highlights this one.
   to: "/communities",
@@ -46,7 +54,9 @@ export const communitiesDestination: NavDestination = {
 
 const ratingDestination: NavDestination = {
   key: "rating",
-  label: "Рейтинг",
+  get label() {
+    return t("common.nav.rating");
+  },
   icon: Icon.Trophy,
   to: "/rating",
   match: (p) => p.startsWith("/rating"),
@@ -54,7 +64,9 @@ const ratingDestination: NavDestination = {
 
 const feedDestination: NavDestination = {
   key: "feed",
-  label: "Лента",
+  get label() {
+    return t("common.nav.feed");
+  },
   icon: Icon.Board,
   to: "/feed",
   match: (p) => p.startsWith("/feed"),

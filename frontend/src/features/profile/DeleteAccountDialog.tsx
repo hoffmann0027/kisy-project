@@ -2,20 +2,23 @@ import { useState } from "react";
 import { Button, Input, Modal, toast } from "@shared/ui";
 import { usersApi } from "@shared/api/endpoints";
 import { userFacingError } from "@shared/api/envelope";
+import { t } from "@shared/i18n";
 
 // Deleting your own account. Two deliberate steps — the password and the word
 // — because this cannot be undone: there is no grace period and no restore.
 // What goes and what stays is spelled out here rather than in a help page
 // nobody opens.
-
-export const CONFIRM_WORD = "УДАЛИТЬ";
+//
+// The word is the one of the language on screen; the server accepts the word
+// of every language it supports, so the word typed is sent, not a fixed one.
 
 export function DeleteAccountDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
+  const word = t("account.delete.confirmWord");
 
-  const ready = password.length > 0 && confirm.trim() === CONFIRM_WORD;
+  const ready = password.length > 0 && confirm.trim() === word;
 
   const submit = async () => {
     if (!ready || busy) return;
@@ -26,50 +29,50 @@ export function DeleteAccountDialog({ open, onClose }: { open: boolean; onClose:
       // page holds for the account that no longer exists.
       window.location.replace("/login?deleted=1");
     } catch (e) {
-      toast.error(userFacingError(e, "Не удалось удалить аккаунт"));
+      toast.error(userFacingError(e, t("account.delete.failed")));
       setBusy(false);
     }
   };
 
   return (
-    <Modal open={open} title="Удалить аккаунт" onClose={onClose}>
-      <p className="delete-account__lead">Это действие необратимо — отменить удаление нельзя.</p>
+    <Modal open={open} title={t("account.delete.title")} onClose={onClose}>
+      <p className="delete-account__lead">{t("account.delete.lead")}</p>
 
-      <p className="delete-account__group">Будет удалено:</p>
+      <p className="delete-account__group">{t("account.delete.goes")}</p>
       <ul className="delete-account__list">
-        <li>пароль, все сеансы и устройства;</li>
-        <li>ключи шифрования и уведомления;</li>
-        <li>ваши файлы, заметки и настройки;</li>
-        <li>тексты ваших личных сообщений — и у собеседника тоже.</li>
+        <li>{t("account.delete.goesCredentials")}</li>
+        <li>{t("account.delete.goesKeys")}</li>
+        <li>{t("account.delete.goesFiles")}</li>
+        <li>{t("account.delete.goesDirect")}</li>
       </ul>
 
-      <p className="delete-account__group">Останется:</p>
+      <p className="delete-account__group">{t("account.delete.stays")}</p>
       <ul className="delete-account__list">
-        <li>ваши сообщения в группах и записи в сообществах — от «Удалённого аккаунта»;</li>
-        <li>группы и сообщества, которыми вы управляли, перейдут следующему по управлению;</li>
-        <li>ваш логин не достанется никому другому.</li>
+        <li>{t("account.delete.staysPosts")}</li>
+        <li>{t("account.delete.staysGroups")}</li>
+        <li>{t("account.delete.staysUsername")}</li>
       </ul>
 
       <Input
-        label="Пароль"
+        label={t("account.fields.password")}
         type="password"
         autoComplete="current-password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
       />
       <Input
-        label={`Введите ${CONFIRM_WORD}, чтобы подтвердить`}
-        placeholder={CONFIRM_WORD}
+        label={t("account.delete.typeToConfirm", { word })}
+        placeholder={word}
         value={confirm}
         onChange={(e) => setConfirm(e.target.value)}
       />
 
       <div className="delete-account__actions">
         <Button variant="secondary" block onClick={onClose} disabled={busy}>
-          Отмена
+          {t("account.delete.cancel")}
         </Button>
         <Button variant="danger" block onClick={() => void submit()} disabled={!ready} loading={busy}>
-          Удалить навсегда
+          {t("account.delete.submit")}
         </Button>
       </div>
     </Modal>

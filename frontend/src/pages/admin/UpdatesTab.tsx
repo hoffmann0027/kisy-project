@@ -5,6 +5,8 @@ import { adminApi } from "@shared/api/endpoints";
 import { userFacingError } from "@shared/api/envelope";
 import type { AppBuildCount } from "@shared/api/types";
 import { formatRelative } from "@shared/lib/format";
+import { t } from "@shared/i18n";
+import { interpolate } from "./interpolate";
 
 // "New Update": tell everyone a new version is out — what it is called, what
 // changed, where to get it — and see how many people still run an older
@@ -35,18 +37,18 @@ export function UpdatesTab() {
     mutationFn: () =>
       adminApi.sendRelease({ version: version.trim(), notes: notes.trim(), downloadUrl: link.trim() || undefined }),
     onSuccess: ({ release }) => {
-      toast.success(`Версия ${release.version} объявлена: получателей — ${release.recipientCount}`);
+      toast.success(t("admin.updates.sent", { version: release.version, count: release.recipientCount }));
       setVersion("");
       setNotes("");
       setLink("");
       void qc.invalidateQueries({ queryKey: ["admin", "releases"] });
     },
-    onError: (e) => toast.error(userFacingError(e, "Не удалось объявить версию")),
+    onError: (e) => toast.error(userFacingError(e, t("admin.updates.sendFailed"))),
   });
 
   const submit = () => {
     if (!ready || send.isPending) return;
-    if (!window.confirm(`Отправить всем пользователям уведомление о версии ${version.trim()}?`)) return;
+    if (!window.confirm(t("admin.updates.confirm", { version: version.trim() }))) return;
     send.mutate();
   };
 
@@ -54,41 +56,41 @@ export function UpdatesTab() {
 
   return (
     <div className="dash-updates">
-      <section className="dash-card" aria-label="Объявить новую версию">
+      <section className="dash-card" aria-label={t("admin.updates.announceTitle")}>
         <header className="dash-card__head">
-          <h3 className="dash-card__title">Объявить новую версию</h3>
+          <h3 className="dash-card__title">{t("admin.updates.announceTitle")}</h3>
         </header>
-        <Input label="Версия" placeholder="1.4.0" value={version} maxLength={32} onChange={(e) => setVersion(e.target.value)} />
+        <Input label={t("admin.updates.version")} placeholder="1.4.0" value={version} maxLength={32} onChange={(e) => setVersion(e.target.value)} />
         <div className="ui-field">
           <label className="ui-field__label" htmlFor="release-notes">
-            Что нового
+            {t("admin.updates.notes")}
           </label>
           <textarea
             id="release-notes"
             className="ui-input announce-form__body"
             rows={5}
             maxLength={NOTES_MAX}
-            placeholder={"— Звонки переживают смену сети\n— Новый логотип"}
+            placeholder={t("admin.updates.notesPlaceholder")}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
         </div>
         <Input
-          label="Ссылка на скачивание (необязательно)"
+          label={t("admin.updates.link")}
           placeholder="https://…"
           value={link}
           onChange={(e) => setLink(e.target.value)}
-          error={linkOk ? undefined : "Ссылка должна начинаться с https://"}
+          error={linkOk ? undefined : t("admin.updates.linkHttps")}
         />
-        <p className="announce-form__hint">Уведомление с пушем получат все активные пользователи.</p>
+        <p className="announce-form__hint">{t("admin.updates.hint")}</p>
         <Button disabled={!ready} loading={send.isPending} onClick={submit}>
-          Отправить всем
+          {t("admin.updates.send")}
         </Button>
       </section>
 
-      <section className="dash-card" aria-label="Версии у пользователей">
+      <section className="dash-card" aria-label={t("admin.updates.versionsAria")}>
         <header className="dash-card__head">
-          <h3 className="dash-card__title">Версии приложения у пользователей</h3>
+          <h3 className="dash-card__title">{t("admin.updates.versionsTitle")}</h3>
         </header>
         {isPending ? (
           <div className="dash-loading">
@@ -97,38 +99,42 @@ export function UpdatesTab() {
         ) : share.latest ? (
           <>
             <p className="dash-updates__share">
-              На новейшей сборке ({share.latest.version}): <strong>{share.onLatest}</strong> · на старых:{" "}
-              <strong>{share.older}</strong>
+              {interpolate(t("admin.updates.share", { version: share.latest.version }), {
+                latest: <strong>{share.onLatest}</strong>,
+                older: <strong>{share.older}</strong>,
+              })}
             </p>
             <ul className="dash-list">
               {data!.versions.map((v) => (
                 <li key={v.build} className="dash-list__row">
                   <div>
                     <div className="dash-list__title">{v.version}</div>
-                    <div className="dash-list__sub">сборка {v.build}</div>
+                    <div className="dash-list__sub">{t("admin.updates.build", { build: v.build })}</div>
                   </div>
-                  <span className="dash-list__time">{v.users} чел.</span>
+                  <span className="dash-list__time">{t("admin.updates.users", { count: v.users })}</span>
                 </li>
               ))}
             </ul>
           </>
         ) : (
           <p className="admin-verify__empty">
-            Пока нет данных: версию сообщают сборки приложения начиная с этой, за последние 30 дней.
+            {t("admin.updates.noData")}
           </p>
         )}
       </section>
 
-      <section className="dash-card" aria-label="Объявленные версии">
+      <section className="dash-card" aria-label={t("admin.updates.releasesTitle")}>
         <header className="dash-card__head">
-          <h3 className="dash-card__title">Объявленные версии</h3>
+          <h3 className="dash-card__title">{t("admin.updates.releasesTitle")}</h3>
         </header>
-        {!isPending && (data?.releases.length ?? 0) === 0 && <p className="admin-verify__empty">Ещё ничего не объявляли</p>}
+        {!isPending && (data?.releases.length ?? 0) === 0 && <p className="admin-verify__empty">{t("admin.updates.noReleases")}</p>}
         <ul className="dash-list">
           {data?.releases.map((r) => (
             <li key={r.id} className="dash-release">
               <div className="dash-list__title">
-                {r.version} <span className="dash-list__sub">· {formatRelative(r.createdAt)} · получателей: {r.recipientCount}</span>
+                {r.version} <span className="dash-list__sub">
+                  · {formatRelative(r.createdAt)} · {t("admin.updates.recipients", { count: r.recipientCount })}
+                </span>
               </div>
               <div className="dash-release__notes">{r.notes}</div>
               {r.downloadUrl && (

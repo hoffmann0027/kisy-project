@@ -7,6 +7,7 @@ import { useBackHandler } from "@shared/lib/backStack";
 import { toast } from "@shared/ui";
 import type { ChatType } from "@shared/api/types";
 import { isMuted, useMuteChat, useMutes } from "@entities/notif-prefs/queries";
+import { t } from "@shared/i18n";
 
 const HOUR = 3600;
 
@@ -33,12 +34,13 @@ export function MuteMenu({ chatType, chatId }: Props) {
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
-  const doMute = (untilSeconds?: number, label?: string) => {
+  // `done` is the whole confirmation, for how long included.
+  const doMute = (untilSeconds: number | undefined, done: string) => {
     muteChat.mutate(
       { chatType, chatId, untilSeconds, mute: true },
       {
-        onSuccess: () => toast.success(label ? `Уведомления отключены (${label})` : "Уведомления отключены"),
-        onError: () => toast.error("Не удалось отключить уведомления"),
+        onSuccess: () => toast.success(done),
+        onError: () => toast.error(t("account.mute.muteFailed")),
       },
     );
     setOpen(false);
@@ -47,8 +49,8 @@ export function MuteMenu({ chatType, chatId }: Props) {
     muteChat.mutate(
       { chatType, chatId, mute: false },
       {
-        onSuccess: () => toast.success("Уведомления включены"),
-        onError: () => toast.error("Не удалось включить уведомления"),
+        onSuccess: () => toast.success(t("account.mute.unmuted")),
+        onError: () => toast.error(t("account.mute.unmuteFailed")),
       },
     );
     setOpen(false);
@@ -58,7 +60,7 @@ export function MuteMenu({ chatType, chatId }: Props) {
     <div className="mutemenu" ref={rootRef}>
       <button
         className="conv__call mutemenu__toggle"
-        title={muted ? "Уведомления отключены" : "Уведомления"}
+        title={muted ? t("account.mute.muted") : t("account.mute.title")}
         onClick={() => setOpen((v) => !v)}
       >
         {muted ? <Icon.BellOff size={20} /> : <Icon.Bell size={20} />}
@@ -67,18 +69,18 @@ export function MuteMenu({ chatType, chatId }: Props) {
         <div className="mutemenu__dropdown" role="menu">
           {muted ? (
             <button className="mutemenu__item" onClick={doUnmute}>
-              Включить уведомления
+              {t("account.mute.unmute")}
             </button>
           ) : (
             <>
-              <button className="mutemenu__item" onClick={() => doMute(HOUR, "1 час")}>
-                Отключить на 1 час
+              <button className="mutemenu__item" onClick={() => doMute(HOUR, t("account.mute.mutedFor1h"))}>
+                {t("account.mute.mute1h")}
               </button>
-              <button className="mutemenu__item" onClick={() => doMute(8 * HOUR, "8 часов")}>
-                Отключить на 8 часов
+              <button className="mutemenu__item" onClick={() => doMute(8 * HOUR, t("account.mute.mutedFor8h"))}>
+                {t("account.mute.mute8h")}
               </button>
-              <button className="mutemenu__item" onClick={() => doMute(undefined, "навсегда")}>
-                Отключить навсегда
+              <button className="mutemenu__item" onClick={() => doMute(undefined, t("account.mute.mutedForever"))}>
+                {t("account.mute.muteForever")}
               </button>
             </>
           )}

@@ -6,6 +6,7 @@ import { ApiError, userFacingError } from "@shared/api/envelope";
 import { roleLabel, userSubtitle, type Announcement, type AnnouncementAudience, type User } from "@shared/api/types";
 import { formatRelative } from "@shared/lib/format";
 import { useAuthStore } from "@shared/store/auth";
+import { t, type Key } from "@shared/i18n";
 import {
   addressableLevels,
   canAddress,
@@ -21,11 +22,11 @@ import {
 const TITLE_MAX = 100;
 const BODY_MAX = 1000;
 
-const AUDIENCES: { value: AnnouncementAudience; label: string }[] = [
-  { value: "all", label: "Всем" },
-  { value: "basic", label: "Всем пользователям basic" },
-  { value: "levels", label: "Пользователям с ролью" },
-  { value: "user", label: "Одному пользователю" },
+const AUDIENCES: { value: AnnouncementAudience; label: Key }[] = [
+  { value: "all", label: "hub.announcements.audienceAll" },
+  { value: "basic", label: "hub.announcements.audienceBasic" },
+  { value: "levels", label: "hub.announcements.audienceLevels" },
+  { value: "user", label: "hub.announcements.audienceUser" },
 ];
 
 interface Props {
@@ -38,13 +39,13 @@ interface Props {
 export function AnnouncementsModal({ open, onClose, authorLevel }: Props) {
   const [tab, setTab] = useState<"new" | "sent">("new");
   return (
-    <Modal open={open} title="Уведомления от руководства" onClose={onClose}>
+    <Modal open={open} title={t("hub.announcements.title")} onClose={onClose}>
       <div className="ui-tabs" role="tablist">
         <button role="tab" aria-selected={tab === "new"} className={tab === "new" ? "is-active" : ""} onClick={() => setTab("new")}>
-          Новое
+          {t("hub.announcements.tabNew")}
         </button>
         <button role="tab" aria-selected={tab === "sent"} className={tab === "sent" ? "is-active" : ""} onClick={() => setTab("sent")}>
-          Отправленные
+          {t("hub.announcements.tabSent")}
         </button>
       </div>
       {tab === "new" ? (
@@ -59,12 +60,12 @@ export function AnnouncementsModal({ open, onClose, authorLevel }: Props) {
 function audienceHint(audience: AnnouncementAudience, authorLevel: number): string {
   if (audience === "all") {
     return authorLevel === 1
-      ? "Получат все пользователи."
-      : `Получат все с уровнями ${authorLevel}–10 и пользователи basic. Тем, кто выше вас, уведомление не придёт.`;
+      ? t("hub.announcements.hintAllCeo")
+      : t("hub.announcements.hintAll", { level: authorLevel });
   }
-  if (audience === "basic") return "Получат все пользователи без уровня (basic).";
-  if (audience === "levels") return "Отметьте одну или несколько ролей.";
-  return "Найдите человека по имени.";
+  if (audience === "basic") return t("hub.announcements.hintBasic");
+  if (audience === "levels") return t("hub.announcements.hintLevels");
+  return t("hub.announcements.hintUser");
 }
 
 function ComposeForm({ authorLevel, onSent }: { authorLevel: number; onSent: () => void }) {
@@ -98,8 +99,8 @@ function ComposeForm({ authorLevel, onSent }: { authorLevel: number; onSent: () 
         onSuccess: ({ announcement }) => {
           toast.success(
             announcement.recipientCount > 0
-              ? `Отправлено: получателей — ${announcement.recipientCount}`
-              : "Отправлено, но получателей не нашлось",
+              ? t("hub.announcements.sentTo", { count: announcement.recipientCount })
+              : t("hub.announcements.sentToNobody"),
           );
           setTitle("");
           setBody("");
@@ -110,8 +111,8 @@ function ComposeForm({ authorLevel, onSent }: { authorLevel: number; onSent: () 
         onError: (e) => {
           const fallback =
             e instanceof ApiError && e.status === 403
-              ? "Этому адресату нельзя отправить уведомление"
-              : "Не удалось отправить уведомление";
+              ? t("hub.announcements.forbidden")
+              : t("hub.announcements.sendFailed");
           toast.error(userFacingError(e, fallback));
         },
       },
@@ -122,7 +123,7 @@ function ComposeForm({ authorLevel, onSent }: { authorLevel: number; onSent: () 
     <div className="announce-form">
       <div className="ui-field">
         <label className="ui-field__label" htmlFor="announce-audience">
-          Кому
+          {t("hub.announcements.to")}
         </label>
         <select
           id="announce-audience"
@@ -132,7 +133,7 @@ function ComposeForm({ authorLevel, onSent }: { authorLevel: number; onSent: () 
         >
           {AUDIENCES.map((a) => (
             <option key={a.value} value={a.value}>
-              {a.label}
+              {t(a.label)}
             </option>
           ))}
         </select>
@@ -140,7 +141,7 @@ function ComposeForm({ authorLevel, onSent }: { authorLevel: number; onSent: () 
       </div>
 
       {audience === "levels" && (
-        <div className="announce-levels" role="group" aria-label="Роли">
+        <div className="announce-levels" role="group" aria-label={t("hub.announcements.roles")}>
           {addressableLevels(authorLevel).map((l) => (
             <label key={l} className={"announce-level" + (levels.includes(l) ? " is-checked" : "")}>
               <input type="checkbox" checked={levels.includes(l)} onChange={() => toggleLevel(l)} />
@@ -155,15 +156,15 @@ function ComposeForm({ authorLevel, onSent }: { authorLevel: number; onSent: () 
       {audience === "user" && <UserPicker authorLevel={authorLevel} value={target} onChange={setTarget} />}
 
       <Input
-        label="Заголовок"
+        label={t("hub.announcements.subject")}
         value={title}
         maxLength={TITLE_MAX}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="Коротко, о чём уведомление"
+        placeholder={t("hub.announcements.subjectPlaceholder")}
       />
       <div className="ui-field">
         <label className="ui-field__label" htmlFor="announce-body">
-          Текст
+          {t("hub.announcements.body")}
         </label>
         <textarea
           id="announce-body"
@@ -178,10 +179,10 @@ function ComposeForm({ authorLevel, onSent }: { authorLevel: number; onSent: () 
         </p>
       </div>
       <p className="announce-form__hint">
-        Получатели увидят ваше имя и роль. Уведомление придёт и пушем на телефон.
+        {t("hub.announcements.privacyNote")}
       </p>
       <Button block disabled={!ready} loading={send.isPending} onClick={submit}>
-        Отправить
+        {t("hub.announcements.send")}
       </Button>
     </div>
   );
@@ -199,8 +200,8 @@ function UserPicker({
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(query), 250);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setDebounced(query), 250);
+    return () => clearTimeout(timer);
   }, [query]);
   const { data, isPending } = useQuery({
     queryKey: ["directory", debounced],
@@ -219,7 +220,7 @@ function UserPicker({
           <div className="user-row__role">{userSubtitle(value)}</div>
         </div>
         <Button variant="secondary" onClick={() => onChange(null)}>
-          Изменить
+          {t("hub.announcements.change")}
         </Button>
       </div>
     );
@@ -228,8 +229,8 @@ function UserPicker({
     <div className="ui-field">
       <input
         className="ui-input"
-        placeholder="Поиск по имени пользователя"
-        aria-label="Поиск получателя"
+        placeholder={t("hub.announcements.searchPlaceholder")}
+        aria-label={t("hub.announcements.searchLabel")}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
@@ -239,7 +240,7 @@ function UserPicker({
             <Spinner />
           </div>
         )}
-        {!isPending && people.length === 0 && <div className="announce-empty">Никого не нашлось</div>}
+        {!isPending && people.length === 0 && <div className="announce-empty">{t("hub.announcements.nobodyFound")}</div>}
         {people.map((u) => (
           <button key={u.id} type="button" className="user-row" onClick={() => onChange(u)}>
             <Avatar name={u.displayName} url={u.avatarUrl} size={36} />
@@ -257,13 +258,13 @@ function UserPicker({
 function audienceLine(a: Announcement): string {
   switch (a.audience) {
     case "all":
-      return "Всем";
+      return t("hub.announcements.toAll");
     case "basic":
-      return "Пользователям basic";
+      return t("hub.announcements.toBasic");
     case "levels":
-      return "Ролям: " + (a.levels ?? []).map((l) => roleLabel(l)).join(", ");
+      return t("hub.announcements.toRoles", { roles: (a.levels ?? []).map((l) => roleLabel(l)).join(", ") });
     case "user":
-      return "Лично: " + (a.targetName ?? "пользователь");
+      return t("hub.announcements.toUser", { name: a.targetName ?? t("hub.announcements.someUser") });
   }
 }
 
@@ -273,10 +274,10 @@ function SentList({ enabled }: { enabled: boolean }) {
   const me = useAuthStore((s) => s.user?.id);
 
   const takeBack = (a: Announcement) => {
-    if (!window.confirm(`Отозвать «${a.title}»? Уведомление исчезнет у всех получателей. Уже показанный пуш вернуть нельзя.`)) return;
+    if (!window.confirm(t("hub.announcements.revokeConfirm", { title: a.title }))) return;
     revoke.mutate(a.id, {
-      onSuccess: () => toast.success("Уведомление отозвано"),
-      onError: () => toast.error("Не удалось отозвать уведомление"),
+      onSuccess: () => toast.success(t("hub.announcements.revoked")),
+      onError: () => toast.error(t("hub.announcements.revokeFailed")),
     });
   };
 
@@ -287,7 +288,7 @@ function SentList({ enabled }: { enabled: boolean }) {
       </div>
     );
   }
-  if (!data || data.length === 0) return <div className="announce-empty">Вы ещё ничего не отправляли</div>;
+  if (!data || data.length === 0) return <div className="announce-empty">{t("hub.announcements.sentEmpty")}</div>;
   return (
     <div className="announce-sent">
       {data.map((a) => (
@@ -295,15 +296,15 @@ function SentList({ enabled }: { enabled: boolean }) {
           <div className="announce-sent__title">{a.title}</div>
           <div className="announce-sent__body">{a.body}</div>
           <div className="announce-sent__meta">
-            {audienceLine(a)} · получателей: {a.recipientCount} · {formatRelative(a.createdAt)}
+            {audienceLine(a)} · {t("hub.announcements.recipients", { count: a.recipientCount })} · {formatRelative(a.createdAt)}
             {/* The CEO sees everyone's; name the author when it is not you. */}
             {a.author.id !== me && ` · ${a.author.displayName}`}
           </div>
           {a.revokedAt ? (
-            <div className="announce-sent__revoked">Отозвано</div>
+            <div className="announce-sent__revoked">{t("hub.announcements.revokedLabel")}</div>
           ) : (
             <Button variant="secondary" onClick={() => takeBack(a)} disabled={revoke.isPending}>
-              Отозвать
+              {t("hub.announcements.revoke")}
             </Button>
           )}
         </div>

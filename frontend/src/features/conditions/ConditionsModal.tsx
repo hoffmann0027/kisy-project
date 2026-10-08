@@ -4,6 +4,7 @@ import { Button, Modal, Spinner, toast } from "@shared/ui";
 import type { LevelCondition } from "@shared/api/types";
 import { useAuthStore } from "@shared/store/auth";
 import { useAllConditions, useNextCondition, useSetCondition } from "@entities/condition/queries";
+import { t } from "@shared/i18n";
 
 interface Props {
   open: boolean;
@@ -15,16 +16,14 @@ export function ConditionsModal({ open, onClose }: Props) {
   const isCEO = me.roleLevel === 1;
 
   return (
-    <Modal open={open} title="Условия повышения уровня" onClose={onClose}>
+    <Modal open={open} title={t("account.conditions.title")} onClose={onClose}>
       {isCEO ? (
         <CeoEditor open={open} />
       ) : me.roleLevel === null ? (
         // Promotion is a movement inside the hierarchy; this account is not in
         // it. The backend refuses /conditions for the same reason, so there is
         // nothing to fetch here either.
-        <p style={{ color: "var(--color-text-secondary)" }}>
-          Повышение уровня доступно только участникам, приглашённым в систему.
-        </p>
+        <p style={{ color: "var(--color-text-secondary)" }}>{t("account.conditions.outsider")}</p>
       ) : (
         <MemberView open={open} level={me.roleLevel} />
       )}
@@ -46,9 +45,7 @@ function CeoEditor({ open }: { open: boolean }) {
 
   return (
     <div className="cond">
-      <p className="cond__hint">
-        Каждый участник видит только одно условие — для своего следующего уровня. Уровень 1 — высший.
-      </p>
+      <p className="cond__hint">{t("account.conditions.ceoHint")}</p>
       {(data ?? []).map((c) => (
         <CeoRow key={c.targetLevel} condition={c} />
       ))}
@@ -69,8 +66,8 @@ function CeoRow({ condition }: { condition: LevelCondition }) {
     set.mutate(
       { level: condition.targetLevel, body: body.trim() },
       {
-        onSuccess: () => toast.success(`Условие для уровня ${condition.targetLevel} сохранено`),
-        onError: () => toast.error("Не удалось сохранить"),
+        onSuccess: () => toast.success(t("account.conditions.saved", { level: condition.targetLevel })),
+        onError: () => toast.error(t("account.conditions.saveFailed")),
       },
     );
   };
@@ -78,20 +75,20 @@ function CeoRow({ condition }: { condition: LevelCondition }) {
   return (
     <div className="cond__row">
       <div className="cond__row-head">
-        <span className="cond__level">Уровень {condition.targetLevel}</span>
-        {dirty && <span className="cond__dirty">не сохранено</span>}
+        <span className="cond__level">{t("account.conditions.level", { level: condition.targetLevel })}</span>
+        {dirty && <span className="cond__dirty">{t("account.conditions.unsaved")}</span>}
       </div>
       <textarea
         className="ui-input cond__input"
         rows={2}
         maxLength={4000}
-        placeholder={`Что нужно, чтобы получить уровень ${condition.targetLevel}…`}
+        placeholder={t("account.conditions.placeholder", { level: condition.targetLevel })}
         value={body}
         onChange={(e) => setBody(e.target.value)}
       />
       <div className="cond__row-actions">
         <Button variant="primary" onClick={save} loading={set.isPending} disabled={!dirty}>
-          Сохранить
+          {t("account.conditions.save")}
         </Button>
       </div>
     </div>
@@ -111,21 +108,23 @@ function MemberView({ open, level }: { open: boolean; level: number }) {
   }
 
   const nextLevel = level - 1;
+  // The number is set in bold inside the sentence: split it where "{level}" stands.
+  const [beforeLevel, afterLevel = ""] = t("account.conditions.nextLevel").split("{level}");
 
   return (
     <div className="cond">
       <div className="cond__next-badge">
-        Ваш следующий уровень: <strong>{nextLevel >= 1 ? nextLevel : "—"}</strong>
+        {beforeLevel}
+        <strong>{nextLevel >= 1 ? nextLevel : "—"}</strong>
+        {afterLevel}
       </div>
       {!data || !data.body.trim() ? (
         <div className="cond__empty">
-          {nextLevel < 1
-            ? "Вы уже на высшем уровне."
-            : "Условие для следующего уровня пока не задано."}
+          {nextLevel < 1 ? t("account.conditions.topLevel") : t("account.conditions.notSet")}
         </div>
       ) : (
         <div className="cond__member-card">
-          <div className="cond__member-title">Чтобы получить уровень {data.targetLevel}:</div>
+          <div className="cond__member-title">{t("account.conditions.memberTitle", { level: data.targetLevel })}</div>
           <div className="cond__member-body">{data.body}</div>
         </div>
       )}

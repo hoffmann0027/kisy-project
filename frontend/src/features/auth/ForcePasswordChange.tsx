@@ -2,8 +2,9 @@ import { useState } from "react";
 import { authApi } from "@shared/api/endpoints";
 import { useAuthStore } from "@shared/store/auth";
 import { Button, Input, toast } from "@shared/ui";
-import { PASSWORD_RULE_TEXT, passwordProblem } from "@shared/lib/password";
+import { passwordProblem, passwordRuleText } from "@shared/lib/password";
 import { ApiError } from "@shared/api/envelope";
+import { t } from "@shared/i18n";
 
 // ForcePasswordChange is a blocking screen shown when the signed-in account
 // still carries a seeded/administratively-reset password (mustChangePassword).
@@ -21,15 +22,15 @@ export function ForcePasswordChange() {
   const submit = async () => {
     const problem = passwordProblem(newPassword);
     if (problem) {
-      toast.error(`Новый пароль — ${problem.toLowerCase()}`);
+      toast.error(t("account.password.newProblem", { problem: problem.toLowerCase() }));
       return;
     }
     if (newPassword !== confirm) {
-      toast.error("Пароли не совпадают");
+      toast.error(t("account.password.mismatch"));
       return;
     }
     if (newPassword === currentPassword) {
-      toast.error("Новый пароль должен отличаться от текущего");
+      toast.error(t("account.password.mustDiffer"));
       return;
     }
     setBusy(true);
@@ -37,9 +38,11 @@ export function ForcePasswordChange() {
       await authApi.changePassword(currentPassword, newPassword);
       // Clear the flag locally so the gate opens without a round-trip.
       if (user) setUser({ ...user, mustChangePassword: false });
-      toast.success("Пароль изменён");
+      toast.success(t("account.password.changed"));
     } catch (e) {
-      toast.error(e instanceof ApiError && e.status === 401 ? "Неверный текущий пароль" : "Не удалось изменить пароль");
+      toast.error(
+        e instanceof ApiError && e.status === 401 ? t("account.password.wrongCurrent") : t("account.password.changeFailed"),
+      );
     } finally {
       setBusy(false);
     }
@@ -49,10 +52,8 @@ export function ForcePasswordChange() {
     <div className="auth-screen">
       <div className="auth-card glass-surface">
         <div className="auth-brand">
-          <h1 className="auth-title">Смена пароля</h1>
-          <p className="auth-subtitle">
-            Для этой учётной записи задан временный пароль. Задайте новый, чтобы продолжить.
-          </p>
+          <h1 className="auth-title">{t("account.passwordGate.title")}</h1>
+          <p className="auth-subtitle">{t("account.passwordGate.lead")}</p>
         </div>
         <form
           onSubmit={(e) => {
@@ -62,7 +63,7 @@ export function ForcePasswordChange() {
           style={{ display: "flex", flexDirection: "column", gap: 12 }}
         >
           <Input
-            label="Текущий пароль"
+            label={t("account.password.current")}
             type="password"
             autoComplete="current-password"
             value={currentPassword}
@@ -70,26 +71,26 @@ export function ForcePasswordChange() {
             autoFocus
           />
           <Input
-            label="Новый пароль"
-            hint={PASSWORD_RULE_TEXT}
+            label={t("account.password.new")}
+            hint={passwordRuleText()}
             type="password"
             autoComplete="new-password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
           />
           <Input
-            label="Повторите новый пароль"
+            label={t("account.passwordGate.confirm")}
             type="password"
             autoComplete="new-password"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
           />
           <Button type="submit" block loading={busy}>
-            Сохранить и войти
+            {t("account.passwordGate.submit")}
           </Button>
         </form>
         <Button variant="ghost" block onClick={() => void logout()}>
-          Выйти
+          {t("account.gate.signOut")}
         </Button>
       </div>
     </div>

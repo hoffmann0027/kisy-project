@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { t } from "@shared/i18n";
 import { Avatar, Modal, Spinner, toast } from "@shared/ui";
 import { usersApi } from "@shared/api/endpoints";
 import { userSubtitle, type Chat } from "@shared/api/types";
@@ -19,8 +20,8 @@ export function NewChatModal({ open, onClose, onOpened }: Props) {
   const openChat = useOpenChat();
 
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(query), 250);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setDebounced(query), 250);
+    return () => clearTimeout(timer);
   }, [query]);
 
   const { data, isPending } = useQuery({
@@ -39,18 +40,18 @@ export function NewChatModal({ open, onClose, onOpened }: Props) {
       onError: (e) => {
         toast.error(
           e instanceof ApiError && e.status === 403
-            ? "Вы не можете начать диалог с этим пользователем"
-            : "Не удалось открыть чат",
+            ? t("chat.newChat.forbidden")
+            : t("chat.newChat.openFailed"),
         );
       },
     });
   };
 
   return (
-    <Modal open={open} title="Новый чат" onClose={onClose}>
+    <Modal open={open} title={t("chat.list.newChat")} onClose={onClose}>
       <input
         className="ui-input"
-        placeholder="Поиск по имени пользователя"
+        placeholder={t("chat.newChat.searchPlaceholder")}
         autoFocus
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -63,7 +64,7 @@ export function NewChatModal({ open, onClose, onOpened }: Props) {
         )}
         {!isPending && (data?.length ?? 0) === 0 && (
           <div style={{ textAlign: "center", color: "var(--color-text-secondary)", padding: 20, fontSize: 14 }}>
-            Пользователи не найдены
+            {t("chat.newChat.noUsers")}
           </div>
         )}
         {data?.map((u) => (

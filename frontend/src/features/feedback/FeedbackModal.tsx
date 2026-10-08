@@ -4,6 +4,7 @@ import { roleLabel, type FeedbackItem, type FeedbackScope } from "@shared/api/ty
 import { userFacingError } from "@shared/api/envelope";
 import { formatRelative } from "@shared/lib/format";
 import { useAuthStore } from "@shared/store/auth";
+import { t } from "@shared/i18n";
 import {
   canAnswerFeedback,
   feedbackWait,
@@ -32,15 +33,15 @@ export function FeedbackModal({ open, onClose }: Props) {
   const scope: FeedbackScope = staff ? tab : "mine";
 
   return (
-    <Modal open={open} title="Отзывы и предложения" onClose={onClose}>
+    <Modal open={open} title={t("hub.feedback.title")} onClose={onClose}>
       <div className="feedback">
         {staff && (
           <div className="ui-tabs" role="tablist">
             <button role="tab" aria-selected={scope === "inbox"} className={scope === "inbox" ? "is-active" : ""} onClick={() => setTab("inbox")}>
-              Входящие
+              {t("hub.feedback.inbox")}
             </button>
             <button role="tab" aria-selected={scope === "mine"} className={scope === "mine" ? "is-active" : ""} onClick={() => setTab("mine")}>
-              Мои
+              {t("hub.feedback.mine")}
             </button>
           </div>
         )}
@@ -56,7 +57,7 @@ export function FeedbackModal({ open, onClose }: Props) {
 
 function waitText(ms: number): string {
   const hours = Math.ceil(ms / 3_600_000);
-  return hours <= 1 ? "меньше чем через час" : `через ${hours} ч`;
+  return hours <= 1 ? t("hub.feedback.waitUnderHour") : t("hub.feedback.waitHours", { count: hours });
 }
 
 function Mine({ enabled, isCEO }: { enabled: boolean; isCEO: boolean }) {
@@ -72,9 +73,9 @@ function Mine({ enabled, isCEO }: { enabled: boolean; isCEO: boolean }) {
     create.mutate(text, {
       onSuccess: () => {
         setBody("");
-        toast.success("Спасибо! Отзыв увидит руководство");
+        toast.success(t("hub.feedback.sent"));
       },
-      onError: (e) => toast.error(userFacingError(e, "Не удалось отправить отзыв")),
+      onError: (e) => toast.error(userFacingError(e, t("hub.feedback.sendFailed"))),
     });
   };
 
@@ -83,8 +84,8 @@ function Mine({ enabled, isCEO }: { enabled: boolean; isCEO: boolean }) {
       <div className="feedback__compose">
         <textarea
           className="ui-input feedback__input"
-          placeholder="Поделитесь идеей или сообщите о проблеме…"
-          aria-label="Текст отзыва"
+          placeholder={t("hub.feedback.placeholder")}
+          aria-label={t("hub.feedback.inputLabel")}
           rows={3}
           maxLength={2000}
           value={body}
@@ -92,36 +93,37 @@ function Mine({ enabled, isCEO }: { enabled: boolean; isCEO: boolean }) {
           onChange={(e) => setBody(e.target.value)}
         />
         <Button variant="primary" onClick={submit} loading={create.isPending} disabled={!body.trim() || wait > 0}>
-          Отправить
+          {t("hub.feedback.send")}
         </Button>
         <p className="feedback__hint">
           {wait > 0
-            ? `Отзыв можно оставлять раз в сутки. Следующий — ${waitText(wait)}.`
-            : "Отзыв видите только вы и руководство. Можно оставлять раз в сутки."}
+            ? t("hub.feedback.waitHint", { when: waitText(wait) })
+            : t("hub.feedback.privacyHint")}
         </p>
       </div>
       <FeedbackList
         items={items}
         isPending={isPending}
-        empty="Вы ещё не оставляли отзывов"
+        empty={t("hub.feedback.mineEmpty")}
         renderExtra={(f) =>
           f.reply ? (
             <div className="feedback__reply">
               <div className="feedback__reply-who">
-                Ответ{f.reply.by ? ` · ${f.reply.by.displayName}` : ""}
+                {t("hub.feedback.replyHeading")}
+                {f.reply.by ? ` · ${f.reply.by.displayName}` : ""}
                 {f.reply.by?.roleLevel ? ` · ${roleLabel(f.reply.by.roleLevel)}` : ""} · {formatRelative(f.reply.at)}
               </div>
               <div className="feedback__text">{f.reply.body}</div>
             </div>
           ) : (
-            <div className="feedback__waiting">Ждёт ответа</div>
+            <div className="feedback__waiting">{t("hub.feedback.awaiting")}</div>
           )
         }
         isCEO={isCEO}
       />
       {hasNextPage && (
         <Button variant="ghost" loading={isFetchingNextPage} onClick={() => void fetchNextPage()}>
-          Показать ещё
+          {t("hub.feedback.more")}
         </Button>
       )}
     </>
@@ -136,13 +138,13 @@ function Inbox({ enabled, isCEO }: { enabled: boolean; isCEO: boolean }) {
       <FeedbackList
         items={items}
         isPending={isPending}
-        empty="Все отзывы отвечены"
+        empty={t("hub.feedback.inboxEmpty")}
         renderExtra={(f) => <AnswerBox id={f.id} />}
         isCEO={isCEO}
       />
       {hasNextPage && (
         <Button variant="ghost" loading={isFetchingNextPage} onClick={() => void fetchNextPage()}>
-          Показать ещё
+          {t("hub.feedback.more")}
         </Button>
       )}
     </>
@@ -158,7 +160,7 @@ function AnswerBox({ id }: { id: string }) {
     return (
       <div className="feedback__answer-actions" style={{ marginTop: 8 }}>
         <Button variant="secondary" onClick={() => setOpen(true)}>
-          Ответить
+          {t("hub.feedback.answer")}
         </Button>
       </div>
     );
@@ -170,8 +172,8 @@ function AnswerBox({ id }: { id: string }) {
       { id, body },
       {
         // The entry leaves the inbox with the refetch.
-        onSuccess: () => toast.success("Ответ отправлен автору"),
-        onError: (e) => toast.error(userFacingError(e, "Не удалось отправить ответ")),
+        onSuccess: () => toast.success(t("hub.feedback.replySent")),
+        onError: (e) => toast.error(userFacingError(e, t("hub.feedback.replyFailed"))),
       },
     );
   };
@@ -179,8 +181,8 @@ function AnswerBox({ id }: { id: string }) {
     <div className="feedback__answer">
       <textarea
         className="ui-input feedback__input"
-        aria-label="Ответ"
-        placeholder="Ответ увидит автор отзыва"
+        aria-label={t("hub.feedback.replyInputLabel")}
+        placeholder={t("hub.feedback.replyPlaceholder")}
         rows={3}
         maxLength={2000}
         autoFocus
@@ -189,10 +191,10 @@ function AnswerBox({ id }: { id: string }) {
       />
       <div className="feedback__answer-actions">
         <Button variant="secondary" onClick={() => setOpen(false)} disabled={reply.isPending}>
-          Отмена
+          {t("hub.feedback.cancel")}
         </Button>
         <Button onClick={send} loading={reply.isPending} disabled={!text.trim()}>
-          Отправить ответ
+          {t("hub.feedback.sendReply")}
         </Button>
       </div>
     </div>
@@ -214,8 +216,8 @@ function FeedbackList({
 }) {
   const del = useDeleteFeedback();
   const remove = (id: string) => {
-    if (!window.confirm("Удалить этот отзыв?")) return;
-    del.mutate(id, { onError: () => toast.error("Не удалось удалить") });
+    if (!window.confirm(t("hub.feedback.deleteConfirm"))) return;
+    del.mutate(id, { onError: () => toast.error(t("hub.feedback.deleteFailed")) });
   };
   return (
     <div className="feedback__list">
@@ -238,7 +240,7 @@ function FeedbackList({
             {renderExtra(f)}
           </div>
           {isCEO && (
-            <button className="feedback__delete" title="Удалить" onClick={() => remove(f.id)}>
+            <button className="feedback__delete" title={t("hub.feedback.delete")} onClick={() => remove(f.id)}>
               ✕
             </button>
           )}

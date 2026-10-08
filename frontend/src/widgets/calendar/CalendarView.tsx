@@ -9,6 +9,7 @@ import {
   type Group,
 } from "@shared/api/types";
 import { useCalendarMonth, useCreateEvent, useDeleteEvent, useUpdateEvent } from "@entities/calendar/queries";
+import { intlLocale, t, type Key } from "@shared/i18n";
 import "./calendar.css";
 
 // Visible hex per palette colour (theme-agnostic; chips carry their own bg).
@@ -23,11 +24,31 @@ const COLOR_HEX: Record<CalendarColor, string> = {
   gray: "#6b7280",
 };
 
-const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
-const MONTHS = [
-  "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
-  "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
-];
+// The spoken name of each palette colour (the swatch itself carries no text).
+const COLOR_NAME: Record<CalendarColor, Key> = {
+  blue: "work.color.blue",
+  green: "work.color.green",
+  red: "work.color.red",
+  orange: "work.color.orange",
+  purple: "work.color.purple",
+  teal: "work.color.teal",
+  pink: "work.color.pink",
+  gray: "work.color.gray",
+};
+
+// Short weekday names in the language on screen, Monday first like the grid
+// (1 January 2024 was a Monday).
+function weekdayNames(): string[] {
+  const fmt = new Intl.DateTimeFormat(intlLocale(), { weekday: "short" });
+  return Array.from({ length: 7 }, (_, i) => fmt.format(new Date(2024, 0, 1 + i)));
+}
+
+// The month's own name ("Октябрь", "October"): month alone gives the
+// nominative form, which a full date would decline.
+function monthName(year: number, month: number): string {
+  const name = new Intl.DateTimeFormat(intlLocale(), { month: "long" }).format(new Date(year, month, 1));
+  return name.charAt(0).toLocaleUpperCase(intlLocale()) + name.slice(1);
+}
 
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -102,17 +123,18 @@ export function CalendarView({ group, onOpenCard }: Props) {
   };
 
   const todayYmd = ymd(today);
+  const weekdays = useMemo(weekdayNames, []);
 
   return (
     <div className="cal">
       <header className="cal__bar">
-        <button className="cal__nav" onClick={() => shift(-1)} aria-label="Предыдущий месяц">‹</button>
-        <div className="cal__title">{MONTHS[cursor.month]} {cursor.year}</div>
-        <button className="cal__nav" onClick={() => shift(1)} aria-label="Следующий месяц">›</button>
+        <button className="cal__nav" onClick={() => shift(-1)} aria-label={t("work.calendar.prevMonth")}>‹</button>
+        <div className="cal__title">{monthName(cursor.year, cursor.month)} {cursor.year}</div>
+        <button className="cal__nav" onClick={() => shift(1)} aria-label={t("work.calendar.nextMonth")}>›</button>
       </header>
 
       <div className="cal__weekdays">
-        {WEEKDAYS.map((w) => (
+        {weekdays.map((w) => (
           <div key={w} className="cal__weekday">{w}</div>
         ))}
       </div>
@@ -153,7 +175,7 @@ export function CalendarView({ group, onOpenCard }: Props) {
                       ev.stopPropagation();
                       onOpenCard(c.cardId);
                     }}
-                    title={`Задача: ${c.title}`}
+                    title={t("work.calendar.cardChipTitle", { title: c.title })}
                   >
                     📌 {c.title}
                   </span>
@@ -166,17 +188,17 @@ export function CalendarView({ group, onOpenCard }: Props) {
 
       {creating && (
         <EventModal
-          title="Новое событие"
+          title={t("work.calendar.newEvent")}
           initial={{ startsAt: `${creating}T12:00`, color: "blue", title: "" }}
           busy={createEvent.isPending}
           onClose={() => setCreating(null)}
           onSubmit={(body) =>
             createEvent.mutate(body, {
               onSuccess: () => {
-                toast.success("Событие создано");
+                toast.success(t("work.calendar.eventCreated"));
                 setCreating(null);
               },
-              onError: () => toast.error("Не удалось создать событие"),
+              onError: () => toast.error(t("work.calendar.createFailed")),
             })
           }
         />
@@ -184,7 +206,7 @@ export function CalendarView({ group, onOpenCard }: Props) {
 
       {editing && (
         <EventModal
-          title="Событие"
+          title={t("work.calendar.event")}
           initial={{
             startsAt: toLocalInput(new Date(editing.startsAt)),
             endsAt: editing.endsAt ? toLocalInput(new Date(editing.endsAt)) : undefined,
@@ -199,20 +221,20 @@ export function CalendarView({ group, onOpenCard }: Props) {
               { eventId: editing.id, body },
               {
                 onSuccess: () => {
-                  toast.success("Событие обновлено");
+                  toast.success(t("work.calendar.eventUpdated"));
                   setEditing(null);
                 },
-                onError: () => toast.error("Не удалось обновить"),
+                onError: () => toast.error(t("work.calendar.updateFailed")),
               },
             )
           }
           onDelete={() =>
             deleteEvent.mutate(editing.id, {
               onSuccess: () => {
-                toast.success("Событие удалено");
+                toast.success(t("work.calendar.eventDeleted"));
                 setEditing(null);
               },
-              onError: () => toast.error("Не удалось удалить"),
+              onError: () => toast.error(t("work.calendar.deleteFailed")),
             })
           }
         />
@@ -240,11 +262,11 @@ function EventModal({ title, initial, canEdit = true, busy, onClose, onSubmit, o
 
   const submit = () => {
     if (!name.trim()) {
-      toast.error("Введите название");
+      toast.error(t("work.calendar.enterTitle"));
       return;
     }
     if (endsAt && new Date(endsAt) < new Date(startsAt)) {
-      toast.error("Конец не может быть раньше начала");
+      toast.error(t("work.calendar.endBeforeStart"));
       return;
     }
     onSubmit({
@@ -257,17 +279,23 @@ function EventModal({ title, initial, canEdit = true, busy, onClose, onSubmit, o
 
   return (
     <Modal open title={title} onClose={onClose}>
-      <Input label="Название" value={name} disabled={readOnly} onChange={(e) => setName(e.target.value)} autoFocus />
+      <Input
+        label={t("work.calendar.fieldTitle")}
+        value={name}
+        disabled={readOnly}
+        onChange={(e) => setName(e.target.value)}
+        autoFocus
+      />
       <div className="ui-field">
-        <label className="ui-field__label">Начало</label>
+        <label className="ui-field__label">{t("work.calendar.fieldStart")}</label>
         <input className="ui-input" type="datetime-local" value={startsAt} disabled={readOnly} onChange={(e) => setStartsAt(e.target.value)} />
       </div>
       <div className="ui-field">
-        <label className="ui-field__label">Конец (необязательно)</label>
+        <label className="ui-field__label">{t("work.calendar.fieldEnd")}</label>
         <input className="ui-input" type="datetime-local" value={endsAt} disabled={readOnly} onChange={(e) => setEndsAt(e.target.value)} />
       </div>
       <div className="ui-field">
-        <label className="ui-field__label">Цвет</label>
+        <label className="ui-field__label">{t("work.calendar.fieldColor")}</label>
         <div className="cal__palette">
           {CALENDAR_COLORS.map((c) => (
             <button
@@ -277,24 +305,24 @@ function EventModal({ title, initial, canEdit = true, busy, onClose, onSubmit, o
               className={`cal__swatch${color === c ? " cal__swatch--on" : ""}`}
               style={{ background: COLOR_HEX[c] }}
               onClick={() => setColor(c)}
-              aria-label={c}
+              aria-label={t(COLOR_NAME[c])}
             />
           ))}
         </div>
       </div>
       {canEdit && (
         <Button block loading={busy} onClick={submit}>
-          Сохранить
+          {t("work.calendar.save")}
         </Button>
       )}
       {onDelete && canEdit && (
         <Button variant="danger" block loading={busy} onClick={onDelete}>
-          Удалить событие
+          {t("work.calendar.deleteEvent")}
         </Button>
       )}
       {readOnly && (
         <div style={{ fontSize: 13, color: "var(--color-text-tertiary)", textAlign: "center" }}>
-          Только автор, владелец группы или CEO может изменять это событие.
+          {t("work.calendar.readOnlyHint")}
         </div>
       )}
     </Modal>

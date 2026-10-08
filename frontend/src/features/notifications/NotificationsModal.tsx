@@ -6,6 +6,7 @@ import { useAuthStore } from "@shared/store/auth";
 import { useMarkNotificationsRead, useNotifications } from "@entities/notification/queries";
 import { canAnnounce } from "@entities/announcement/queries";
 import { AnnouncementsModal } from "@features/announcements/AnnouncementsModal";
+import { intlLocale, t, type Key } from "@shared/i18n";
 
 interface Props {
   open: boolean;
@@ -13,11 +14,48 @@ interface Props {
 }
 
 function describe(type: string, payload: Record<string, unknown>): string {
-  if (type === "mention") return "Вас упомянули в сообщении";
-  // Moderation notices carry their full sentence, reason included, as the
-  // server wrote it — the same text the push showed.
-  if (type === "group_sanction" && typeof payload.text === "string") return payload.text;
+  if (type === "mention") return t("hub.notifications.mention");
+  if (type === "group_sanction") return sanctionText(payload) ?? type;
   return type;
+}
+
+function sanctionKey(action: unknown, community: boolean): Key | null {
+  switch (action) {
+    case "warn":
+      return community ? "hub.notifications.sanctionWarnCommunity" : "hub.notifications.sanctionWarnGroup";
+    case "mute":
+      return community ? "hub.notifications.sanctionMuteCommunity" : "hub.notifications.sanctionMuteGroup";
+    case "delete":
+      return community ? "hub.notifications.sanctionDeleteCommunity" : "hub.notifications.sanctionDeleteGroup";
+    case "restore":
+      return community ? "hub.notifications.sanctionRestoreCommunity" : "hub.notifications.sanctionRestoreGroup";
+    default:
+      return null;
+  }
+}
+
+/**
+ * A moderation notice, worded in the reader's language from its fields. A
+ * notice from before those fields existed carries only the sentence the
+ * server wrote (in Russian) — the same text its push showed.
+ */
+function sanctionText(payload: Record<string, unknown>): string | null {
+  const key = sanctionKey(payload.action, payload.groupKind === "community");
+  if (!key) return typeof payload.text === "string" ? payload.text : null;
+  const expires = typeof payload.expiresAt === "string" ? new Date(payload.expiresAt) : null;
+  const until =
+    expires && !Number.isNaN(expires.getTime())
+      ? t("hub.notifications.muteUntil", {
+          date: expires.toLocaleString(intlLocale(), { dateStyle: "short", timeStyle: "short", timeZone: "UTC" }),
+        })
+      : t("hub.notifications.muteForever");
+  return t(key, {
+    name: String(payload.groupName ?? ""),
+    reason: String(payload.reason ?? ""),
+    count: Number(payload.activeWarns ?? 0),
+    limit: Number(payload.warnLimit ?? 0),
+    until,
+  });
 }
 
 /** An announcement from levels 1-3: title, text and who wrote it. */
@@ -42,8 +80,8 @@ function FeedbackReplyView({ payload }: { payload: Record<string, unknown> }) {
   const role = roleLabel(by.roleLevel || null);
   return (
     <div className="announce-note">
-      <div className="announce-note__title">Ответ на ваш отзыв</div>
-      {typeof payload.feedback === "string" && <div className="announce-note__quote">«{payload.feedback}»</div>}
+      <div className="announce-note__title">{t("hub.notifications.feedbackReply")}</div>
+      {typeof payload.feedback === "string" && <div className="announce-note__quote">{t("hub.notifications.quote", { text: payload.feedback })}</div>}
       <div className="announce-note__body">{String(payload.reply ?? "")}</div>
       <div className="announce-note__author">
         {by.displayName ?? ""}
@@ -58,11 +96,11 @@ function ReleaseView({ payload }: { payload: Record<string, unknown> }) {
   const link = typeof payload.downloadUrl === "string" && payload.downloadUrl.startsWith("https://") ? payload.downloadUrl : null;
   return (
     <div className="announce-note">
-      <div className="announce-note__title">Вышла версия {String(payload.version ?? "")}</div>
+      <div className="announce-note__title">{t("hub.notifications.release", { version: String(payload.version ?? "") })}</div>
       <div className="announce-note__body">{String(payload.notes ?? "")}</div>
       {link && (
         <a className="announce-note__link" href={link} target="_blank" rel="noopener noreferrer">
-          Скачать
+          {t("hub.notifications.download")}
         </a>
       )}
     </div>
@@ -76,18 +114,18 @@ export function NotificationsModal({ open, onClose }: Props) {
   const [composing, setComposing] = useState(false);
 
   return (
-    <Modal open={open} title="Уведомления" onClose={onClose}>
+    <Modal open={open} title={t("hub.notifications.title")} onClose={onClose}>
       {canAnnounce(roleLevel) && (
         <>
           <Button variant="secondary" onClick={() => setComposing(true)}>
-            Создать уведомление
+            {t("hub.notifications.compose")}
           </Button>
           <AnnouncementsModal open={composing} onClose={() => setComposing(false)} authorLevel={roleLevel!} />
         </>
       )}
       {(data?.unreadCount ?? 0) > 0 && (
         <Button variant="secondary" onClick={() => markRead.mutate(undefined)} loading={markRead.isPending}>
-          Отметить все как прочитанные
+          {t("hub.notifications.markAllRead")}
         </Button>
       )}
       <div style={{ maxHeight: 360, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
@@ -98,7 +136,7 @@ export function NotificationsModal({ open, onClose }: Props) {
         )}
         {!isPending && (data?.notifications.length ?? 0) === 0 && (
           <div style={{ textAlign: "center", color: "var(--color-text-secondary)", padding: 20, fontSize: 14 }}>
-            Нет уведомлений
+            {t("hub.notifications.empty")}
           </div>
         )}
         {data?.notifications.map((n) => (

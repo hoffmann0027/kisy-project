@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@shared/ui";
 import { useAuthStore } from "@shared/store/auth";
+import { t } from "@shared/i18n";
 
 // Shown when the app cannot reach the server on start.
 //
@@ -47,12 +48,12 @@ export function OfflineNotice() {
         textAlign: "center",
       }}
     >
-      <div style={{ fontSize: 17, fontWeight: 640 }}>Нет связи с сервером</div>
+      <div style={{ fontSize: 17, fontWeight: 640 }}>{t("common.offline.title")}</div>
       <div style={{ color: "var(--color-text-secondary)", fontSize: 14, maxWidth: 320 }}>
-        Вы остаётесь в аккаунте — приложение подключится само, как только появится сеть.
+        {t("common.offline.body")}
       </div>
       <Button variant="secondary" onClick={retry} loading={retrying}>
-        Повторить
+        {t("common.offline.retry")}
       </Button>
     </div>
   );

@@ -1,16 +1,19 @@
 // A curated emoji set for the picker (stage F). Kept compact and searchable
 // by keyword rather than shipping the full Unicode set — covers the common
 // chat needs across smileys, gestures, hearts, objects and symbols.
+import type { Key } from "@shared/i18n";
+
 export interface EmojiCategory {
   id: string;
-  label: string;
+  /** The heading, resolved with t() when the picker renders. */
+  labelKey: Key;
   emojis: { char: string; keywords: string }[];
 }
 
 export const EMOJI_CATEGORIES: EmojiCategory[] = [
   {
     id: "smileys",
-    label: "Смайлы",
+    labelKey: "common.emoji.smileys",
     emojis: [
       { char: "😀", keywords: "улыбка smile grin happy" },
       { char: "😁", keywords: "улыбка grin" },
@@ -36,7 +39,7 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
   },
   {
     id: "gestures",
-    label: "Жесты",
+    labelKey: "common.emoji.gestures",
     emojis: [
       { char: "👍", keywords: "лайк like thumbs up хорошо" },
       { char: "👎", keywords: "дизлайк dislike плохо" },
@@ -54,7 +57,7 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
   },
   {
     id: "hearts",
-    label: "Сердца",
+    labelKey: "common.emoji.hearts",
     emojis: [
       { char: "❤️", keywords: "сердце love red heart" },
       { char: "🧡", keywords: "сердце orange" },
@@ -72,7 +75,7 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
   },
   {
     id: "objects",
-    label: "Объекты",
+    labelKey: "common.emoji.objects",
     emojis: [
       { char: "🎉", keywords: "праздник party хлопушка" },
       { char: "🎂", keywords: "торт cake день рождения" },

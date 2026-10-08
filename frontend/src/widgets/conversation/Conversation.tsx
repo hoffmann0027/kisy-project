@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
+import { intlLocale, t } from "@shared/i18n";
 import { cn } from "@shared/lib/cn";
 import { useCallControls } from "@features/call/CallProvider";
 import { formatDay } from "@shared/lib/format";
@@ -205,7 +206,7 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
         onError: (e) => {
           cache.patch(chatType, chatId, tempId, (m) => ({ ...m, pending: false, failed: true }));
           // A private chat that could not be encrypted says why (audit A-10).
-          toast.error(userFacingError(e, "Не удалось отправить сообщение"));
+          toast.error(userFacingError(e, t("chat.conv.sendFailed")));
         },
       },
     );
@@ -217,28 +218,30 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
       {
         onSuccess: () =>
           toast.success(
-            `Сообщение будет отправлено ${sendAt.toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}`,
+            t("chat.conv.scheduled", {
+              when: sendAt.toLocaleString(intlLocale(), { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }),
+            }),
           ),
-        onError: (e) => toast.error(userFacingError(e, "Не удалось запланировать сообщение")),
+        onError: (e) => toast.error(userFacingError(e, t("chat.conv.scheduleFailed"))),
       },
     );
   };
 
   const handleDelete = (m: Message) =>
-    del.mutate(m.id, { onError: () => toast.error("Не удалось удалить сообщение") });
+    del.mutate(m.id, { onError: () => toast.error(t("chat.conv.deleteFailed")) });
 
   const handleEdit = (m: Message, text: string) =>
-    edit.mutate({ messageId: m.id, text }, { onError: () => toast.error("Не удалось изменить сообщение") });
+    edit.mutate({ messageId: m.id, text }, { onError: () => toast.error(t("chat.conv.editFailed")) });
 
   const handlePin = (m: Message, doPin: boolean) =>
-    pin.mutate({ messageId: m.id, pin: doPin }, { onError: () => toast.error("Не удалось закрепить сообщение") });
+    pin.mutate({ messageId: m.id, pin: doPin }, { onError: () => toast.error(t("chat.conv.pinFailed")) });
 
   const handleSetExpiry = (m: Message, ttlSeconds: number | null) =>
     setExpiry.mutate(
       { messageId: m.id, ttlSeconds },
       {
-        onSuccess: () => toast.success(ttlSeconds ? "Таймер установлен" : "Таймер убран"),
-        onError: () => toast.error("Не удалось изменить таймер"),
+        onSuccess: () => toast.success(ttlSeconds ? t("chat.conv.timerSet") : t("chat.conv.timerRemoved")),
+        onError: () => toast.error(t("chat.timer.changeFailed")),
       },
     );
 
@@ -261,22 +264,22 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
     setForwardOpen(true);
   };
 
-  const doForward = (t: ForwardTarget) => {
+  const doForward = (dest: ForwardTarget) => {
     const msgs = forwardSource ?? [];
     setForwardOpen(false);
     forward.mutate(
-      { target: t, messages: msgs },
+      { target: dest, messages: msgs },
       {
         onSuccess: () => {
-          toast.success(`Переслано в «${t.title}»`);
+          toast.success(t("chat.conv.forwarded", { title: dest.title }));
           setSelected(new Set());
           setForwardSource(null);
         },
         onError: (e) => {
           toast.error(
             e instanceof ApiError && e.status === 403
-              ? "Нельзя переслать в чат с более широкой аудиторией"
-              : userFacingError(e, "Не удалось переслать сообщения"),
+              ? t("chat.conv.forwardWiderAudience")
+              : userFacingError(e, t("chat.conv.forwardFailed")),
           );
         },
       },
@@ -343,7 +346,7 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
         attempts++;
         void fetchNextPage().then(() => window.setTimeout(tryScroll, 120));
       } else {
-        toast.info("Исходное сообщение недоступно");
+        toast.info(t("chat.conv.originalUnavailable"));
       }
     };
     tryScroll();
@@ -353,7 +356,7 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
     if (!id) return undefined;
     const parent = messages.find((m) => m.id === id);
     if (!parent) return undefined;
-    return parent.isDeleted ? "удалённое сообщение" : (parent.text ?? "").slice(0, 80);
+    return parent.isDeleted ? t("chat.conv.deletedMessage") : (parent.text ?? "").slice(0, 80);
   };
 
   let lastDay = "";
@@ -364,7 +367,7 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
       <header className="conv__header">
         <button
           className="conv__back"
-          title="Назад"
+          title={t("chat.conv.back")}
           onClick={() => navigate(target.chatType === "group" ? "/communities" : "/")}
         >
           <Icon.Back size={22} />
@@ -376,16 +379,16 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
           </div>
           <div className={cn("conv__status", target.online && "conv__status--online")}>
             {typers.length > 0
-              ? "печатает…"
+              ? t("chat.conv.typing")
               : target.online
-                ? "в сети"
-                : (target.offlineLabel ?? "не в сети")}
+                ? t("chat.conv.online")
+                : (target.offlineLabel ?? t("chat.conv.offline"))}
           </div>
         </div>
         {chatType === "private" && target.peerUserId && (
           <button
             className="conv__call"
-            title="Позвонить"
+            title={t("chat.conv.call")}
             disabled={callBusy}
             onClick={() =>
               startCall(
@@ -411,7 +414,7 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
               <ReportButton
                 targetKind="user"
                 targetId={target.peerUserId}
-                label={`Пожаловаться на ${target.title}`}
+                label={t("chat.conv.report", { name: target.title })}
                 className="conv__panel-toggle"
                 size={20}
               />
@@ -419,7 +422,7 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
           )}
           <button
             className={cn("conv__panel-toggle", panelOpen && "conv__panel-toggle--active")}
-            title="Медиа, файлы и ссылки"
+            title={t("chat.conv.sharedToggle")}
             onClick={() => {
               setPanelOpen((v) => !v);
               setActionsOpen(false);
@@ -434,8 +437,8 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
         </div>
         <button
           className={cn("conv__more", actionsOpen && "conv__more--active")}
-          title="Ещё"
-          aria-label="Ещё"
+          title={t("chat.conv.more")}
+          aria-label={t("chat.conv.more")}
           aria-expanded={actionsOpen}
           onClick={() => setActionsOpen((v) => !v)}
         >
@@ -454,7 +457,7 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
                 <span className="conv__pinned-text">{m.text}</span>
                 <button
                   className="conv__pinned-unpin"
-                  title="Открепить"
+                  title={t("chat.action.unpin")}
                   onClick={() => handlePin(m, false)}
                 >
                   ✕
@@ -474,7 +477,7 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
         {hasNextPage && (
           <div className="conv__load-more">
             <Button variant="ghost" loading={isFetchingNextPage} onClick={() => void fetchNextPage()}>
-              Загрузить ещё
+              {t("chat.common.loadMore")}
             </Button>
           </div>
         )}
@@ -526,17 +529,17 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
 
       {selectionMode ? (
         <div className="select-bar">
-          <button className="select-bar__cancel" onClick={() => setSelected(new Set())} title="Отменить выбор">
+          <button className="select-bar__cancel" onClick={() => setSelected(new Set())} title={t("chat.select.cancel")}>
             ✕
           </button>
-          <span className="select-bar__count">Выбрано: {selected.size}</span>
-          <button className="select-bar__action" onClick={copySelected} title="Копировать">
+          <span className="select-bar__count">{t("chat.select.count", { count: selected.size })}</span>
+          <button className="select-bar__action" onClick={copySelected} title={t("chat.action.copy")}>
             <Icon.Copy size={18} />
           </button>
-          <button className="select-bar__action" onClick={forwardSelected} title="Переслать">
+          <button className="select-bar__action" onClick={forwardSelected} title={t("chat.action.forward")}>
             <Icon.Forward size={18} />
           </button>
-          <button className="select-bar__action select-bar__action--danger" onClick={deleteSelected} title="Удалить">
+          <button className="select-bar__action select-bar__action--danger" onClick={deleteSelected} title={t("chat.action.delete")}>
             <Icon.Trash size={18} />
           </button>
         </div>
@@ -545,7 +548,7 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
           {pendingScheduled.length > 0 && (
             <button className="conv__scheduled-bar" onClick={() => setScheduledOpen(true)}>
               <Icon.Calendar size={15} />
-              Запланированные сообщения: {pendingScheduled.length}
+              {t("chat.conv.scheduledBar", { count: pendingScheduled.length })}
             </button>
           )}
           {readOnly ? (

@@ -8,6 +8,7 @@ import { useBackHandler } from "@shared/lib/backStack";
 import { roleLabel } from "@shared/api/types";
 import "./drawer.css";
 import { VerifiedName } from "@shared/ui/VerifiedBadge";
+import { t } from "@shared/i18n";
 
 // Side drawer for the phone layout (design_handoff_kisy_mobile §7), opened by
 // the avatar in the Messages header. It carries the sections that do not fit
@@ -40,7 +41,7 @@ export function AppDrawer({ open, onClose }: Props) {
   // Portal to <body>: the drawer must cover the whole viewport, not be clipped
   // by a panel with overflow:hidden.
   return createPortal(
-    <div className="drawer" role="dialog" aria-modal="true" aria-label="Меню">
+    <div className="drawer" role="dialog" aria-modal="true" aria-label={t("hub.drawer.menu")}>
       <div className="drawer__scrim" onClick={onClose} />
 
       <aside className="drawer__panel">
@@ -52,7 +53,7 @@ export function AppDrawer({ open, onClose }: Props) {
             </div>
             <div className="drawer__role">{roleLabel(user.roleLevel)}</div>
           </div>
-          <button type="button" className="drawer__close" aria-label="Закрыть" onClick={onClose}>
+          <button type="button" className="drawer__close" aria-label={t("hub.drawer.close")} onClick={onClose}>
             <Icon.X size={20} />
           </button>
         </header>
@@ -67,7 +68,7 @@ export function AppDrawer({ open, onClose }: Props) {
         <footer className="drawer__foot">
           <button type="button" className="drawer__logout" onClick={() => void logout()}>
             <Icon.Logout size={20} />
-            <span>Выйти</span>
+            <span>{t("hub.drawer.logout")}</span>
           </button>
         </footer>
       </aside>

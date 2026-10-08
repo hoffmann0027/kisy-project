@@ -7,6 +7,7 @@ import {
   displayNameProblem,
   normalizeDisplayName,
 } from "@shared/lib/displayName";
+import { t } from "@shared/i18n";
 
 // ForceDisplayNameChange blocks the app for an account whose name stopped
 // being allowed when display names became unique and letters-only
@@ -37,9 +38,9 @@ export function ForceDisplayNameChange() {
       const { user: updated } = await usersApi.updateProfile({ displayName: normalizeDisplayName(name) });
       // The server clears the flag in the same update; the gate opens on it.
       setUser(updated);
-      toast.success("Имя сохранено");
+      toast.success(t("account.renameGate.saved"));
     } catch (e) {
-      setError(displayNameErrorMessage(e) ?? "Не удалось сохранить имя");
+      setError(displayNameErrorMessage(e) ?? t("account.renameGate.saveFailed"));
     } finally {
       setBusy(false);
     }
@@ -49,12 +50,10 @@ export function ForceDisplayNameChange() {
     <div className="auth-screen">
       <div className="auth-card glass-surface">
         <div className="auth-brand">
-          <h1 className="auth-title">Выберите имя</h1>
+          <h1 className="auth-title">{t("account.renameGate.title")}</h1>
           <p className="auth-subtitle">
-            {oldNameBreaksRule
-              ? `Имя «${user.displayName}» больше не подходит: в имени теперь можно использовать только буквы и одиночные пробелы, от 2 до 40 символов.`
-              : `Имя «${user.displayName}» уже есть у другого пользователя: теперь имена в KISY уникальны.`}{" "}
-            Выберите новое, чтобы продолжить. Ваш логин @{user.username} не меняется.
+            {t(oldNameBreaksRule ? "account.renameGate.invalid" : "account.renameGate.taken", { name: user.displayName })}{" "}
+            {t("account.renameGate.pickNew", { username: user.username })}
           </p>
         </div>
         <form
@@ -65,8 +64,8 @@ export function ForceDisplayNameChange() {
           style={{ display: "flex", flexDirection: "column", gap: 12 }}
         >
           <Input
-            label="Новое имя"
-            placeholder="Анна Смирнова"
+            label={t("account.renameGate.newName")}
+            placeholder={t("account.fields.namePlaceholder")}
             autoComplete="name"
             autoFocus
             value={name}
@@ -77,11 +76,11 @@ export function ForceDisplayNameChange() {
             }}
           />
           <Button type="submit" block loading={busy}>
-            Сохранить и продолжить
+            {t("account.renameGate.submit")}
           </Button>
         </form>
         <Button variant="ghost" block onClick={() => void logout()}>
-          Выйти
+          {t("account.gate.signOut")}
         </Button>
       </div>
     </div>

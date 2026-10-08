@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button, Modal, toast } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import { useIsBlocked, useSetBlocked } from "@entities/block/queries";
+import { t } from "@shared/i18n";
 
 // Blocking from the conversation itself — where you are when you decide you
 // have had enough of someone. The dialog spells out what changes, because a
@@ -23,10 +24,10 @@ export function BlockButton({ userId, name }: Props) {
       { userId, blocked: !blocked },
       {
         onSuccess: () => {
-          toast.success(blocked ? "Пользователь разблокирован" : "Пользователь заблокирован");
+          toast.success(blocked ? t("account.blocks.unblocked") : t("account.blocks.blocked"));
           setOpen(false);
         },
-        onError: () => toast.error("Не удалось изменить блокировку"),
+        onError: () => toast.error(t("account.blocks.toggleFailed")),
       },
     );
   };
@@ -35,32 +36,30 @@ export function BlockButton({ userId, name }: Props) {
     <>
       <button
         className="conv__panel-toggle"
-        title={blocked ? `Разблокировать ${name}` : `Заблокировать ${name}`}
+        title={blocked ? t("account.blocks.unblockName", { name }) : t("account.blocks.blockName", { name })}
         onClick={() => setOpen(true)}
       >
         <Icon.Ban size={20} />
       </button>
 
       {open && (
-        <Modal open title={blocked ? "Разблокировать" : "Заблокировать"} onClose={() => setOpen(false)}>
+        <Modal open title={blocked ? t("account.blocks.unblock") : t("account.blocks.block")} onClose={() => setOpen(false)}>
           {blocked ? (
-            <p className="block-dialog__text">
-              {name} снова сможет писать вам и звонить, и вы увидите их записи в ленте.
-            </p>
+            <p className="block-dialog__text">{t("account.blocks.unblockText", { name })}</p>
           ) : (
             <>
-              <p className="block-dialog__text">После блокировки {name}:</p>
+              <p className="block-dialog__text">{t("account.blocks.blockIntro", { name })}</p>
               <ul className="block-dialog__list">
-                <li>не сможет писать вам и звонить — и вы им тоже;</li>
-                <li>исчезнет из вашей ленты и из поиска, а вы — из их;</li>
-                <li>не узнает о блокировке: уведомления не будет.</li>
+                <li>{t("account.blocks.blockNoContact")}</li>
+                <li>{t("account.blocks.blockHidden")}</li>
+                <li>{t("account.blocks.blockSilent")}</li>
               </ul>
-              <p className="block-dialog__text">Снять блокировку можно в профиле в любой момент.</p>
+              <p className="block-dialog__text">{t("account.blocks.blockUndo")}</p>
             </>
           )}
           <div className="block-dialog__actions">
             <Button variant="secondary" block onClick={() => setOpen(false)}>
-              Отмена
+              {t("account.blocks.cancel")}
             </Button>
             <Button
               variant={blocked ? "primary" : "danger"}
@@ -68,7 +67,7 @@ export function BlockButton({ userId, name }: Props) {
               loading={setBlocked.isPending}
               onClick={apply}
             >
-              {blocked ? "Разблокировать" : "Заблокировать"}
+              {blocked ? t("account.blocks.unblock") : t("account.blocks.block")}
             </Button>
           </div>
         </Modal>

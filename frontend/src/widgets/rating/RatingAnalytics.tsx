@@ -13,9 +13,16 @@ import {
 } from "recharts";
 import { cn } from "@shared/lib/cn";
 import { formatKopecks } from "@shared/lib/money";
+import { t, type Key } from "@shared/i18n";
 import type { RatingAnalytics as Analytics } from "@shared/api/types";
 
 type Period = "month" | "quarter" | "year";
+
+const PERIOD_LABEL: Record<Period, Key> = {
+  month: "work.rating.periodMonth",
+  quarter: "work.rating.periodQuarter",
+  year: "work.rating.periodYear",
+};
 
 // bucketMonthly aggregates the per-month profit series into the chosen period.
 function bucketMonthly(monthly: Analytics["monthly"], period: Period) {
@@ -50,9 +57,9 @@ export function RatingAnalytics({ data }: Props) {
   return (
     <div className="rating-analytics">
       <div className="rating-card rating-analytics__panel">
-        <div className="rating-analytics__title">Доля чистой прибыли по проектам</div>
+        <div className="rating-analytics__title">{t("work.rating.profitShareTitle")}</div>
         {pie.length === 0 ? (
-          <div className="rating-analytics__empty">Пока нет данных о прибыли</div>
+          <div className="rating-analytics__empty">{t("work.rating.noProfitData")}</div>
         ) : (
           <ResponsiveContainer width="100%" height={240}>
             <PieChart>
@@ -83,7 +90,7 @@ export function RatingAnalytics({ data }: Props) {
 
       <div className="rating-card rating-analytics__panel">
         <div className="rating-analytics__head">
-          <div className="rating-analytics__title">Прибыль (все проекты)</div>
+          <div className="rating-analytics__title">{t("work.rating.profitTitle")}</div>
           <div className="rating-period">
             {(["month", "quarter", "year"] as Period[]).map((p) => (
               <button
@@ -91,13 +98,13 @@ export function RatingAnalytics({ data }: Props) {
                 className={cn("rating-period__btn", period === p && "rating-period__btn--active")}
                 onClick={() => setPeriod(p)}
               >
-                {p === "month" ? "Месяц" : p === "quarter" ? "Квартал" : "Год"}
+                {t(PERIOD_LABEL[p])}
               </button>
             ))}
           </div>
         </div>
         {line.length === 0 ? (
-          <div className="rating-analytics__empty">Пока нет данных о прибыли</div>
+          <div className="rating-analytics__empty">{t("work.rating.noProfitData")}</div>
         ) : (
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={line} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
@@ -105,7 +112,7 @@ export function RatingAnalytics({ data }: Props) {
               <XAxis dataKey="label" stroke="#8a8a99" fontSize={12} />
               <YAxis stroke="#8a8a99" fontSize={12} width={64} tickFormatter={(v) => `${v}`} />
               <Tooltip
-                formatter={(v: number) => [formatKopecks(Math.round(v * 100)), "Прибыль"]}
+                formatter={(v: number) => [formatKopecks(Math.round(v * 100)), t("work.rating.profit")]}
                 contentStyle={tooltipStyle}
               />
               <Line type="monotone" dataKey="rub" stroke="#5a8bf6" strokeWidth={2.5} dot={{ r: 3 }} />

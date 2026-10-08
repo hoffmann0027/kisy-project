@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Logo } from "@shared/ui";
+import { t } from "@shared/i18n";
 import { DELETION_STEPS, LAST_UPDATED, PRIVACY_SECTIONS, type LegalSection } from "./privacyContent";
 import { RULES_LAST_UPDATED, RULES_SECTIONS } from "./rulesContent";
 import "./legal.css";
@@ -52,7 +53,7 @@ function LegalShell({ title, subtitle, sections }: { title: string; subtitle: st
         <LegalSections sections={sections} />
         <footer className="legal-foot">
           <Link to="/login" className="auth-link">
-            Вернуться в приложение
+            {t("account.legal.backToApp")}
           </Link>
         </footer>
       </article>
@@ -63,8 +64,8 @@ function LegalShell({ title, subtitle, sections }: { title: string; subtitle: st
 export function PrivacyPage() {
   return (
     <LegalShell
-      title="Политика конфиденциальности"
-      subtitle={`KISY · обновлено ${LAST_UPDATED}`}
+      title={t("account.legal.privacyTitle")}
+      subtitle={t("account.legal.updated", { date: LAST_UPDATED })}
       sections={PRIVACY_SECTIONS}
     />
   );
@@ -73,8 +74,8 @@ export function PrivacyPage() {
 export function RulesPage() {
   return (
     <LegalShell
-      title="Правила сообщества"
-      subtitle={`KISY · обновлено ${RULES_LAST_UPDATED}`}
+      title={t("account.legal.rulesTitle")}
+      subtitle={t("account.legal.updated", { date: RULES_LAST_UPDATED })}
       sections={RULES_SECTIONS}
     />
   );
@@ -83,8 +84,8 @@ export function RulesPage() {
 export function AccountDeletionPage() {
   return (
     <LegalShell
-      title="Удаление аккаунта"
-      subtitle="KISY · как удалить аккаунт и что при этом происходит"
+      title={t("account.legal.deletionTitle")}
+      subtitle={t("account.legal.deletionSubtitle")}
       sections={DELETION_STEPS}
     />
   );

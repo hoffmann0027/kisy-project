@@ -16,6 +16,7 @@ import {
 } from "@shared/lib/nativeCall";
 import type { CallIncomingData, ServerEvent } from "@shared/ws/events";
 import { callsApi } from "@shared/api/endpoints";
+import { t } from "@shared/i18n";
 import { ringtone } from "./ringtone";
 import { rateQuality, readSample, type CallQuality, type QualitySample } from "./quality";
 
@@ -190,7 +191,7 @@ export function useCall() {
         /* already closed */
       }
     }
-    s?.localStream?.getTracks().forEach((t) => t.stop());
+    s?.localStream?.getTracks().forEach((track) => track.stop());
     if (remoteAudio.current) remoteAudio.current.srcObject = null;
   }, []);
 
@@ -281,7 +282,7 @@ export function useCall() {
           recovery.giveUp = setTimeout(() => {
             if (session.current !== s) return;
             wsClient.send({ type: "call.hangup", data: { callId: s.callId } });
-            finishWith("Связь потеряна", true);
+            finishWith(t("hub.call.endLinkLost"), true);
           }, RECOVERY_GIVE_UP_MS);
           // Only the caller offers, so the two never offer into each other.
           if (s.role === "caller") {
@@ -345,7 +346,7 @@ export function useCall() {
         beginRecovery(s, st === "failed");
       } else if (st === "failed") {
         // Never connected at all: there is no path to recover.
-        finishWith("Сбой соединения", true);
+        finishWith(t("hub.call.endConnectionFailed"), true);
       }
     };
     return pc;
@@ -358,12 +359,12 @@ export function useCall() {
     } catch (err) {
       const name = (err as DOMException)?.name;
       if (name === "NotAllowedError" || name === "SecurityError") {
-        throw new Error("Доступ к микрофону запрещён");
+        throw new Error(t("hub.call.micDenied"));
       }
       if (name === "NotFoundError" || name === "DevicesNotFoundError") {
-        throw new Error("Микрофон не найден");
+        throw new Error(t("hub.call.micNotFound"));
       }
-      throw new Error("Не удалось получить доступ к микрофону");
+      throw new Error(t("hub.call.micUnavailable"));
     }
   }, []);
 
@@ -383,7 +384,7 @@ export function useCall() {
       }
       const config = await fetchIce({ chatId, peerId: peer.id });
       const pc = makePc(config, callId);
-      localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
+      localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
       session.current = { callId, role: "caller", peer, chatId, pc, localStream, remoteSet: false, pendingIce: [] };
 
       ringtone.outgoing();
@@ -392,7 +393,7 @@ export function useCall() {
         await pc.setLocalDescription(offer);
         wsClient.send({ type: "call.invite", data: { callId, toUserId: peer.id, chatId, sdp: offer.sdp ?? "" } });
       } catch {
-        finishWith("Не удалось начать звонок", true);
+        finishWith(t("hub.call.startFailed"), true);
       }
     },
     [fetchIce, finishWith, getMic, makePc],
@@ -430,7 +431,7 @@ export function useCall() {
     }
     const config = await fetchIce({ callId: s.callId });
     const pc = makePc(config, s.callId);
-    localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
+    localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
     s.pc = pc;
     s.localStream = localStream;
     setView((v) => ({ ...v, phase: "connecting" }));
@@ -443,7 +444,7 @@ export function useCall() {
       wsClient.send({ type: "call.answer", data: { callId: s.callId, sdp: answer.sdp ?? "" } });
     } catch {
       wsClient.send({ type: "call.hangup", data: { callId: s.callId } });
-      finishWith("Не удалось установить соединение", true);
+      finishWith(t("hub.call.connectFailed"), true);
     }
   }, [fetchIce, finishWith, flushIce, getMic, makePc]);
 
@@ -709,7 +710,7 @@ export function useCall() {
               flushIce(s);
               setView((v) => ({ ...v, phase: "connecting" }));
             })
-            .catch(() => finishWith("Сбой соединения", true));
+            .catch(() => finishWith(t("hub.call.endConnectionFailed"), true));
           break;
         }
         case "call.renegotiate": {
@@ -736,21 +737,21 @@ export function useCall() {
           break;
         }
         case "call.rejected":
-          if (session.current?.callId === e.data.callId) finishWith("Звонок отклонён");
+          if (session.current?.callId === e.data.callId) finishWith(t("hub.call.endDeclined"));
           break;
         case "call.canceled":
-          if (session.current?.callId === e.data.callId) finishWith("Вызов отменён");
+          if (session.current?.callId === e.data.callId) finishWith(t("hub.call.endCanceled"));
           break;
         case "call.busy":
-          if (session.current?.callId === e.data.callId) finishWith("Абонент занят");
+          if (session.current?.callId === e.data.callId) finishWith(t("hub.call.endBusy"));
           break;
         case "call.timeout":
           if (session.current?.callId === e.data.callId) {
-            finishWith(session.current?.role === "caller" ? "Нет ответа" : "Пропущенный звонок");
+            finishWith(session.current?.role === "caller" ? t("hub.call.endNoAnswer") : t("hub.call.endMissed"));
           }
           break;
         case "call.ended":
-          if (session.current?.callId === e.data.callId) finishWith("Звонок завершён");
+          if (session.current?.callId === e.data.callId) finishWith(t("hub.call.endEnded"));
           break;
       }
     });

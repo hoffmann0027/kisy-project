@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { t } from "@shared/i18n";
 import { cn } from "@shared/lib/cn";
 import { ApiImage } from "@shared/ui/ApiImage";
 import { Icon } from "@shared/ui/icons";
@@ -88,7 +89,7 @@ export function Composer({
     const maxBytes = limit?.maxBytes ?? FALLBACK_MAX_BYTES;
     for (const file of Array.from(files)) {
       if (file.size > maxBytes) {
-        toast.error(`«${file.name}» больше ${formatBytes(maxBytes)}`);
+        toast.error(t("chat.composer.fileTooLarge", { name: file.name, size: formatBytes(maxBytes) }));
         continue;
       }
       // A new account has a smaller ceiling of its own; refused here rather
@@ -109,7 +110,7 @@ export function Composer({
         });
         setAttachments((prev) => [...prev, attachment]);
       } catch (err) {
-        if (!abort.signal.aborted) toast.error(userFacingError(err, `Не удалось загрузить «${file.name}»`));
+        if (!abort.signal.aborted) toast.error(userFacingError(err, t("chat.composer.uploadFailed", { name: file.name })));
       } finally {
         setUploads((prev) => prev.filter((u) => u.key !== key));
       }
@@ -186,7 +187,7 @@ export function Composer({
       onSend("", replyTo?.id, [attachment]);
       onClearReply();
     } catch {
-      toast.error("Не удалось отправить голосовое сообщение");
+      toast.error(t("chat.composer.voiceSendFailed"));
     } finally {
       setSendingVoice(false);
     }
@@ -194,7 +195,7 @@ export function Composer({
 
   const startRecording = async () => {
     if (!(await recorder.start())) {
-      toast.error("Нет доступа к микрофону");
+      toast.error(t("chat.composer.micDenied"));
     }
   };
 
@@ -247,10 +248,10 @@ export function Composer({
         <div className="composer__reply">
           <div className="composer__reply-bar" />
           <div style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            <strong>Ответ: </strong>
+            <strong>{t("chat.composer.replyLabel")} </strong>
             {replyPreview}
           </div>
-          <IconButton label="Отменить ответ" onClick={onClearReply}>
+          <IconButton label={t("chat.composer.cancelReply")} onClick={onClearReply}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M18 6 6 18M6 6l12 12" strokeLinecap="round" />
             </svg>
@@ -270,7 +271,7 @@ export function Composer({
               <button
                 className="composer__chip-x"
                 onClick={() => setAttachments((prev) => prev.filter((x) => x.id !== a.id))}
-                title="Убрать"
+                title={t("chat.composer.removeAttachment")}
               >
                 ✕
               </button>
@@ -286,7 +287,7 @@ export function Composer({
                   style={{ width: `${Math.round((u.progress ?? 0) * 100)}%` }}
                 />
               </span>
-              <button className="composer__chip-x" onClick={() => u.abort.abort()} title="Отменить загрузку">
+              <button className="composer__chip-x" onClick={() => u.abort.abort()} title={t("chat.composer.cancelUpload")}>
                 ✕
               </button>
             </div>
@@ -300,16 +301,16 @@ export function Composer({
           <span className="composer__rec-dot" />
           <span className="composer__rec-time">{formatDuration(recorder.elapsedMs)}</span>
           <span className="composer__rec-hint">
-            {sendingVoice ? "Отправка…" : "Идёт запись голосового сообщения"}
+            {sendingVoice ? t("chat.composer.sending") : t("chat.composer.recording")}
           </span>
-          <IconButton label="Отменить запись" onClick={recorder.cancel}>
+          <IconButton label={t("chat.composer.cancelRecording")} onClick={recorder.cancel}>
             <Icon.Trash size={20} />
           </IconButton>
           <button
             className="composer__send"
             onClick={() => void sendVoice()}
             disabled={recorder.state !== "recording" || sendingVoice}
-            aria-label="Отправить голосовое сообщение"
+            aria-label={t("chat.composer.sendVoice")}
           >
             <Icon.Send size={20} />
           </button>
@@ -333,27 +334,27 @@ export function Composer({
               e.target.value = "";
             }}
           />
-          <IconButton label="Прикрепить файл" onClick={() => fileRef.current?.click()}>
+          <IconButton label={t("chat.composer.attach")} onClick={() => fileRef.current?.click()}>
             <Icon.Paperclip size={20} />
           </IconButton>
           <div
             className={cn("composer__format", fmtOpen && "composer__format--open")}
             role="toolbar"
-            aria-label="Форматирование"
+            aria-label={t("chat.composer.formatting")}
           >
-            <button className="composer__fmt" title="Жирный (Ctrl+B)" onClick={() => wrapSelection("**")}>
+            <button className="composer__fmt" title={t("chat.composer.bold")} onClick={() => wrapSelection("**")}>
               <b>B</b>
             </button>
-            <button className="composer__fmt" title="Курсив (Ctrl+I)" onClick={() => wrapSelection("_")}>
+            <button className="composer__fmt" title={t("chat.composer.italic")} onClick={() => wrapSelection("_")}>
               <i>I</i>
             </button>
-            <button className="composer__fmt" title="Код (Ctrl+E)" onClick={() => wrapSelection("`")}>
+            <button className="composer__fmt" title={t("chat.composer.code")} onClick={() => wrapSelection("`")}>
               {"</>"}
             </button>
             <div className="composer__emoji-wrap">
               <button
                 className="composer__fmt composer__emoji-toggle"
-                title="Эмодзи"
+                title={t("chat.composer.emoji")}
                 onClick={() => setEmojiOpen((v) => !v)}
               >
                 <Icon.Smile size={18} />
@@ -371,7 +372,7 @@ export function Composer({
             <textarea
               ref={areaRef}
               className="composer__input"
-              placeholder="Написать сообщение…"
+              placeholder={t("chat.composer.placeholder")}
               rows={1}
               value={text}
               onChange={(e) => {
@@ -390,7 +391,7 @@ export function Composer({
             <button
               type="button"
               className={cn("composer__aa", fmtOpen && "composer__aa--on")}
-              aria-label="Форматирование"
+              aria-label={t("chat.composer.formatting")}
               aria-pressed={fmtOpen}
               onClick={() => setFmtOpen((v) => !v)}
             >
@@ -401,7 +402,7 @@ export function Composer({
             <div className="composer__schedule-wrap">
               <button
                 className="composer__fmt composer__schedule-toggle"
-                title="Отправить позже"
+                title={t("chat.composer.sendLater")}
                 onClick={() => setScheduleOpen((v) => !v)}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -423,8 +424,8 @@ export function Composer({
             <button
               className="composer__send composer__send--mic"
               onClick={() => void startRecording()}
-              aria-label="Записать голосовое сообщение"
-              title="Голосовое сообщение"
+              aria-label={t("chat.composer.recordVoice")}
+              title={t("chat.composer.voiceMessage")}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="9" y="3" width="6" height="11" rx="3" />
@@ -432,7 +433,7 @@ export function Composer({
               </svg>
             </button>
           ) : (
-            <button className="composer__send" onClick={submit} aria-label="Отправить">
+            <button className="composer__send" onClick={submit} aria-label={t("chat.composer.send")}>
               <Icon.Send size={20} />
             </button>
           )}

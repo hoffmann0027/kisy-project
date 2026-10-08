@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { t } from "@shared/i18n";
 import { Button, Input, Modal, toast } from "@shared/ui";
 import { ROLE_LABELS, type Group, type GroupKind } from "@shared/api/types";
 import { useCreateGroup } from "@entities/group/queries";
@@ -24,7 +25,7 @@ export function NewGroupModal({ open, onClose, onCreated }: Props) {
   const create = useCreateGroup();
   // A brand-new account may not found a community yet (ordinary groups are
   // unaffected — see internal/quarantine).
-  const heldCommunity = heldBackNotice(useAuthStore((s) => s.quarantine), "Создание сообществ откроется");
+  const heldCommunity = heldBackNotice(useAuthStore((s) => s.quarantine), t("chat.newGroup.communityHeldBack"));
 
   // A user may only create a group whose minimum clearance is their own
   // level or weaker (numerically >= their level).
@@ -36,7 +37,7 @@ export function NewGroupModal({ open, onClose, onCreated }: Props) {
       return;
     }
     if (name.trim().length < 1) {
-      toast.error(kind === "community" ? "Введите название сообщества" : "Введите название группы");
+      toast.error(kind === "community" ? t("chat.newGroup.enterCommunityName") : t("chat.newGroup.enterGroupName"));
       return;
     }
     create.mutate(
@@ -51,33 +52,33 @@ export function NewGroupModal({ open, onClose, onCreated }: Props) {
       },
       {
         onSuccess: ({ group }) => {
-          toast.success(kind === "community" ? "Сообщество создано" : "Группа создана");
+          toast.success(kind === "community" ? t("chat.newGroup.communityCreated") : t("chat.newGroup.groupCreated"));
           setName("");
           setDescription("");
           onCreated(group);
           onClose();
         },
-        onError: () => toast.error("Не удалось создать"),
+        onError: () => toast.error(t("chat.newGroup.createFailed")),
       },
     );
   };
 
   return (
-    <Modal open={open} title={kind === "community" ? "Новое сообщество" : "Новая группа"} onClose={onClose}>
+    <Modal open={open} title={kind === "community" ? t("chat.newGroup.newCommunity") : t("chat.list.newGroup")} onClose={onClose}>
       <div className="ui-field">
-        <label className="ui-field__label">Что создаём</label>
+        <label className="ui-field__label">{t("chat.newGroup.kindLabel")}</label>
         <div style={{ display: "flex", gap: 8 }}>
           <Button variant={kind === "group" ? "primary" : "secondary"} onClick={() => setKind("group")}>
-            Группа
+            {t("chat.group.group")}
           </Button>
           <Button variant={kind === "community" ? "primary" : "secondary"} onClick={() => setKind("community")}>
-            Сообщество
+            {t("chat.group.community")}
           </Button>
         </div>
         <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
           {kind === "group"
-            ? "Группа — общий чат: писать могут все участники."
-            : "Сообщество — стена с постами: публикуют владельцы и редакторы, остальные читают и ставят реакции. Обсуждение можно включить позже в настройках."}
+            ? t("chat.newGroup.groupExplain")
+            : t("chat.newGroup.communityExplain")}
         </span>
         {kind === "community" && heldCommunity && (
           <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{heldCommunity}</span>
@@ -85,19 +86,19 @@ export function NewGroupModal({ open, onClose, onCreated }: Props) {
       </div>
 
       <Input
-        label="Название"
-        placeholder={kind === "community" ? "Например, Новости компании" : "Например, Отдел разработки"}
+        label={t("chat.newGroup.name")}
+        placeholder={kind === "community" ? t("chat.newGroup.communityNamePlaceholder") : t("chat.newGroup.groupNamePlaceholder")}
         value={name}
         onChange={(e) => setName(e.target.value)}
         autoFocus
       />
-      <Input label="Описание (необязательно)" value={description} onChange={(e) => setDescription(e.target.value)} />
+      <Input label={t("chat.newGroup.description")} value={description} onChange={(e) => setDescription(e.target.value)} />
 
       {/* No level, no selector. An empty or disabled dropdown would be asking a
           question this account cannot answer; its groups are simply open. */}
       {caps.canSeeLevels && (
         <div className="ui-field">
-          <label className="ui-field__label">Минимальный уровень доступа</label>
+          <label className="ui-field__label">{t("chat.newGroup.minLevel")}</label>
           <select className="ui-input" value={minRoleLevel} onChange={(e) => setMinRoleLevel(Number(e.target.value))}>
             {levelOptions.map(([lvl, label]) => (
               <option key={lvl} value={lvl}>
@@ -106,7 +107,7 @@ export function NewGroupModal({ open, onClose, onCreated }: Props) {
             ))}
           </select>
           <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
-            Будет видно пользователям этого уровня и выше. Нельзя создать с доступом выше вашего уровня.
+            {t("chat.newGroup.minLevelHint")}
           </span>
         </div>
       )}
@@ -115,16 +116,16 @@ export function NewGroupModal({ open, onClose, onCreated }: Props) {
         <label className="ui-field" style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
           <input type="checkbox" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} />
           <span>
-            <span style={{ display: "block" }}>Открытое сообщество</span>
+            <span style={{ display: "block" }}>{t("chat.group.publicCommunity")}</span>
             <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
-              Посты попадают в общую ленту, и вступить может любой.
+              {t("chat.newGroup.publicHint")}
             </span>
           </span>
         </label>
       )}
 
       <Button block loading={create.isPending} onClick={submit}>
-        {kind === "community" ? "Создать сообщество" : "Создать группу"}
+        {kind === "community" ? t("chat.newGroup.createCommunity") : t("chat.newGroup.createGroup")}
       </Button>
     </Modal>
   );

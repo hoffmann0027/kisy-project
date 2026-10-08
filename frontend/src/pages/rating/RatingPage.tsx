@@ -2,6 +2,7 @@ import { useState } from "react";
 import "./rating.css";
 import { Rail } from "@widgets/rail/Rail";
 import { Spinner } from "@shared/ui";
+import { t } from "@shared/i18n";
 import { RatingAnalytics } from "@widgets/rating/RatingAnalytics";
 import { RatingKanban } from "@widgets/rating/RatingKanban";
 import { ProfileModal } from "@features/profile/ProfileModal";
@@ -23,9 +24,9 @@ export function RatingPage() {
       <main className="rating">
         <div className="rating__scroll">
           <div className="rating__topbar">
-            <h1 className="rating__heading">Рейтинг проектов</h1>
+            <h1 className="rating__heading">{t("work.rating.heading")}</h1>
             <a className="rating-add rating__export" href={`${API_BASE}/rating/export.csv`}>
-              Экспорт CSV
+              {t("work.rating.exportCsv")}
             </a>
           </div>
 

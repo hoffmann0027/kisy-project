@@ -5,6 +5,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useBackHandler } from "@shared/lib/backStack";
+import { t } from "@shared/i18n";
 import { EMOJI_CATEGORIES, searchEmojis } from "./emojiData";
 import "./EmojiPicker.css";
 
@@ -103,9 +104,9 @@ export function EmojiPicker({ onPick, onClose, ignoreSelector, autoFocusSearch =
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
-      const t = e.target as HTMLElement;
-      if (rootRef.current?.contains(t)) return;
-      if (ignoreSelector && t.closest(ignoreSelector)) return;
+      const target = e.target as HTMLElement;
+      if (rootRef.current?.contains(target)) return;
+      if (ignoreSelector && target.closest(ignoreSelector)) return;
       onClose();
     };
     const onKey = (e: KeyboardEvent) => {
@@ -131,13 +132,13 @@ export function EmojiPicker({ onPick, onClose, ignoreSelector, autoFocusSearch =
       className={anchor ? "emojipick emojipick--floating" : "emojipick"}
       ref={rootRef}
       role="dialog"
-      aria-label="Выбор эмодзи"
+      aria-label={t("common.emoji.picker")}
       style={anchor ? (pos ?? { visibility: "hidden" }) : undefined}
     >
       <input
         ref={searchRef}
         className="emojipick__search ui-input"
-        placeholder="Поиск эмодзи"
+        placeholder={t("common.emoji.search")}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
@@ -150,14 +151,14 @@ export function EmojiPicker({ onPick, onClose, ignoreSelector, autoFocusSearch =
                   {e.char}
                 </button>
               ))}
-              {results.length === 0 && <div className="emojipick__empty">Ничего не найдено</div>}
+              {results.length === 0 && <div className="emojipick__empty">{t("common.emoji.noResults")}</div>}
             </div>
           </section>
         ) : (
           <>
             {recent.length > 0 && (
               <section className="emojipick__section">
-                <div className="emojipick__label">Недавние</div>
+                <div className="emojipick__label">{t("common.emoji.recent")}</div>
                 <div className="emojipick__grid">
                   {recent.map((c) => (
                     <button key={`r-${c}`} className="emojipick__emoji" onClick={() => pick(c)}>
@@ -169,7 +170,7 @@ export function EmojiPicker({ onPick, onClose, ignoreSelector, autoFocusSearch =
             )}
             {EMOJI_CATEGORIES.map((cat) => (
               <section key={cat.id} className="emojipick__section">
-                <div className="emojipick__label">{cat.label}</div>
+                <div className="emojipick__label">{t(cat.labelKey)}</div>
                 <div className="emojipick__grid">
                   {cat.emojis.map((e) => (
                     <button key={e.char} className="emojipick__emoji" onClick={() => pick(e.char)}>

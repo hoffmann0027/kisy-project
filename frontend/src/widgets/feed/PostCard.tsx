@@ -4,6 +4,7 @@ import { Avatar, Button, EmojiPicker, IconButton, VerifiedName, toast } from "@s
 import { ApiImage } from "@shared/ui/ApiImage";
 import { Icon } from "@shared/ui/icons";
 import { formatRelative } from "@shared/lib/format";
+import { t } from "@shared/i18n";
 import type { Post } from "@shared/api/types";
 import { useJoinGroup } from "@entities/group/queries";
 import { useDeletePost, useReactToPost } from "@entities/post/queries";
@@ -52,7 +53,7 @@ export function PostCard({ post, showCommunity = true }: Props) {
     const mine = post.reactions.some((r) => r.emoji === emoji && r.mine);
     react.mutate(
       { postId: post.id, communityId: post.community.id, emoji, on: !mine },
-      { onError: () => toast.error("Не удалось поставить реакцию") },
+      { onError: () => toast.error(t("work.post.reactFailed")) },
     );
   };
 
@@ -60,11 +61,9 @@ export function PostCard({ post, showCommunity = true }: Props) {
     join.mutate(post.community.id, {
       onSuccess: () =>
         toast.success(
-          post.community.joinPolicy === "open"
-            ? "Вы вступили в сообщество"
-            : "Заявка отправлена — её рассмотрят администраторы",
+          post.community.joinPolicy === "open" ? t("work.post.joined") : t("work.post.requestSent"),
         ),
-      onError: () => toast.error("Не удалось вступить"),
+      onError: () => toast.error(t("work.post.joinFailed")),
     });
   };
 
@@ -75,7 +74,7 @@ export function PostCard({ post, showCommunity = true }: Props) {
         <VerifiedName className="post__community" name={post.community.name} verified={post.community.verified} subject="group" />
         <span className="post__time">
           {formatRelative(post.createdAt)}
-          {post.editedAt && " · изменено"}
+          {post.editedAt && ` · ${t("work.post.edited")}`}
         </span>
       </span>
     </>
@@ -100,16 +99,16 @@ export function PostCard({ post, showCommunity = true }: Props) {
         )}
         {showCommunity && !post.community.isMember && (
           <Button variant="secondary" onClick={joinCommunity} loading={join.isPending}>
-            {post.community.joinPolicy === "open" ? "Вступить" : "Подать заявку"}
+            {post.community.joinPolicy === "open" ? t("work.post.join") : t("work.post.requestToJoin")}
           </Button>
         )}
         {post.canDelete && (
           <IconButton
-            label="Удалить пост"
+            label={t("work.post.delete")}
             onClick={() =>
               remove.mutate(
                 { postId: post.id, communityId: post.community.id },
-                { onError: () => toast.error("Не удалось удалить пост") },
+                { onError: () => toast.error(t("work.post.deleteFailed")) },
               )
             }
           >
@@ -123,7 +122,7 @@ export function PostCard({ post, showCommunity = true }: Props) {
           <ReportButton
             targetKind="post"
             targetId={post.id}
-            label="Пожаловаться на запись"
+            label={t("work.post.report")}
             className="ui-icon-btn post__report"
           />
         )}
@@ -166,7 +165,7 @@ export function PostCard({ post, showCommunity = true }: Props) {
         <button
           type="button"
           className="post__reaction post__reaction-more"
-          aria-label="Другие эмодзи"
+          aria-label={t("work.post.moreEmoji")}
           aria-expanded={pickerOpen}
           data-picker-toggle={post.id}
           onClick={() => setPickerOpen((v) => !v)}

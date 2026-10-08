@@ -12,6 +12,7 @@ import {
   type EncryptedBody,
 } from "@entities/e2ee";
 import { encryptPrivateText } from "./encryption";
+import { t } from "@shared/i18n";
 
 export const messageKeys = {
   list: (chatType: ChatType, chatId: string) => ["messages", chatType, chatId] as const,
@@ -181,7 +182,7 @@ export async function forwardMessages(args: ForwardArgs): Promise<void> {
     else plaintext.push(m);
   }
   if (plaintext.length === 0 && encrypted.length === 0) {
-    throw new Error("Нет сообщений, доступных для пересылки");
+    throw new Error(t("common.forward.nothingToForward"));
   }
 
   // Into a private chat every text is encrypted FIRST, all of it, before

@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { t } from "@shared/i18n";
 import { Avatar, Button, Modal, Spinner, toast } from "@shared/ui";
 import { roleLabel, type DirectoryGroup } from "@shared/api/types";
 import { useGroupDirectory, useJoinGroup } from "@entities/group/queries";
@@ -20,19 +21,19 @@ export function FindGroupModal({ open, onClose }: Props) {
     join.mutate(g.id, {
       onSuccess: ({ joined }) => {
         if (joined) {
-          toast.success("Вы вступили в группу");
+          toast.success(t("chat.findGroup.joined"));
           onClose();
           navigate(`/group/${g.id}`);
         } else {
-          toast.success("Заявка отправлена");
+          toast.success(t("chat.findGroup.requestSent"));
         }
       },
-      onError: () => toast.error("Не удалось вступить"),
+      onError: () => toast.error(t("chat.findGroup.joinFailed")),
     });
   };
 
   return (
-    <Modal open={open} title="Найти группу" onClose={onClose}>
+    <Modal open={open} title={t("chat.list.findGroup")} onClose={onClose}>
       {isPending && (
         <div style={{ display: "flex", justifyContent: "center", padding: 24 }}>
           <Spinner />
@@ -40,7 +41,7 @@ export function FindGroupModal({ open, onClose }: Props) {
       )}
       {!isPending && (groups?.length ?? 0) === 0 && (
         <div style={{ color: "var(--color-text-secondary)", fontSize: 14, padding: "12px 0" }}>
-          Нет доступных для вступления групп.
+          {t("chat.findGroup.empty")}
         </div>
       )}
       <div style={{ maxHeight: 380, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
@@ -52,14 +53,16 @@ export function FindGroupModal({ open, onClose }: Props) {
               <div style={{ flex: 1 }}>
                 <div className="user-row__name">{g.name}</div>
                 <div className="user-row__role">
-                  {g.joinPolicy === "open" ? "Публичная" : "Закрытая (по заявке)"} · от {roleLabel(g.minRoleLevel)} и выше
+                  {t(g.joinPolicy === "open" ? "chat.findGroup.openFromLevel" : "chat.findGroup.requestFromLevel", {
+                    level: roleLabel(g.minRoleLevel),
+                  })}
                 </div>
               </div>
               {pending ? (
-                <span style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>Заявка на рассмотрении</span>
+                <span style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>{t("chat.findGroup.requestPending")}</span>
               ) : (
                 <Button variant="secondary" loading={join.isPending} onClick={() => act(g)}>
-                  {g.joinPolicy === "open" ? "Вступить" : "Подать заявку"}
+                  {g.joinPolicy === "open" ? t("chat.findGroup.join") : t("chat.findGroup.requestToJoin")}
                 </Button>
               )}
             </div>

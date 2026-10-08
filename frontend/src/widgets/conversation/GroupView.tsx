@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { t } from "@shared/i18n";
 import { cn } from "@shared/lib/cn";
 import { Icon } from "@shared/ui/icons";
 import { roleLabel, type Group } from "@shared/api/types";
@@ -48,12 +49,14 @@ export function GroupView({ group }: { group: Group }) {
     isFounder || caps.canAdmin || viewer?.role === "owner" || viewer?.role === "editor" || viewer?.role === "moderator";
   const banner = <SanctionsBanner groupId={group.id} runsGroup={runsGroup} />;
   // Editors-only group where the viewer is a plain member → composer hidden.
-  const readOnly = viewer && !viewer.canPost ? "Писать могут только редакторы" : undefined;
+  const readOnly = viewer && !viewer.canPost ? t("chat.group.readOnly") : undefined;
   // Group's clearance, shown in the header so the level is visible in-chat.
   // "No threshold" is not a level, so it is not announced as one.
   const levelLabel = group.minRoleLevel === null
-    ? (isCommunity ? "Сообщество" : "Группа")
-    : `${isCommunity ? "Сообщество" : "Группа"} · от ${roleLabel(group.minRoleLevel)} и выше`;
+    ? (isCommunity ? t("chat.group.community") : t("chat.group.group"))
+    : t(isCommunity ? "chat.group.communityFromLevel" : "chat.group.groupFromLevel", {
+        level: roleLabel(group.minRoleLevel),
+      });
 
   // On a phone this row wraps onto its own line under the header (see
   // .group-tabs in messenger.css), so the group name keeps the first line.
@@ -64,7 +67,7 @@ export function GroupView({ group }: { group: Group }) {
           className={cn("group-tab", shown === "posts" && "group-tab--active")}
           onClick={() => setTab("posts")}
         >
-          Посты
+          {t("chat.group.tabPosts")}
         </button>
       )}
       {/* A community starts as a wall: the conversation tab appears only once
@@ -75,7 +78,7 @@ export function GroupView({ group }: { group: Group }) {
           className={cn("group-tab", shown === "chat" && "group-tab--active")}
           onClick={() => setTab("chat")}
         >
-          {isCommunity ? "Обсуждение" : "Чат"}
+          {isCommunity ? t("chat.group.tabDiscussion") : t("chat.group.tabChat")}
         </button>
       )}
       {canUseWorkspace && (
@@ -84,13 +87,13 @@ export function GroupView({ group }: { group: Group }) {
             className={cn("group-tab", shown === "board" && "group-tab--active")}
             onClick={() => setTab("board")}
           >
-            <Icon.Board size={16} /> Доска
+            <Icon.Board size={16} /> {t("chat.group.tabBoard")}
           </button>
           <button
             className={cn("group-tab", shown === "calendar" && "group-tab--active")}
             onClick={() => setTab("calendar")}
           >
-            <Icon.Calendar size={16} /> Календарь
+            <Icon.Calendar size={16} /> {t("chat.group.tabCalendar")}
           </button>
         </>
       )}
@@ -98,7 +101,7 @@ export function GroupView({ group }: { group: Group }) {
           to anyone else, so a reader of a public community is not offered a
           button that leads to an error. */}
       {(viewer?.member || caps.canAdmin) && (
-        <button className="group-tab" onClick={() => setMembersOpen(true)} title="Участники">
+        <button className="group-tab" onClick={() => setMembersOpen(true)} title={t("chat.group.members")}>
           <Icon.Users size={16} />
         </button>
       )}
@@ -107,7 +110,7 @@ export function GroupView({ group }: { group: Group }) {
         <ReportButton
           targetKind="community"
           targetId={group.id}
-          label={isCommunity ? "Пожаловаться на сообщество" : "Пожаловаться на группу"}
+          label={isCommunity ? t("chat.group.reportCommunity") : t("chat.group.reportGroup")}
           className="group-tab"
           size={16}
         />
@@ -123,14 +126,14 @@ export function GroupView({ group }: { group: Group }) {
     return (
       <section className="conv">
         <header className="conv__header">
-          <button className="conv__back" title="Назад" onClick={() => navigate("/communities")}>
+          <button className="conv__back" title={t("chat.conv.back")} onClick={() => navigate("/communities")}>
             <Icon.Back size={22} />
           </button>
           <div className="conv__header-body">
             <div className="conv__title">
               <VerifiedName name={group.name} verified={!!group.verifiedAt} subject="group" />
             </div>
-            <div className="conv__status">{group.isPublic ? "Открытое сообщество" : "Закрытое сообщество"}</div>
+            <div className="conv__status">{group.isPublic ? t("chat.group.publicCommunity") : t("chat.group.privateCommunity")}</div>
           </div>
           {tabs}
         </header>
@@ -149,14 +152,14 @@ export function GroupView({ group }: { group: Group }) {
     return (
       <section className="conv">
         <header className="conv__header">
-          <button className="conv__back" title="Назад" onClick={() => navigate("/communities")}>
+          <button className="conv__back" title={t("chat.conv.back")} onClick={() => navigate("/communities")}>
             <Icon.Back size={22} />
           </button>
           <div className="conv__header-body">
             <div className="conv__title">
               <VerifiedName name={group.name} verified={!!group.verifiedAt} subject="group" />
             </div>
-            <div className="conv__status">{shown === "board" ? "Доска задач" : "Календарь"}</div>
+            <div className="conv__status">{shown === "board" ? t("chat.group.taskBoard") : t("chat.group.tabCalendar")}</div>
           </div>
           {tabs}
         </header>

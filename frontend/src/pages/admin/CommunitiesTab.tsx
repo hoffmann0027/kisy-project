@@ -5,20 +5,32 @@ import { moderationApi } from "@shared/api/endpoints";
 import type { ModeratedGroup, MuteDuration, Sanction, SanctionKind } from "@shared/api/types";
 import { ApiError } from "@shared/api/envelope";
 import { formatRelative } from "@shared/lib/format";
+import { intlLocale, t, type Key } from "@shared/i18n";
 
 // CEO moderation of groups and communities: warnings (three delete), mutes
 // (out of the feed for a while) and deletion (restorable for 30 days, see the
 // "Удалённые" tab). A reason is required for every action — the group's
 // founder and editors are shown it.
 
-export const MUTE_LABELS: Record<MuteDuration, string> = {
-  "1d": "1 день",
-  "7d": "7 дней",
-  "30d": "30 дней",
-  forever: "Бессрочно",
+const MUTE_LABELS: Record<MuteDuration, Key> = {
+  "1d": "admin.communities.mute1d",
+  "7d": "admin.communities.mute7d",
+  "30d": "admin.communities.mute30d",
+  forever: "admin.communities.muteForever",
 };
 
-const KIND_LABEL: Record<SanctionKind, string> = { warn: "Предупреждение", mute: "Мут", delete: "Удаление" };
+/** The mute periods on offer, shortest first. */
+export const MUTE_DURATIONS = Object.keys(MUTE_LABELS) as MuteDuration[];
+
+export function muteLabel(d: MuteDuration): string {
+  return t(MUTE_LABELS[d]);
+}
+
+const KIND_LABEL: Record<SanctionKind, Key> = {
+  warn: "admin.communities.kind.warn",
+  mute: "admin.communities.kind.mute",
+  delete: "admin.communities.kind.delete",
+};
 
 export const moderationKeys = {
   groups: (q: string) => ["admin", "moderation", "groups", q] as const,
@@ -36,7 +48,9 @@ function useDebounced(value: string, ms = 300) {
 }
 
 export function formatUntil(until: string | null): string {
-  return until ? `до ${new Date(until).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" })}` : "бессрочно";
+  return until
+    ? t("admin.communities.until", { date: new Date(until).toLocaleString(intlLocale(), { dateStyle: "short", timeStyle: "short" }) })
+    : t("admin.communities.forever");
 }
 
 export function CommunitiesTab() {
@@ -49,8 +63,8 @@ export function CommunitiesTab() {
     <div className="moderation">
       <input
         className="ui-input"
-        placeholder="Название группы или сообщества"
-        aria-label="Поиск сообществ"
+        placeholder={t("admin.communities.searchPlaceholder")}
+        aria-label={t("admin.communities.searchLabel")}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
@@ -59,7 +73,7 @@ export function CommunitiesTab() {
           <Spinner size={24} />
         </div>
       ) : data?.groups.length === 0 ? (
-        <p className="moderation__empty">Ничего не найдено</p>
+        <p className="moderation__empty">{t("admin.communities.empty")}</p>
       ) : (
         <ul className="moderation__list">
           {data?.groups.map((g) => (
@@ -84,16 +98,17 @@ function GroupRow({ group, open, onToggle }: { group: ModeratedGroup; open: bool
         <span className="moderation__who">
           <VerifiedName name={group.name} verified={!!group.verifiedAt} subject="group" />
           <span className="moderation__sub">
-            {group.kind === "community" ? "Сообщество" : "Группа"} · {group.memberCount} участн.
+            {group.kind === "community" ? t("admin.groupKind.community") : t("admin.groupKind.group")} ·{" "}
+            {t("admin.communities.members", { count: group.memberCount })}
           </span>
         </span>
         <span className="moderation__badges">
           {group.activeWarns > 0 && (
             <span className="moderation__badge moderation__badge--warn">
-              {group.activeWarns} из {group.warnLimit}
+              {t("admin.communities.warnCount", { n: group.activeWarns, limit: group.warnLimit })}
             </span>
           )}
-          {group.muted && <span className="moderation__badge moderation__badge--mute">Мут {formatUntil(group.mutedUntil)}</span>}
+          {group.muted && <span className="moderation__badge moderation__badge--mute">{t("admin.communities.mutedUntil", { until: formatUntil(group.mutedUntil) })}</span>}
         </span>
       </button>
       {open && <GroupPanel group={group} />}
@@ -116,29 +131,30 @@ function GroupPanel({ group }: { group: ModeratedGroup }) {
       moderationApi.issue(group.id, { kind, reason: reason.trim(), duration: kind === "mute" ? duration : undefined }),
     onSuccess: (out, kind) => {
       setReason("");
-      if (out.deleted) toast.success(kind === "warn" ? `Третье предупреждение — «${group.name}» удалено` : `«${group.name}» удалено`);
-      else if (kind === "warn") toast.success(`Предупреждение выдано (${out.activeWarns} из ${group.warnLimit})`);
-      else toast.success(`Мут ${formatUntil(out.sanction.expiresAt)}`);
+      if (out.deleted)
+        toast.success(t(kind === "warn" ? "admin.communities.deletedByWarn" : "admin.communities.deleted", { name: group.name }));
+      else if (kind === "warn") toast.success(t("admin.communities.warned", { n: out.activeWarns, limit: group.warnLimit }));
+      else toast.success(t("admin.communities.mutedUntil", { until: formatUntil(out.sanction.expiresAt) }));
       refresh();
     },
-    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Не удалось применить санкцию"),
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : t("admin.communities.issueFailed")),
   });
 
   const revoke = useMutation({
     mutationFn: (s: Sanction) => moderationApi.revoke(s.id),
     onSuccess: () => {
-      toast.success("Санкция снята");
+      toast.success(t("admin.communities.revoked"));
       refresh();
     },
-    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Не удалось снять санкцию"),
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : t("admin.communities.revokeFailed")),
   });
 
   const act = (kind: SanctionKind) => {
     if (!reason.trim()) {
-      toast.error("Укажите причину — её увидят владелец и редакторы");
+      toast.error(t("admin.communities.reasonRequired"));
       return;
     }
-    if (kind === "delete" && !window.confirm(`Удалить «${group.name}»? Восстановить можно в течение 30 дней.`)) return;
+    if (kind === "delete" && !window.confirm(t("admin.communities.confirmDelete", { name: group.name }))) return;
     issue.mutate(kind);
   };
 
@@ -149,60 +165,60 @@ function GroupPanel({ group }: { group: ModeratedGroup }) {
   return (
     <div className="moderation__panel">
       <label className="ui-field">
-        <span className="ui-field__label">Причина (обязательно)</span>
+        <span className="ui-field__label">{t("admin.communities.reasonLabel")}</span>
         <textarea
           className="ui-input moderation__reason"
           rows={2}
           maxLength={1000}
-          placeholder="Её увидят владелец и редакторы"
+          placeholder={t("admin.communities.reasonPlaceholder")}
           value={reason}
           onChange={(e) => setReason(e.target.value)}
         />
       </label>
       <div className="moderation__actions">
         <Button variant="secondary" loading={issue.isPending && issue.variables === "warn"} onClick={() => act("warn")}>
-          Варн
+          {t("admin.communities.warn")}
         </Button>
         <select
           className="ui-input moderation__duration"
-          aria-label="Срок мута"
+          aria-label={t("admin.communities.muteDuration")}
           value={duration}
           onChange={(e) => setDuration(e.target.value as MuteDuration)}
         >
-          {(Object.keys(MUTE_LABELS) as MuteDuration[]).map((d) => (
+          {MUTE_DURATIONS.map((d) => (
             <option key={d} value={d}>
-              {MUTE_LABELS[d]}
+              {muteLabel(d)}
             </option>
           ))}
         </select>
         <Button variant="secondary" loading={issue.isPending && issue.variables === "mute"} onClick={() => act("mute")}>
-          Мут
+          {t("admin.communities.mute")}
         </Button>
         <Button variant="danger" loading={issue.isPending && issue.variables === "delete"} onClick={() => act("delete")}>
-          Удалить
+          {t("admin.communities.delete")}
         </Button>
       </div>
 
       <div className="moderation__history">
-        <div className="ui-field__label">История</div>
+        <div className="ui-field__label">{t("admin.communities.history")}</div>
         {history.isPending ? (
           <Spinner size={18} />
         ) : history.data?.sanctions.length === 0 ? (
-          <p className="moderation__empty">Санкций не было</p>
+          <p className="moderation__empty">{t("admin.communities.noSanctions")}</p>
         ) : (
           <ul className="moderation__sanctions">
             {history.data?.sanctions.map((s) => (
               <li key={s.id} className={"moderation__sanction" + (live(s) ? "" : " moderation__sanction--past")}>
                 <div className="moderation__sanction-head">
-                  <strong>{KIND_LABEL[s.kind]}</strong>
+                  <strong>{t(KIND_LABEL[s.kind])}</strong>
                   <span className="moderation__sub">
                     {formatRelative(s.issuedAt)}
                     {s.kind === "mute" && ` · ${formatUntil(s.expiresAt)}`}
-                    {s.revokedAt && ` · снято ${formatRelative(s.revokedAt)}`}
+                    {s.revokedAt && ` · ${t("admin.communities.revokedAgo", { when: formatRelative(s.revokedAt) })}`}
                   </span>
                   {live(s) && s.kind !== "delete" && (
                     <Button variant="ghost" loading={revoke.isPending && revoke.variables?.id === s.id} onClick={() => revoke.mutate(s)}>
-                      Снять
+                      {t("admin.communities.revoke")}
                     </Button>
                   )}
                 </div>

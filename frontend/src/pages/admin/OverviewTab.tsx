@@ -5,6 +5,7 @@ import { Icon } from "@shared/ui/icons";
 import { adminApi } from "@shared/api/endpoints";
 import type { DashboardOverview } from "@shared/api/types";
 import { formatRelative } from "@shared/lib/format";
+import { intlLocale, t, type Key } from "@shared/i18n";
 import { GrowthChart } from "./GrowthChart";
 import { auditLabel } from "./auditLabels";
 import { FeedbackModal } from "@features/feedback/FeedbackModal";
@@ -16,47 +17,59 @@ import { FeedbackModal } from "@features/feedback/FeedbackModal";
 
 export type AdminSection = "overview" | "users" | "invites" | "verification" | "communities" | "reports" | "updates" | "deleted" | "audit";
 
-const CHECK_NAMES: Record<string, string> = {
-  database: "База данных",
-  redis: "Redis (кеш)",
-  files: "Файлы",
-  turn: "Звонки (TURN)",
-  push_android: "Пуши Android",
-  push_web: "Пуши в браузере",
-  captcha: "Капча при регистрации",
+const CHECK_NAMES: Record<string, Key> = {
+  database: "admin.overview.check.database",
+  redis: "admin.overview.check.redis",
+  files: "admin.overview.check.files",
+  turn: "admin.overview.check.turn",
+  push_android: "admin.overview.check.pushAndroid",
+  push_web: "admin.overview.check.pushWeb",
+  captcha: "admin.overview.check.captcha",
 };
 
-const REASONS: Record<string, string> = {
-  spam: "Спам",
-  abuse: "Оскорбления",
-  fraud: "Мошенничество",
-  illegal: "Запрещённый контент",
-  other: "Другое",
+const REASONS: Record<string, Key> = {
+  spam: "admin.reportReason.spam",
+  abuse: "admin.reportReason.abuse",
+  fraud: "admin.reportReason.fraud",
+  illegal: "admin.reportReason.illegal",
+  other: "admin.reportReason.other",
 };
-const TARGETS: Record<string, string> = { user: "пользователь", message: "сообщение", post: "запись", community: "сообщество" };
-const SEVERITY: Record<string, string> = { high: "Высокая", medium: "Средняя", low: "Низкая" };
+const TARGETS: Record<string, Key> = {
+  user: "admin.overview.target.user",
+  message: "admin.overview.target.message",
+  post: "admin.overview.target.post",
+  community: "admin.overview.target.community",
+};
+const SEVERITY: Record<string, Key> = {
+  high: "admin.overview.severity.high",
+  medium: "admin.overview.severity.medium",
+  low: "admin.overview.severity.low",
+};
+
+/** A label from a table of keys, or the raw value the table does not know. */
+const labelOf = (table: Record<string, Key>, value: string) => (table[value] ? t(table[value]) : value);
 
 export function formatBytes(n: number): string {
-  if (n >= 1 << 30) return `${(n / (1 << 30)).toFixed(2)} ГБ`;
-  if (n >= 1 << 20) return `${(n / (1 << 20)).toFixed(n >= 100 << 20 ? 0 : 1)} МБ`;
-  return `${Math.max(1, Math.round(n / 1024))} КБ`;
+  if (n >= 1 << 30) return t("admin.overview.bytes.gb", { n: (n / (1 << 30)).toFixed(2) });
+  if (n >= 1 << 20) return t("admin.overview.bytes.mb", { n: (n / (1 << 20)).toFixed(n >= 100 << 20 ? 0 : 1) });
+  return t("admin.overview.bytes.kb", { n: Math.max(1, Math.round(n / 1024)) });
 }
 
 export function uptime(startedAt: string, now = Date.now()): string {
   const min = Math.max(0, Math.floor((now - new Date(startedAt).getTime()) / 60_000));
   const d = Math.floor(min / 1440);
   const h = Math.floor((min % 1440) / 60);
-  if (d > 0) return `${d} д ${h} ч`;
-  if (h > 0) return `${h} ч ${min % 60} мин`;
-  return `${min} мин`;
+  if (d > 0) return t("admin.overview.uptime.days", { d, h });
+  if (h > 0) return t("admin.overview.uptime.hours", { h, m: min % 60 });
+  return t("admin.overview.uptime.minutes", { m: min });
 }
 
 /** How full a limit is, as a level the meter shows in colour and in words. */
 export function usageLevel(used: number, limit: number): { pct: number; level: "ok" | "warn" | "critical"; text: string } {
   const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
-  if (pct >= 90) return { pct, level: "critical", text: "почти заполнено" };
-  if (pct >= 70) return { pct, level: "warn", text: "пора думать о месте" };
-  return { pct, level: "ok", text: "в норме" };
+  if (pct >= 90) return { pct, level: "critical", text: t("admin.overview.usage.critical") };
+  if (pct >= 70) return { pct, level: "warn", text: t("admin.overview.usage.warn") };
+  return { pct, level: "ok", text: t("admin.overview.usage.ok") };
 }
 
 export function OverviewTab({ onNavigate }: { onNavigate: (s: AdminSection) => void }) {
@@ -73,7 +86,7 @@ export function OverviewTab({ onNavigate }: { onNavigate: (s: AdminSection) => v
       </div>
     );
   }
-  if (isError || !data) return <p className="admin-verify__empty">Не удалось загрузить обзор</p>;
+  if (isError || !data) return <p className="admin-verify__empty">{t("admin.overview.loadFailed")}</p>;
 
   return (
     <div className="dash">
@@ -96,23 +109,43 @@ export function OverviewTab({ onNavigate }: { onNavigate: (s: AdminSection) => v
 
 function Kpis({ o }: { o: DashboardOverview }) {
   const k = o.kpi;
-  const n = (v: number) => v.toLocaleString("ru-RU");
+  const n = (v: number) => v.toLocaleString(intlLocale());
   const tiles = [
-    { icon: <Icon.Users />, label: "Пользователей", value: n(k.usersTotal), sub: `+${n(k.usersNew24h)} за сутки · +${n(k.usersNew7d)} за неделю` },
-    { icon: <Icon.User />, label: "Активны за 24 ч", value: n(k.active24h), sub: k.usersTotal ? `${Math.round((k.active24h / k.usersTotal) * 100)}% от всех` : "" },
-    { icon: <Icon.Chat />, label: "Сообщений за 24 ч", value: n(k.messages24h), sub: "только количество — содержимое зашифровано" },
-    { icon: <Icon.Community />, label: "Сообществ", value: n(k.communities), sub: `и ${n(k.groups)} групп` },
+    {
+      icon: <Icon.Users />,
+      label: t("admin.overview.kpi.users"),
+      value: n(k.usersTotal),
+      sub: t("admin.overview.kpi.usersSub", { day: n(k.usersNew24h), week: n(k.usersNew7d) }),
+    },
+    {
+      icon: <Icon.User />,
+      label: t("admin.overview.kpi.active24h"),
+      value: n(k.active24h),
+      sub: k.usersTotal ? t("admin.overview.kpi.activeShare", { pct: Math.round((k.active24h / k.usersTotal) * 100) }) : "",
+    },
+    {
+      icon: <Icon.Chat />,
+      label: t("admin.overview.kpi.messages24h"),
+      value: n(k.messages24h),
+      sub: t("admin.overview.kpi.messagesSub"),
+    },
+    {
+      icon: <Icon.Community />,
+      label: t("admin.overview.kpi.communities"),
+      value: n(k.communities),
+      sub: t("admin.overview.kpi.groups", { count: k.groups, n: n(k.groups) }),
+    },
   ];
   return (
     <div className="dash-kpis">
-      {tiles.map((t) => (
-        <div key={t.label} className="dash-kpi">
+      {tiles.map((tile) => (
+        <div key={tile.label} className="dash-kpi">
           <span className="dash-kpi__icon" aria-hidden="true">
-            {t.icon}
+            {tile.icon}
           </span>
-          <div className="dash-kpi__label">{t.label}</div>
-          <div className="dash-kpi__value">{t.value}</div>
-          {t.sub && <div className="dash-kpi__sub">{t.sub}</div>}
+          <div className="dash-kpi__label">{tile.label}</div>
+          <div className="dash-kpi__value">{tile.value}</div>
+          {tile.sub && <div className="dash-kpi__sub">{tile.sub}</div>}
         </div>
       ))}
     </div>
@@ -122,27 +155,36 @@ function Kpis({ o }: { o: DashboardOverview }) {
 function SystemCard({ o }: { o: DashboardOverview }) {
   const down = o.system.checks.filter((c) => c.state === "down").length;
   return (
-    <section className="dash-card" aria-label="Состояние систем" id="dash-system">
+    <section className="dash-card" aria-label={t("admin.overview.system.title")} id="dash-system">
       <header className="dash-card__head">
-        <h3 className="dash-card__title">Состояние систем</h3>
+        <h3 className="dash-card__title">{t("admin.overview.system.title")}</h3>
       </header>
       <p className={"dash-status " + (down ? "dash-status--critical" : "dash-status--ok")}>
         <span className="dash-dot" aria-hidden="true" />
-        {down ? `Не отвечает: ${down}` : "Всё, что включено, работает"}
+        {down ? t("admin.overview.system.down", { count: down }) : t("admin.overview.system.allUp")}
       </p>
       <ul className="dash-checks">
         {o.system.checks.map((c) => (
           <li key={c.name} className={`dash-check dash-check--${c.state}`}>
             <span className="dash-dot" aria-hidden="true" />
-            <span className="dash-check__name">{CHECK_NAMES[c.name] ?? c.name}</span>
+            <span className="dash-check__name">{labelOf(CHECK_NAMES, c.name)}</span>
             <span className="dash-check__state">
-              {c.state === "ok" ? (c.latencyMs != null ? `${c.latencyMs} мс` : (c.detail ?? "включено")) : c.state === "down" ? "не отвечает" : "не настроено"}
+              {c.state === "ok"
+                ? c.latencyMs != null
+                  ? t("admin.overview.check.latency", { ms: c.latencyMs })
+                  : (c.detail ?? t("admin.overview.check.on"))
+                : c.state === "down"
+                  ? t("admin.overview.check.down")
+                  : t("admin.overview.check.off")}
             </span>
           </li>
         ))}
       </ul>
       <p className="dash-card__foot">
-        Версия {o.system.version ? o.system.version.slice(0, 7) : "неизвестна"} · работает {uptime(o.system.startedAt)}
+        {t("admin.overview.system.footer", {
+          version: o.system.version ? o.system.version.slice(0, 7) : t("admin.overview.system.versionUnknown"),
+          uptime: uptime(o.system.startedAt),
+        })}
       </p>
     </section>
   );
@@ -158,14 +200,14 @@ function InboxCard({ o, onNavigate }: { o: DashboardOverview; onNavigate: (s: Ad
     void qc.invalidateQueries({ queryKey: ["admin", "dashboard"] });
   };
   const items: { label: string; value: number; go?: () => void; hint?: string }[] = [
-    { label: "Открытые жалобы", value: o.inbox.openReports, go: () => onNavigate("reports") },
-    { label: "Отзывы без ответа", value: o.inbox.unansweredFeedback, go: () => setFeedback(true) },
-    { label: "Заявки в группы", value: o.inbox.pendingJoinRequests, hint: "решают владельцы групп" },
+    { label: t("admin.overview.inbox.openReports"), value: o.inbox.openReports, go: () => onNavigate("reports") },
+    { label: t("admin.overview.inbox.unansweredFeedback"), value: o.inbox.unansweredFeedback, go: () => setFeedback(true) },
+    { label: t("admin.overview.inbox.joinRequests"), value: o.inbox.pendingJoinRequests, hint: t("admin.overview.inbox.joinRequestsHint") },
   ];
   return (
-    <section className="dash-card" aria-label="Ждут решения">
+    <section className="dash-card" aria-label={t("admin.overview.inbox.title")}>
       <header className="dash-card__head">
-        <h3 className="dash-card__title">Ждут решения</h3>
+        <h3 className="dash-card__title">{t("admin.overview.inbox.title")}</h3>
       </header>
       <ul className="dash-inbox">
         {items.map((i) => (
@@ -199,8 +241,7 @@ function Meter({ label, used, limit, note }: { label: string; used: number; limi
       <div className="dash-meter__top">
         <span>{label}</span>
         <span>
-          {formatBytes(used)}
-          {limit > 0 && ` из ${formatBytes(limit)}`}
+          {limit > 0 ? t("admin.overview.meter.usedOf", { used: formatBytes(used), limit: formatBytes(limit) }) : formatBytes(used)}
         </span>
       </div>
       {limit > 0 && (
@@ -216,18 +257,18 @@ function Meter({ label, used, limit, note }: { label: string; used: number; limi
 function LimitsCard({ o }: { o: DashboardOverview }) {
   const l = o.limits;
   return (
-    <section className="dash-card" aria-label="Лимиты тарифов">
+    <section className="dash-card" aria-label={t("admin.overview.limits.title")}>
       <header className="dash-card__head">
-        <h3 className="dash-card__title">Лимиты тарифов</h3>
+        <h3 className="dash-card__title">{t("admin.overview.limits.title")}</h3>
       </header>
-      <Meter label="База данных (Neon)" used={l.database.usedBytes} limit={l.database.limitBytes} />
+      <Meter label={t("admin.overview.limits.database")} used={l.database.usedBytes} limit={l.database.limitBytes} />
       <div className="dash-meter__note dash-meter__note--block">
-        Из них файлы: {formatBytes(l.filesInDatabase)} — пока объектное хранилище не подключено, вложения лежат в базе
+        {t("admin.overview.limits.filesInDb", { size: formatBytes(l.filesInDatabase) })}
       </div>
       {l.redis ? (
         <Meter label="Redis (Upstash)" used={l.redis.usedBytes} limit={l.redis.limitBytes} />
       ) : (
-        <div className="dash-meter__note">Redis не сообщает расход памяти</div>
+        <div className="dash-meter__note">{t("admin.overview.limits.redisUnknown")}</div>
       )}
     </section>
   );
@@ -235,20 +276,20 @@ function LimitsCard({ o }: { o: DashboardOverview }) {
 
 function ActivityCard({ o, onNavigate }: { o: DashboardOverview; onNavigate: (s: AdminSection) => void }) {
   return (
-    <section className="dash-card" aria-label="Последние события">
+    <section className="dash-card" aria-label={t("admin.overview.activity.title")}>
       <header className="dash-card__head">
-        <h3 className="dash-card__title">Последние события</h3>
+        <h3 className="dash-card__title">{t("admin.overview.activity.title")}</h3>
         <button className="dash-link" onClick={() => onNavigate("audit")}>
-          Весь аудит
+          {t("admin.overview.activity.all")}
         </button>
       </header>
-      {o.activity.length === 0 && <p className="admin-verify__empty">Событий пока нет</p>}
+      {o.activity.length === 0 && <p className="admin-verify__empty">{t("admin.overview.activity.empty")}</p>}
       <ul className="dash-list">
         {o.activity.map((a, i) => (
           <li key={i} className="dash-list__row">
             <div>
               <div className="dash-list__title">{auditLabel(a.action)}</div>
-              <div className="dash-list__sub">{a.actorName ?? "система"}</div>
+              <div className="dash-list__sub">{a.actorName ?? t("admin.overview.activity.system")}</div>
             </div>
             <span className="dash-list__time">{formatRelative(a.createdAt)}</span>
           </li>
@@ -260,22 +301,22 @@ function ActivityCard({ o, onNavigate }: { o: DashboardOverview; onNavigate: (s:
 
 function ReportsCard({ o, onNavigate }: { o: DashboardOverview; onNavigate: (s: AdminSection) => void }) {
   return (
-    <section className="dash-card" aria-label="Открытые жалобы">
+    <section className="dash-card" aria-label={t("admin.overview.reports.title")}>
       <header className="dash-card__head">
-        <h3 className="dash-card__title">Открытые жалобы</h3>
+        <h3 className="dash-card__title">{t("admin.overview.reports.title")}</h3>
         <button className="dash-link" onClick={() => onNavigate("reports")}>
-          Все жалобы
+          {t("admin.overview.reports.all")}
         </button>
       </header>
-      {o.reports.length === 0 && <p className="admin-verify__empty">Открытых жалоб нет</p>}
+      {o.reports.length === 0 && <p className="admin-verify__empty">{t("admin.overview.reports.empty")}</p>}
       <ul className="dash-list">
         {o.reports.map((r) => (
           <li key={r.id} className="dash-list__row">
             <div>
-              <div className="dash-list__title">{REASONS[r.reason] ?? r.reason}</div>
-              <div className="dash-list__sub">{TARGETS[r.targetKind] ?? r.targetKind}</div>
+              <div className="dash-list__title">{labelOf(REASONS, r.reason)}</div>
+              <div className="dash-list__sub">{labelOf(TARGETS, r.targetKind)}</div>
             </div>
-            <span className={`dash-sev dash-sev--${r.severity}`}>{SEVERITY[r.severity]}</span>
+            <span className={`dash-sev dash-sev--${r.severity}`}>{SEVERITY[r.severity] ? t(SEVERITY[r.severity]) : undefined}</span>
             <span className="dash-list__time">{formatRelative(r.createdAt)}</span>
           </li>
         ))}

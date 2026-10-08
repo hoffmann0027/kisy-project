@@ -3,6 +3,7 @@
 // MLS keys are one-time, so server history is undecryptable later; decrypted
 // text must be cached locally, encrypted at rest by the keystore).
 import { UserFacingError } from "@shared/lib/errors";
+import { t } from "@shared/i18n";
 import {
   addMembers,
   createChat,
@@ -503,7 +504,7 @@ async function initiateChat(s: E2EESession, chatId: string, peerUserId: string):
   if (feed.length > 0) {
     const joined = await awaitJoin(s, chatId);
     if (joined) return joined;
-    throw new UserFacingError(DEVICE_NOT_IN_CHAT);
+    throw new UserFacingError(deviceNotInChatText());
   }
 
   // One key package per device: the peer's devices + our own other devices.
@@ -516,7 +517,7 @@ async function initiateChat(s: E2EESession, chatId: string, peerUserId: string):
     // (audit A-10). Tell the sender which of the two it is: the peer has no
     // E2EE device at all, or their one-time key packages ran out.
     const { devices } = await e2eeApi.listDevices(peerUserId).catch(() => ({ devices: [] }));
-    throw new UserFacingError(devices.length > 0 ? PEER_KEYS_EXHAUSTED : PEER_NO_DEVICES);
+    throw new UserFacingError(devices.length > 0 ? peerKeysExhaustedText() : peerNoDevicesText());
   }
 
   const recipients: Record<string, string> = {};
@@ -556,7 +557,7 @@ async function initiateChat(s: E2EESession, chatId: string, peerUserId: string):
     // second or two.
     const adopted = await awaitJoin(s, chatId);
     if (adopted) return adopted;
-    throw new UserFacingError(DEVICE_NOT_IN_CHAT);
+    throw new UserFacingError(deviceNotInChatText());
   }
 
   if (commit.welcome) {
@@ -634,12 +635,18 @@ export interface EncryptedBody {
   epoch: number;
 }
 
-export const DEVICE_NOT_IN_CHAT =
-  "Это устройство ещё не подключено к защищённому чату. Его подключит собеседник или другое ваше устройство, как только окажется в сети, — тогда отправьте снова.";
-export const PEER_NO_DEVICES =
-  "Собеседник ещё не входил в KISY с поддержкой шифрования — сообщение не отправлено.";
-export const PEER_KEYS_EXHAUSTED =
-  "У собеседника закончились ключи шифрования — сообщение не отправлено. Попросите его открыть KISY и повторите.";
+/** The refusal when this device is not yet a member of the chat's MLS group. */
+export function deviceNotInChatText(): string {
+  return t("common.e2ee.deviceNotInChat");
+}
+/** The refusal when the peer has never published an encryption device. */
+export function peerNoDevicesText(): string {
+  return t("common.e2ee.peerNoDevices");
+}
+/** The refusal when the peer's devices have no key packages left. */
+export function peerKeysExhaustedText(): string {
+  return t("common.e2ee.peerKeysExhausted");
+}
 
 /**
  * Encrypt a message for a private chat, creating the chat's MLS group on

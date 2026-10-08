@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Spinner } from "@shared/ui";
 import { adminApi } from "@shared/api/endpoints";
+import { intlLocale, t } from "@shared/i18n";
 
 export function AuditTab() {
   const { data, isPending } = useQuery({
@@ -20,17 +21,17 @@ export function AuditTab() {
     <table className="table">
       <thead>
         <tr>
-          <th>Время</th>
-          <th>Действие</th>
-          <th>Объект</th>
-          <th>Детали</th>
+          <th>{t("admin.audit.colTime")}</th>
+          <th>{t("admin.audit.colAction")}</th>
+          <th>{t("admin.audit.colTarget")}</th>
+          <th>{t("admin.audit.colDetails")}</th>
         </tr>
       </thead>
       <tbody>
         {data?.map((e) => (
           <tr key={e.id}>
             <td style={{ whiteSpace: "nowrap", color: "var(--color-text-secondary)" }}>
-              {new Date(e.createdAt).toLocaleString("ru-RU")}
+              {new Date(e.createdAt).toLocaleString(intlLocale())}
             </td>
             <td>
               <span className="audit-action">{e.action}</span>
@@ -44,7 +45,7 @@ export function AuditTab() {
         {(data?.length ?? 0) === 0 && (
           <tr>
             <td colSpan={4} style={{ textAlign: "center", color: "var(--color-text-secondary)", padding: 24 }}>
-              Записи аудита отсутствуют
+              {t("admin.audit.empty")}
             </td>
           </tr>
         )}

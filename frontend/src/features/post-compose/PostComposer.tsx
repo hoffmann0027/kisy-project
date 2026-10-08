@@ -5,6 +5,7 @@ import { userFacingError } from "@shared/api/envelope";
 import { useCreatePost } from "@entities/post/queries";
 import { useAuthStore } from "@shared/store/auth";
 import { fileTooLargeForNewAccount, heldBackNotice } from "@shared/lib/quarantine";
+import { t } from "@shared/i18n";
 
 // Writing a post: text plus up to ten files.
 //
@@ -22,7 +23,7 @@ export function PostComposer({ communityId }: { communityId: string }) {
   // A brand-new account may not publish yet. Saying so here beats letting
   // someone write a post and lose it to a refusal on submit.
   const quarantine = useAuthStore((s) => s.quarantine);
-  const held = heldBackNotice(quarantine, "Публикация постов откроется");
+  const held = heldBackNotice(quarantine, t("work.compose.heldBack"));
 
   const pick = (list: FileList | null) => {
     if (!list) return;
@@ -35,7 +36,7 @@ export function PostComposer({ communityId }: { communityId: string }) {
     }
     const picked = [...files, ...Array.from(list)].slice(0, MAX_FILES);
     if (picked.length < files.length + list.length) {
-      toast.error(`Не больше ${MAX_FILES} файлов в одном посте`);
+      toast.error(t("work.compose.tooManyFiles", { max: MAX_FILES }));
     }
     setFiles(picked);
   };
@@ -50,7 +51,7 @@ export function PostComposer({ communityId }: { communityId: string }) {
           setFiles([]);
           if (fileInput.current) fileInput.current.value = "";
         },
-        onError: (e) => toast.error(userFacingError(e, "Не удалось опубликовать пост")),
+        onError: (e) => toast.error(userFacingError(e, t("work.compose.publishFailed"))),
       },
     );
   };
@@ -63,13 +64,13 @@ export function PostComposer({ communityId }: { communityId: string }) {
     <div className="post-compose">
       <textarea
         className="post-compose__text"
-        placeholder="Что нового?"
+        placeholder={t("work.compose.placeholder")}
         value={text}
         maxLength={8000}
         onChange={(e) => setText(e.target.value)}
       />
       <div className="post-compose__row">
-        <IconButton label="Прикрепить файлы" onClick={() => fileInput.current?.click()}>
+        <IconButton label={t("work.compose.attach")} onClick={() => fileInput.current?.click()}>
           <Icon.Paperclip size={20} />
         </IconButton>
         <input
@@ -87,7 +88,7 @@ export function PostComposer({ communityId }: { communityId: string }) {
           loading={create.isPending}
           disabled={!text.trim() && files.length === 0}
         >
-          Опубликовать
+          {t("work.compose.publish")}
         </Button>
       </div>
     </div>

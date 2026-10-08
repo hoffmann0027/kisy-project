@@ -4,6 +4,7 @@
 // runs on an explicit user action (allowPreview) — the card offers a button
 // instead of auto-fetching.
 import { useState } from "react";
+import { t } from "@shared/i18n";
 import { linkPreviewApi } from "@shared/api/endpoints";
 import { useLinkPreview } from "@entities/link-preview/queries";
 
@@ -22,8 +23,8 @@ export function LinkPreviewCard({ url, autoFetch }: Props) {
   if (!enabled) {
     return (
       <button className="linkcard linkcard--optin" onClick={() => setOptedIn(true)}>
-        Показать превью ссылки
-        <span className="linkcard__hint">Запрос уйдёт на сервер (в зашифрованном чате)</span>
+        {t("chat.linkPreview.show")}
+        <span className="linkcard__hint">{t("chat.linkPreview.hint")}</span>
       </button>
     );
   }

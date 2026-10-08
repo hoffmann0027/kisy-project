@@ -2,6 +2,7 @@
 // Links, lazily loaded per tab, clearance-scoped by the backend. Clicking a
 // thumbnail opens the media viewer over the tab's items.
 import { useState } from "react";
+import { t } from "@shared/i18n";
 import { cn } from "@shared/lib/cn";
 import { handleDownloadClick } from "@shared/lib/mediaSrc";
 import { Button } from "@shared/ui";
@@ -44,19 +45,19 @@ export function ChatPanel({ chatType, chatId, onClose, onOpenMedia }: Props) {
   const active = tab === "media" ? media : tab === "files" ? files : links;
 
   return (
-    <aside className="cpanel" aria-label="Материалы чата">
+    <aside className="cpanel" aria-label={t("chat.panel.ariaLabel")}>
       <header className="cpanel__header">
-        <span className="cpanel__title">Материалы</span>
-        <button className="cpanel__close" onClick={onClose} title="Закрыть панель">
+        <span className="cpanel__title">{t("chat.panel.title")}</span>
+        <button className="cpanel__close" onClick={onClose} title={t("chat.panel.close")}>
           ✕
         </button>
       </header>
       <div className="cpanel__tabs" role="tablist">
         {(
           [
-            ["media", "Медиа"],
-            ["files", "Файлы"],
-            ["links", "Ссылки"],
+            ["media", t("chat.panel.tabMedia")],
+            ["files", t("chat.panel.tabFiles")],
+            ["links", t("chat.panel.tabLinks")],
           ] as [Tab, string][]
         ).map(([key, label]) => (
           <button
@@ -76,7 +77,7 @@ export function ChatPanel({ chatType, chatId, onClose, onOpenMedia }: Props) {
           <Skeletons grid={tab === "media"} />
         ) : tab === "media" ? (
           mediaItems.length === 0 ? (
-            <div className="cpanel__empty">В этом чате пока нет медиа</div>
+            <div className="cpanel__empty">{t("chat.panel.emptyMedia")}</div>
           ) : (
             <div className="cpanel__grid">
               {mediaItems.map((it, i) => (
@@ -93,7 +94,7 @@ export function ChatPanel({ chatType, chatId, onClose, onOpenMedia }: Props) {
           )
         ) : tab === "files" ? (
           fileItems.length === 0 ? (
-            <div className="cpanel__empty">В этом чате пока нет файлов</div>
+            <div className="cpanel__empty">{t("chat.panel.emptyFiles")}</div>
           ) : (
             <div className="cpanel__list">
               {fileItems.map((it) => (
@@ -116,9 +117,9 @@ export function ChatPanel({ chatType, chatId, onClose, onOpenMedia }: Props) {
           )
         ) : linkItems.length === 0 ? (
           <div className="cpanel__empty">
-            В этом чате пока нет ссылок
+            {t("chat.panel.emptyLinks")}
             {chatType === "private" && (
-              <div className="cpanel__hint">Ссылки из зашифрованных сообщений серверу не видны</div>
+              <div className="cpanel__hint">{t("chat.panel.encryptedLinksHint")}</div>
             )}
           </div>
         ) : (
@@ -140,7 +141,7 @@ export function ChatPanel({ chatType, chatId, onClose, onOpenMedia }: Props) {
         {active.hasNextPage && (
           <div className="cpanel__more">
             <Button variant="ghost" loading={active.isFetchingNextPage} onClick={() => void active.fetchNextPage()}>
-              Загрузить ещё
+              {t("chat.common.loadMore")}
             </Button>
           </div>
         )}

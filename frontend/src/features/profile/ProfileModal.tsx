@@ -5,7 +5,7 @@ import { Button, Input, Modal, VerifiedName, toast } from "@shared/ui";
 import { roleLabel } from "@shared/api/types";
 import { authApi, usersApi } from "@shared/api/endpoints";
 import { useAuthStore } from "@shared/store/auth";
-import { PASSWORD_RULE_TEXT, passwordProblem } from "@shared/lib/password";
+import { passwordProblem, passwordRuleText } from "@shared/lib/password";
 import { DeleteAccountDialog } from "./DeleteAccountDialog";
 import { BlockedList } from "@features/blocks/BlockedList";
 import { disablePush, enablePush, pushEnabled, pushSupported } from "@shared/lib/push";
@@ -14,6 +14,7 @@ import type { GroupNotifyMode } from "@shared/api/endpoints";
 import { PermissionsModal } from "@features/permissions/PermissionsModal";
 import { AvatarCropper } from "./AvatarCropper";
 import { displayNameErrorMessage, displayNameProblem, normalizeDisplayName } from "@shared/lib/displayName";
+import { t, type Key } from "@shared/i18n";
 
 interface Props {
   open: boolean;
@@ -45,14 +46,14 @@ export function ProfileModal({ open, onClose }: Props) {
       if (pushOn) {
         await disablePush();
         setPushOn(false);
-        toast.success("Push-уведомления отключены");
+        toast.success(t("account.profile.pushOff"));
       } else {
         const ok = await enablePush();
         setPushOn(ok);
-        toast[ok ? "success" : "error"](ok ? "Push-уведомления включены" : "Не удалось включить push");
+        toast[ok ? "success" : "error"](ok ? t("account.profile.pushOn") : t("account.profile.pushEnableFailed"));
       }
     } catch {
-      toast.error("Не удалось изменить push-уведомления");
+      toast.error(t("account.profile.pushToggleFailed"));
     } finally {
       setPushBusy(false);
     }
@@ -73,22 +74,22 @@ export function ProfileModal({ open, onClose }: Props) {
     }
     if (username !== user.username) {
       if (!/^[A-Za-z0-9_]{3,32}$/.test(username)) {
-        toast.error("Логин: 3–32 символа, буквы/цифры/подчёркивание");
+        toast.error(t("account.profile.loginRule"));
         return;
       }
       fields.username = username;
     }
     if (!fields.displayName && !fields.username) {
-      toast.error("Нет изменений");
+      toast.error(t("account.profile.noChanges"));
       return;
     }
     setBusy(true);
     try {
       const { user: updated } = await usersApi.updateProfile(fields);
       setUser(updated);
-      toast.success("Профиль обновлён");
+      toast.success(t("account.profile.updated"));
     } catch (e) {
-      toast.error(displayNameErrorMessage(e) ?? "Не удалось обновить профиль (возможно, логин занят)");
+      toast.error(displayNameErrorMessage(e) ?? t("account.profile.updateFailed"));
     } finally {
       setBusy(false);
     }
@@ -102,7 +103,7 @@ export function ProfileModal({ open, onClose }: Props) {
   const changePassword = async () => {
     const problem = passwordProblem(newPassword);
     if (problem) {
-      toast.error(`Новый пароль — ${problem.toLowerCase()}`);
+      toast.error(t("account.password.newProblem", { problem: problem.toLowerCase() }));
       return;
     }
     setBusy(true);
@@ -110,16 +111,16 @@ export function ProfileModal({ open, onClose }: Props) {
       await authApi.changePassword(currentPassword, newPassword);
       setCurrentPassword("");
       setNewPassword("");
-      toast.success("Пароль изменён. Другие сессии завершены");
+      toast.success(t("account.profile.passwordChanged"));
     } catch {
-      toast.error("Не удалось изменить пароль");
+      toast.error(t("account.password.changeFailed"));
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Modal open={open} title="Профиль" onClose={onClose}>
+    <Modal open={open} title={t("account.profile.title")} onClose={onClose}>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <AvatarCropper name={user.displayName} url={user.avatarUrl} size={56} onUpload={uploadAvatar} />
         <div>
@@ -135,10 +136,10 @@ export function ProfileModal({ open, onClose }: Props) {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <Input label="Отображаемое имя" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-        <Input label="Логин" value={username} onChange={(e) => setUsername(e.target.value)} />
+        <Input label={t("account.profile.displayName")} value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+        <Input label={t("account.profile.username")} value={username} onChange={(e) => setUsername(e.target.value)} />
         <Button variant="secondary" onClick={saveProfile} loading={busy}>
-          Сохранить профиль
+          {t("account.profile.saveProfile")}
         </Button>
       </div>
 
@@ -147,48 +148,44 @@ export function ProfileModal({ open, onClose }: Props) {
       <LanguageSwitcher />
 
       <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ fontWeight: 600, fontSize: 15 }}>Сменить пароль</div>
+        <div style={{ fontWeight: 600, fontSize: 15 }}>{t("account.profile.changePasswordTitle")}</div>
         <Input
-          label="Текущий пароль"
+          label={t("account.password.current")}
           type="password"
           value={currentPassword}
           onChange={(e) => setCurrentPassword(e.target.value)}
         />
         <Input
-          label="Новый пароль"
-          hint={PASSWORD_RULE_TEXT}
+          label={t("account.password.new")}
+          hint={passwordRuleText()}
           type="password"
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
         />
         <Button variant="secondary" onClick={changePassword} loading={busy}>
-          Изменить пароль
+          {t("account.profile.changePassword")}
         </Button>
       </div>
 
       {pushSupported() && (
         <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div>
-            <div style={{ fontWeight: 600, fontSize: 15 }}>Push-уведомления</div>
-            <div style={{ color: "var(--color-text-secondary)", fontSize: 13 }}>
-              О новых упоминаниях, когда вкладка закрыта
-            </div>
+            <div style={{ fontWeight: 600, fontSize: 15 }}>{t("account.profile.push")}</div>
+            <div style={{ color: "var(--color-text-secondary)", fontSize: 13 }}>{t("account.profile.pushHint")}</div>
           </div>
           <Button variant="secondary" onClick={() => void togglePush()} loading={pushBusy}>
-            {pushOn ? "Отключить" : "Включить"}
+            {pushOn ? t("account.profile.disable") : t("account.profile.enable")}
           </Button>
         </div>
       )}
 
       <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <div>
-          <div style={{ fontWeight: 600, fontSize: 15 }}>Разрешения</div>
-          <div style={{ color: "var(--color-text-secondary)", fontSize: 13 }}>
-            Уведомления, микрофон и экран звонка — что разрешено и как исправить
-          </div>
+          <div style={{ fontWeight: 600, fontSize: 15 }}>{t("account.permissions.title")}</div>
+          <div style={{ color: "var(--color-text-secondary)", fontSize: 13 }}>{t("account.profile.permissionsHint")}</div>
         </div>
         <Button variant="secondary" onClick={() => setPermissionsOpen(true)}>
-          Открыть
+          {t("account.profile.open")}
         </Button>
       </div>
       {permissionsOpen && <PermissionsModal open onClose={() => setPermissionsOpen(false)} />}
@@ -198,20 +195,20 @@ export function ProfileModal({ open, onClose }: Props) {
       <BlockedList />
 
       <Button variant="danger" block onClick={() => void logout()}>
-        Выйти из аккаунта
+        {t("account.profile.signOut")}
       </Button>
 
       {/* Удаление аккаунта — отдельно от выхода и тише его: это не то, что
           нажимают по ошибке. Ссылка на политику рядом, как требует Play. */}
       <div className="profile-legal">
         <button type="button" className="profile-legal__danger" onClick={() => setDeleteOpen(true)}>
-          Удалить аккаунт
+          {t("account.profile.deleteAccount")}
         </button>
         <a className="auth-link" href="/privacy" target="_blank" rel="noreferrer">
-          Политика конфиденциальности
+          {t("account.legal.privacyTitle")}
         </a>
         <a className="auth-link" href="/rules" target="_blank" rel="noreferrer">
-          Правила сообщества
+          {t("account.legal.rulesTitle")}
         </a>
       </div>
       {deleteOpen && <DeleteAccountDialog open onClose={() => setDeleteOpen(false)} />}
@@ -219,10 +216,11 @@ export function ProfileModal({ open, onClose }: Props) {
   );
 }
 
-const GROUP_MODE_LABELS: Record<GroupNotifyMode, string> = {
-  all: "Все сообщения",
-  mentions_only: "Только упоминания",
-  none: "Отключены",
+// Keys, not text: resolved at render, in the language on screen.
+const GROUP_MODE_LABELS: Record<GroupNotifyMode, Key> = {
+  all: "account.notifications.groupModeAll",
+  mentions_only: "account.notifications.groupModeMentionsOnly",
+  none: "account.notifications.groupModeNone",
 };
 
 function NotificationSettingsSection() {
@@ -231,22 +229,22 @@ function NotificationSettingsSection() {
   if (!settings) return null;
 
   const set = (patch: Partial<typeof settings>) =>
-    update.mutate({ ...settings, ...patch }, { onError: () => toast.error("Не удалось сохранить настройки") });
+    update.mutate({ ...settings, ...patch }, { onError: () => toast.error(t("account.notifications.saveFailed")) });
 
   return (
     <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ fontWeight: 600, fontSize: 15 }}>Уведомления</div>
+      <div style={{ fontWeight: 600, fontSize: 15 }}>{t("account.notifications.title")}</div>
 
       <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-        <span style={{ fontSize: 14 }}>Звук</span>
+        <span style={{ fontSize: 14 }}>{t("account.notifications.sound")}</span>
         <input type="checkbox" checked={settings.sound} onChange={(e) => set({ sound: e.target.checked })} />
       </label>
       <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-        <span style={{ fontSize: 14 }}>Показывать превью текста</span>
+        <span style={{ fontSize: 14 }}>{t("account.notifications.preview")}</span>
         <input type="checkbox" checked={settings.preview} onChange={(e) => set({ preview: e.target.checked })} />
       </label>
       <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-        <span style={{ fontSize: 14 }}>Уведомления в группах</span>
+        <span style={{ fontSize: 14 }}>{t("account.notifications.groups")}</span>
         <select
           className="ui-input"
           style={{ width: "auto" }}
@@ -255,7 +253,7 @@ function NotificationSettingsSection() {
         >
           {(Object.keys(GROUP_MODE_LABELS) as GroupNotifyMode[]).map((m) => (
             <option key={m} value={m}>
-              {GROUP_MODE_LABELS[m]}
+              {t(GROUP_MODE_LABELS[m])}
             </option>
           ))}
         </select>

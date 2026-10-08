@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { intlLocale, t } from "@shared/i18n";
 
 // Accounts over time: one series, so no legend — the title names it. The line
 // and area wear the theme's accent; grid and axis text stay in muted ink.
@@ -30,7 +31,7 @@ export function niceTicks(max: number, count = 4): number[] {
 }
 
 const dayLabel = (iso: string) =>
-  new Date(iso + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+  new Date(iso + "T00:00:00").toLocaleDateString(intlLocale(), { day: "numeric", month: "short" });
 
 export function GrowthChart({ data }: { data: GrowthPoint[] }) {
   const [range, setRange] = useState<Range>(30);
@@ -72,13 +73,13 @@ export function GrowthChart({ data }: { data: GrowthPoint[] }) {
   const last = points[points.length - 1];
 
   return (
-    <section className="dash-card dash-growth" aria-label="Рост пользователей">
+    <section className="dash-card dash-growth" aria-label={t("admin.growth.title")}>
       <header className="dash-card__head">
-        <h3 className="dash-card__title">Рост пользователей</h3>
-        <div className="dash-range" role="group" aria-label="Период">
+        <h3 className="dash-card__title">{t("admin.growth.title")}</h3>
+        <div className="dash-range" role="group" aria-label={t("admin.growth.range")}>
           {RANGES.map((r) => (
             <button key={r} className={r === range ? "is-active" : ""} aria-pressed={r === range} onClick={() => setRange(r)}>
-              {r} дн
+              {t("admin.growth.days", { n: r })}
             </button>
           ))}
         </div>
@@ -89,18 +90,18 @@ export function GrowthChart({ data }: { data: GrowthPoint[] }) {
         onPointerMove={(e) => onMove(e.clientX)}
         onPointerLeave={() => setHover(null)}
       >
-        <svg width={width} height={H} role="img" aria-label={`Всего пользователей: ${last?.total ?? 0}`}>
+        <svg width={width} height={H} role="img" aria-label={t("admin.growth.ariaTotal", { total: last?.total ?? 0 })}>
           <defs>
             <linearGradient id="dash-growth-fill" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" style={{ stopColor: "var(--acc)", stopOpacity: 0.35 }} />
               <stop offset="100%" style={{ stopColor: "var(--acc)", stopOpacity: 0 }} />
             </linearGradient>
           </defs>
-          {ticks.map((t) => (
-            <g key={t}>
-              <line className="dash-growth__grid" x1={PAD.left} x2={width - PAD.right} y1={y(t)} y2={y(t)} />
-              <text className="dash-growth__axis" x={PAD.left - 8} y={y(t) + 4} textAnchor="end">
-                {t.toLocaleString("ru-RU")}
+          {ticks.map((tick) => (
+            <g key={tick}>
+              <line className="dash-growth__grid" x1={PAD.left} x2={width - PAD.right} y1={y(tick)} y2={y(tick)} />
+              <text className="dash-growth__axis" x={PAD.left - 8} y={y(tick) + 4} textAnchor="end">
+                {tick.toLocaleString(intlLocale())}
               </text>
             </g>
           ))}
@@ -125,7 +126,7 @@ export function GrowthChart({ data }: { data: GrowthPoint[] }) {
             className="dash-tip"
             style={{ left: Math.min(width - 150, Math.max(0, x(hover) - 70)), top: Math.max(0, y(h.total) - 70) }}
           >
-            <strong>{h.total.toLocaleString("ru-RU")}</strong> пользователей
+            <strong>{h.total.toLocaleString(intlLocale())}</strong> {t("admin.growth.tipUsers", { count: h.total })}
             <div>
               {dayLabel(h.day)} · +{h.registrations}
             </div>

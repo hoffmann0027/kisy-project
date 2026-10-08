@@ -3,6 +3,7 @@
 // thread (threadRootId). Realtime updates arrive via the WS layer, which
 // routes thread replies into this panel's query cache.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { t } from "@shared/i18n";
 import { Button, Spinner, toast } from "@shared/ui";
 import type { Attachment, Message } from "@shared/api/types";
 import {
@@ -49,7 +50,7 @@ export function ThreadPanel({ root, onClose, onReact, onDelete, onEdit, onOpenIm
       { text, replyTo: replyToId, attachmentIds: attachments?.map((a) => a.id), threadRootId: root.id },
       {
         onSuccess: ({ message }) => cache.insertThread(root.id, message),
-        onError: () => toast.error("Не удалось отправить в обсуждение"),
+        onError: () => toast.error(t("chat.thread.sendFailed")),
       },
     );
   };
@@ -58,7 +59,7 @@ export function ThreadPanel({ root, onClose, onReact, onDelete, onEdit, onOpenIm
     if (!id) return undefined;
     const parent = id === root.id ? root : replies.find((m) => m.id === id);
     if (!parent) return undefined;
-    return parent.isDeleted ? "удалённое сообщение" : (parent.text ?? "").slice(0, 80);
+    return parent.isDeleted ? t("chat.conv.deletedMessage") : (parent.text ?? "").slice(0, 80);
   };
 
   const noop = () => {};
@@ -82,10 +83,10 @@ export function ThreadPanel({ root, onClose, onReact, onDelete, onEdit, onOpenIm
   );
 
   return (
-    <aside className="cpanel thread-panel" aria-label="Обсуждение">
+    <aside className="cpanel thread-panel" aria-label={t("chat.thread.title")}>
       <header className="cpanel__header">
-        <span className="cpanel__title">Обсуждение</span>
-        <button className="cpanel__close" onClick={onClose} title="Закрыть обсуждение">
+        <span className="cpanel__title">{t("chat.thread.title")}</span>
+        <button className="cpanel__close" onClick={onClose} title={t("chat.thread.close")}>
           ✕
         </button>
       </header>
@@ -94,8 +95,8 @@ export function ThreadPanel({ root, onClose, onReact, onDelete, onEdit, onOpenIm
         <div className="thread-panel__root">{bubble(root)}</div>
         <div className="thread-panel__divider">
           {root.threadReplyCount
-            ? `Ответы: ${root.threadReplyCount}`
-            : "Пока нет ответов — начните обсуждение"}
+            ? t("chat.thread.replies", { count: root.threadReplyCount })
+            : t("chat.thread.noReplies")}
         </div>
         {isPending && (
           <div style={{ display: "flex", justifyContent: "center", padding: 16 }}>
@@ -105,7 +106,7 @@ export function ThreadPanel({ root, onClose, onReact, onDelete, onEdit, onOpenIm
         {hasNextPage && (
           <div className="conv__load-more">
             <Button variant="ghost" loading={isFetchingNextPage} onClick={() => void fetchNextPage()}>
-              Загрузить ещё
+              {t("chat.common.loadMore")}
             </Button>
           </div>
         )}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Avatar, Button, Modal, toast } from "@shared/ui";
+import { t } from "@shared/i18n";
 
 const FRAME = 260; // on-screen crop square, px
 const OUTPUT = 256; // exported avatar size, px
@@ -29,11 +30,11 @@ export function AvatarCropper({ name, url, size = 56, onUpload, disabled }: Prop
   const pick = (file: File | undefined) => {
     if (!file) return;
     if (!ACCEPT.includes(file.type)) {
-      toast.error("Только JPEG, PNG или WebP");
+      toast.error(t("account.avatar.badType"));
       return;
     }
     if (file.size > MAX_INPUT_BYTES) {
-      toast.error("Файл слишком большой (макс. 8 МБ)");
+      toast.error(t("account.avatar.tooBig"));
       return;
     }
     setSrc(URL.createObjectURL(file));
@@ -48,10 +49,10 @@ export function AvatarCropper({ name, url, size = 56, onUpload, disabled }: Prop
     setBusy(true);
     try {
       await onUpload(blob);
-      toast.success("Аватар обновлён");
+      toast.success(t("account.avatar.updated"));
       close();
     } catch {
-      toast.error("Не удалось загрузить аватар");
+      toast.error(t("account.avatar.uploadFailed"));
     } finally {
       setBusy(false);
     }
@@ -69,10 +70,10 @@ export function AvatarCropper({ name, url, size = 56, onUpload, disabled }: Prop
           e.preventDefault();
           if (!disabled) pick(e.dataTransfer.files?.[0]);
         }}
-        title={disabled ? "" : "Изменить аватар"}
+        title={disabled ? "" : t("account.avatar.change")}
       >
         <Avatar name={name} url={url} size={size} />
-        {!disabled && <span className="avatar-trigger__hint">Изменить</span>}
+        {!disabled && <span className="avatar-trigger__hint">{t("account.avatar.changeShort")}</span>}
       </button>
       <input
         ref={fileRef}
@@ -163,7 +164,7 @@ function CropDialog({
   };
 
   return (
-    <Modal open title="Обрезка аватара" onClose={onCancel}>
+    <Modal open title={t("account.avatar.cropTitle")} onClose={onCancel}>
       <div className="cropper">
         <div
           className="cropper__frame"
@@ -191,7 +192,7 @@ function CropDialog({
           )}
         </div>
         <label className="cropper__zoom">
-          Масштаб
+          {t("account.avatar.zoom")}
           <input
             type="range"
             min={1}
@@ -203,10 +204,10 @@ function CropDialog({
         </label>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <Button variant="ghost" onClick={onCancel} disabled={busy}>
-            Отмена
+            {t("account.avatar.cancel")}
           </Button>
           <Button variant="primary" onClick={confirm} loading={busy}>
-            Сохранить
+            {t("account.avatar.save")}
           </Button>
         </div>
       </div>

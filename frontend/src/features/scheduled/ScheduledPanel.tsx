@@ -2,6 +2,7 @@
 // each with its text (E2EE rows resolve from the local sched cache), send
 // time, reschedule and cancel controls.
 import { useEffect, useState } from "react";
+import { intlLocale, t } from "@shared/i18n";
 import { Modal, toast } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import type { ScheduledMessage } from "@shared/api/types";
@@ -23,7 +24,7 @@ function toLocalInput(d: Date): string {
 }
 
 function formatSendAt(iso: string): string {
-  return new Date(iso).toLocaleString("ru-RU", {
+  return new Date(iso).toLocaleString(intlLocale(), {
     day: "numeric",
     month: "long",
     hour: "2-digit",
@@ -42,8 +43,8 @@ function Row({ item }: { item: ScheduledMessage }) {
   useEffect(() => {
     if (item.text != null) return;
     let alive = true;
-    void scheduledDisplayText(item).then((t) => {
-      if (alive) setText(t);
+    void scheduledDisplayText(item).then((resolved) => {
+      if (alive) setText(resolved);
     });
     return () => {
       alive = false;
@@ -53,14 +54,14 @@ function Row({ item }: { item: ScheduledMessage }) {
   const saveTime = () => {
     const d = new Date(newTime);
     if (Number.isNaN(d.getTime()) || d.getTime() < Date.now() + 10_000) {
-      toast.error("Время должно быть в будущем");
+      toast.error(t("chat.scheduled.timeInPast"));
       return;
     }
     reschedule.mutate(
       { id: item.id, sendAt: d },
       {
         onSuccess: () => setEditingTime(false),
-        onError: () => toast.error("Не удалось перенести отправку"),
+        onError: () => toast.error(t("chat.scheduled.rescheduleFailed")),
       },
     );
   };
@@ -69,7 +70,7 @@ function Row({ item }: { item: ScheduledMessage }) {
     <li className="schedlist__row">
       <div className="schedlist__body">
         <div className="schedlist__text">
-          {text ?? (item.ciphertext ? "🔒 Зашифрованное сообщение" : "Вложение")}
+          {text ?? (item.ciphertext ? t("chat.bubble.encrypted") : t("chat.scheduled.attachment"))}
         </div>
         {editingTime ? (
           <div className="schedlist__edit-time">
@@ -80,7 +81,7 @@ function Row({ item }: { item: ScheduledMessage }) {
               min={toLocalInput(new Date())}
               onChange={(e) => setNewTime(e.target.value)}
             />
-            <button className="schedlist__btn" title="Сохранить" onClick={saveTime}>
+            <button className="schedlist__btn" title={t("chat.action.save")} onClick={saveTime}>
               <Icon.Check size={16} />
             </button>
           </div>
@@ -92,14 +93,14 @@ function Row({ item }: { item: ScheduledMessage }) {
         )}
       </div>
       <div className="schedlist__actions">
-        <button className="schedlist__btn" title="Перенести" onClick={() => setEditingTime((v) => !v)}>
+        <button className="schedlist__btn" title={t("chat.scheduled.reschedule")} onClick={() => setEditingTime((v) => !v)}>
           <Icon.Edit size={16} />
         </button>
         <button
           className="schedlist__btn schedlist__btn--danger"
-          title="Отменить отправку"
+          title={t("chat.scheduled.cancel")}
           onClick={() =>
-            cancel.mutate(item.id, { onError: () => toast.error("Не удалось отменить отправку") })
+            cancel.mutate(item.id, { onError: () => toast.error(t("chat.scheduled.cancelFailed")) })
           }
         >
           <Icon.Trash size={16} />
@@ -111,10 +112,10 @@ function Row({ item }: { item: ScheduledMessage }) {
 
 export function ScheduledPanel({ open, items, onClose }: Props) {
   return (
-    <Modal open={open} title="Запланированные сообщения" onClose={onClose}>
+    <Modal open={open} title={t("chat.scheduled.title")} onClose={onClose}>
       {items.length === 0 ? (
         <p className="schedlist__empty">
-          Нет запланированных сообщений. Кнопка «часы» рядом с отправкой планирует сообщение на будущее.
+          {t("chat.scheduled.empty")}
         </p>
       ) : (
         <ul className="schedlist">

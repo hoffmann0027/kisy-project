@@ -3,6 +3,7 @@ import type { PluginListenerHandle } from "@capacitor/core";
 import { pushApi } from "@shared/api/endpoints";
 import { isNative } from "@shared/lib/native";
 import { callLog } from "@shared/lib/callLog";
+import { t } from "@shared/i18n";
 
 // Push notifications for the packaged mobile app.
 //
@@ -82,8 +83,8 @@ async function ensureChannel(): Promise<void> {
   try {
     await PushNotifications.createChannel({
       id: CHANNEL_ID,
-      name: "Сообщения",
-      description: "Новые сообщения и упоминания",
+      name: t("common.push.channelName"),
+      description: t("common.push.channelDescription"),
       importance: 5, // heads-up, with sound
       visibility: 1, // shown on the lock screen, without the message body
     });

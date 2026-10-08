@@ -3,6 +3,17 @@ import { Avatar, Button, Input, Modal, toast } from "@shared/ui";
 import { CARD_LABELS, type BoardCard, type CardInput, type User } from "@shared/api/types";
 import { cn } from "@shared/lib/cn";
 import { useAuthStore } from "@shared/store/auth";
+import { t, type Key } from "@shared/i18n";
+
+// The spoken name of each label colour (the swatch itself carries no text).
+const LABEL_NAME: Record<string, Key> = {
+  blue: "work.color.blue",
+  green: "work.color.green",
+  yellow: "work.color.yellow",
+  red: "work.color.red",
+  purple: "work.color.purple",
+  gray: "work.color.gray",
+};
 
 interface Props {
   card: BoardCard | null;
@@ -25,7 +36,7 @@ export function CardModal({ card, members, canDelete, onClose, onSave, onDelete 
 
   const save = () => {
     if (!title.trim()) {
-      toast.error("Введите название задачи");
+      toast.error(t("work.board.enterTitle"));
       return;
     }
     onSave(card.id, {
@@ -39,22 +50,22 @@ export function CardModal({ card, members, canDelete, onClose, onSave, onDelete 
   };
 
   return (
-    <Modal open={!!card} title="Задача" onClose={onClose}>
-      <Input label="Название" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+    <Modal open={!!card} title={t("work.board.card")} onClose={onClose}>
+      <Input label={t("work.board.fieldTitle")} value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
 
       <div className="ui-field">
-        <label className="ui-field__label">Описание</label>
+        <label className="ui-field__label">{t("work.board.fieldDescription")}</label>
         <textarea
           className="ui-input"
           style={{ minHeight: 90, resize: "vertical" }}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Детали задачи…"
+          placeholder={t("work.board.descriptionPlaceholder")}
         />
       </div>
 
       <div className="ui-field">
-        <label className="ui-field__label">Метка</label>
+        <label className="ui-field__label">{t("work.board.fieldLabel")}</label>
         <div className="card-labels">
           {Object.entries(CARD_LABELS).map(([key, color]) => (
             <button
@@ -63,20 +74,19 @@ export function CardModal({ card, members, canDelete, onClose, onSave, onDelete 
               className={cn("card-label-swatch", label === key && "card-label-swatch--active")}
               style={{ background: color }}
               onClick={() => setLabel(label === key ? null : key)}
-              aria-label={key}
+              aria-label={LABEL_NAME[key] ? t(LABEL_NAME[key]) : key}
             />
           ))}
         </div>
       </div>
 
       <div className="ui-field">
-        <label className="ui-field__label">Исполнитель</label>
+        <label className="ui-field__label">{t("work.board.fieldAssignee")}</label>
         <select className="ui-input" value={assigneeId ?? ""} onChange={(e) => setAssigneeId(e.target.value || null)}>
-          <option value="">Не назначен</option>
+          <option value="">{t("work.board.unassigned")}</option>
           {members.map((m) => (
             <option key={m.id} value={m.id}>
-              {m.displayName}
-              {m.id === me.id ? " (вы)" : ""}
+              {m.id === me.id ? t("work.board.memberYou", { name: m.displayName }) : m.displayName}
             </option>
           ))}
         </select>
@@ -90,11 +100,11 @@ export function CardModal({ card, members, canDelete, onClose, onSave, onDelete 
         )}
       </div>
 
-      <Input label="Срок" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+      <Input label={t("work.board.fieldDue")} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
 
       <div style={{ display: "flex", gap: 8 }}>
         <Button block onClick={save}>
-          Сохранить
+          {t("work.board.save")}
         </Button>
         {canDelete && (
           <Button
@@ -104,7 +114,7 @@ export function CardModal({ card, members, canDelete, onClose, onSave, onDelete 
               onClose();
             }}
           >
-            Удалить
+            {t("work.board.delete")}
           </Button>
         )}
       </div>

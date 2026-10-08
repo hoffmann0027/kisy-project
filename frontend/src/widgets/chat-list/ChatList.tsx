@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { t } from "@shared/i18n";
 import { cn } from "@shared/lib/cn";
 import { formatRelative } from "@shared/lib/format";
 import { Avatar, Badge, IconButton } from "@shared/ui";
@@ -138,7 +139,7 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
         <div className="chat-item__row">
           <span className="chat-item__name">{group.name}</span>
           {isMuted(mutedSet, "group", group.id) && (
-            <span className="chat-item__muted" title="Уведомления отключены">
+            <span className="chat-item__muted" title={t("chat.list.muted")}>
               <Icon.BellOff size={14} />
             </span>
           )}
@@ -149,7 +150,7 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
   );
 
   const chatRow = (chat: Chat) => {
-    const name = chat.otherUser?.displayName ?? "Пользователь";
+    const name = chat.otherUser?.displayName ?? t("chat.list.unknownUser");
     const isOnline = chat.otherUser ? online.has(chat.otherUser.id) || chat.otherUser.status === "online" : false;
     return (
       <button
@@ -168,7 +169,7 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
         </div>
         <div className="chat-item__meta">
           {isMuted(mutedSet, "private", chat.id) && (
-            <span className="chat-item__muted" title="Уведомления отключены">
+            <span className="chat-item__muted" title={t("chat.list.muted")}>
               <Icon.BellOff size={14} />
             </span>
           )}
@@ -185,24 +186,20 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
   // A filtered-out list gets a one-line note; a genuinely empty account gets
   // the full empty state with the illustration (handoff §2).
   const filteredLabel = query
-    ? "Ничего не найдено"
+    ? t("chat.list.nothingFound")
     : tab === "unread"
-      ? "Нет непрочитанных чатов"
+      ? t("chat.list.noUnread")
       : tab === "mentions"
-        ? "Упоминаний нет"
+        ? t("chat.list.noMentions")
         : activeFolder
-          ? "В папке пока нет чатов. Добавьте чат через правый клик по нему."
+          ? t("chat.list.folderEmpty")
           : null;
 
   const emptyState = (
     <ChatListEmpty
-      title={communities ? "Пока нет сообществ" : "Пока нет сообщений"}
-      hint={
-        communities
-          ? "Создайте группу или найдите существующую по названию"
-          : "Начните диалог с коллегой или создайте групповой чат"
-      }
-      actionLabel={communities ? "Новая группа" : "Новый чат"}
+      title={communities ? t("chat.list.emptyCommunities") : t("chat.list.emptyChats")}
+      hint={communities ? t("chat.list.emptyCommunitiesHint") : t("chat.list.emptyChatsHint")}
+      actionLabel={communities ? t("chat.list.newGroup") : t("chat.list.newChat")}
       onAction={communities ? onNewGroup : onNewChat}
     />
   );
@@ -213,22 +210,22 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
   return (
     <aside className="chatlist">
       <div className="chatlist__header">
-        <h1 className="chatlist__title">{communities ? "Сообщества" : "Сообщения"}</h1>
+        <h1 className="chatlist__title">{communities ? t("chat.list.communities") : t("chat.list.messages")}</h1>
         <div style={{ display: "flex", gap: 2 }}>
           {communities ? (
             // Creating a group means picking the clearance it requires, which
             // an account outside the hierarchy cannot do (the server refuses
             // it). Communities, which such an account will create, arrive in
             // the next step.
-            <IconButton label="Новая группа" onClick={onNewGroup}>
+            <IconButton label={t("chat.list.newGroup")} onClick={onNewGroup}>
               <Icon.Plus />
             </IconButton>
           ) : (
             <>
-              <IconButton label="Папки чатов" onClick={() => setManagerOpen(true)}>
+              <IconButton label={t("chat.list.folders")} onClick={() => setManagerOpen(true)}>
                 <Icon.FolderPlus />
               </IconButton>
-              <IconButton label="Новый чат" onClick={onNewChat}>
+              <IconButton label={t("chat.list.newChat")} onClick={onNewChat}>
                 <Icon.Plus />
               </IconButton>
             </>
@@ -239,7 +236,7 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
             <button
               type="button"
               className="chatlist__avatar"
-              aria-label="Меню"
+              aria-label={t("chat.list.menu")}
               onClick={onOpenDrawer}
             >
               <Avatar name={me.displayName} url={me.avatarUrl} size={38} />
@@ -255,7 +252,7 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
           <input
             className="ui-input"
             style={{ paddingLeft: 40 }}
-            placeholder="Поиск"
+            placeholder={t("chat.list.search")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -269,21 +266,21 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
             role="tab"
             onClick={() => setTab("all")}
           >
-            Все
+            {t("chat.list.tabAll")}
           </button>
           <button
             className={cn("chatlist__tab", tab === "unread" && "chatlist__tab--active")}
             role="tab"
             onClick={() => setTab("unread")}
           >
-            Непрочитанные
+            {t("chat.list.tabUnread")}
           </button>
           <button
             className={cn("chatlist__tab", tab === "mentions" && "chatlist__tab--active")}
             role="tab"
             onClick={() => setTab("mentions")}
           >
-            Упоминания
+            {t("chat.list.tabMentions")}
           </button>
           {folders.map((f) => (
             <button
@@ -304,13 +301,13 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
         {communities && (
           <>
             <div className="chatlist__section" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span>Группы</span>
+              <span>{t("chat.list.groups")}</span>
               <button
                 type="button"
                 onClick={() => setFindOpen(true)}
                 style={{ border: "none", background: "none", color: "var(--acc)", cursor: "pointer", fontSize: 12, fontWeight: 700, textTransform: "none", letterSpacing: 0 }}
               >
-                Найти группу
+                {t("chat.list.findGroup")}
               </button>
             </div>
             {filteredGroups.map(groupRow)}
@@ -320,7 +317,7 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
 
         {!communities && (
           <>
-            {filtered.length > 0 && <div className="chatlist__section">Личные чаты</div>}
+            {filtered.length > 0 && <div className="chatlist__section">{t("chat.list.privateChats")}</div>}
             {!isPending && filtered.length === 0 && emptyBlock}
             {filtered.map(chatRow)}
           </>
@@ -328,7 +325,7 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
 
         {q.length >= 2 && messageHits && messageHits.length > 0 && (
           <>
-            <div className="chatlist__section">Сообщения</div>
+            <div className="chatlist__section">{t("chat.list.messages")}</div>
             {messageHits.map((hit) => (
               <button key={hit.messageId} className="chat-item" onClick={() => openHit(hit.chatType, hit.chatId)}>
                 <Avatar name={hit.senderName} size={44} />
@@ -348,7 +345,7 @@ export function ChatList({ view, activeId, onSelect, onSelectGroup, onNewChat, o
           <>
             <button className="chatlist__archive" onClick={() => setShowArchive((v) => !v)}>
               <Icon.Archive size={18} />
-              <span>Архив</span>
+              <span>{t("chat.list.archive")}</span>
               <span className="chatlist__archive-count">{viewArchivedCount}</span>
               <span className="chatlist__archive-chevron">{showArchive ? "▾" : "▸"}</span>
             </button>

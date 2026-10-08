@@ -1,6 +1,7 @@
 // Mirrors the backend DTOs (docs/spec/09-api-contracts.md and the Go
 // json tags). Kept in one place so every feature shares one source of
 // truth for the API shape.
+import { t } from "@shared/i18n";
 
 /**
  * How the account came to exist. "invited" redeemed a CEO invitation and holds
@@ -771,9 +772,12 @@ export type FeedSort = "popular" | "new";
  * the middle is what happens when that is forgotten.
  */
 export function groupSubtitle(group: Pick<Group, "kind" | "minRoleLevel" | "isPublic">): string {
-  const noun = group.kind === "community" ? (group.isPublic ? "Открытое сообщество" : "Сообщество") : "Группа";
+  const noun =
+    group.kind === "community"
+      ? t(group.isPublic ? "common.group.openCommunity" : "common.group.community")
+      : t("common.group.group");
   if (group.minRoleLevel === null) return noun;
-  return `${noun} · от ${roleLabel(group.minRoleLevel)} и выше`;
+  return t("common.group.fromRole", { kind: noun, role: roleLabel(group.minRoleLevel) });
 }
 
 // --- CEO moderation of groups and communities (migration 48) ---

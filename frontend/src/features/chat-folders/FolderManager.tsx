@@ -2,6 +2,7 @@
 // reorder the user's chat folders. Chats are added to folders from the
 // chat-list context menu.
 import { useState } from "react";
+import { t } from "@shared/i18n";
 import { Button, Input, Modal, toast } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import {
@@ -33,7 +34,7 @@ export function FolderManager({ open, onClose }: Props) {
     if (!name) return;
     createFolder.mutate(name, {
       onSuccess: () => setNewName(""),
-      onError: () => toast.error("Не удалось создать папку"),
+      onError: () => toast.error(t("chat.folders.createFailed")),
     });
   };
 
@@ -44,7 +45,7 @@ export function FolderManager({ open, onClose }: Props) {
       { id, name },
       {
         onSuccess: () => setEditingId(null),
-        onError: () => toast.error("Не удалось переименовать папку"),
+        onError: () => toast.error(t("chat.folders.renameFailed")),
       },
     );
   };
@@ -54,27 +55,27 @@ export function FolderManager({ open, onClose }: Props) {
     const j = index + dir;
     if (j < 0 || j >= ids.length) return;
     [ids[index], ids[j]] = [ids[j], ids[index]];
-    reorderFolders.mutate(ids, { onError: () => toast.error("Не удалось изменить порядок") });
+    reorderFolders.mutate(ids, { onError: () => toast.error(t("chat.folders.reorderFailed")) });
   };
 
   return (
-    <Modal open={open} title="Папки чатов" onClose={onClose}>
+    <Modal open={open} title={t("chat.list.folders")} onClose={onClose}>
       <div className="foldermgr">
         <div className="foldermgr__create">
           <Input
-            placeholder="Название новой папки"
+            placeholder={t("chat.folders.newFolderPlaceholder")}
             value={newName}
             maxLength={64}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && create()}
           />
           <Button onClick={create} disabled={!newName.trim() || createFolder.isPending}>
-            Создать
+            {t("chat.folders.create")}
           </Button>
         </div>
 
         {folders.length === 0 && (
-          <p className="foldermgr__empty">Пока нет папок. Создайте первую, чтобы группировать чаты.</p>
+          <p className="foldermgr__empty">{t("chat.folders.empty")}</p>
         )}
 
         <ul className="foldermgr__list">
@@ -92,7 +93,7 @@ export function FolderManager({ open, onClose }: Props) {
                       if (e.key === "Escape") setEditingId(null);
                     }}
                   />
-                  <button className="foldermgr__btn" title="Сохранить" onClick={() => saveRename(f.id)}>
+                  <button className="foldermgr__btn" title={t("chat.action.save")} onClick={() => saveRename(f.id)}>
                     <Icon.Check size={16} />
                   </button>
                 </>
@@ -104,12 +105,12 @@ export function FolderManager({ open, onClose }: Props) {
                     <span className="foldermgr__count">{f.items.length}</span>
                   </span>
                   <span className="foldermgr__actions">
-                    <button className="foldermgr__btn" title="Выше" disabled={i === 0} onClick={() => move(i, -1)}>
+                    <button className="foldermgr__btn" title={t("chat.folders.moveUp")} disabled={i === 0} onClick={() => move(i, -1)}>
                       ↑
                     </button>
                     <button
                       className="foldermgr__btn"
-                      title="Ниже"
+                      title={t("chat.folders.moveDown")}
                       disabled={i === folders.length - 1}
                       onClick={() => move(i, 1)}
                     >
@@ -117,7 +118,7 @@ export function FolderManager({ open, onClose }: Props) {
                     </button>
                     <button
                       className="foldermgr__btn"
-                      title="Переименовать"
+                      title={t("chat.folders.rename")}
                       onClick={() => {
                         setEditingId(f.id);
                         setEditName(f.name);
@@ -127,9 +128,9 @@ export function FolderManager({ open, onClose }: Props) {
                     </button>
                     <button
                       className="foldermgr__btn foldermgr__btn--danger"
-                      title="Удалить папку"
+                      title={t("chat.folders.delete")}
                       onClick={() =>
-                        deleteFolder.mutate(f.id, { onError: () => toast.error("Не удалось удалить папку") })
+                        deleteFolder.mutate(f.id, { onError: () => toast.error(t("chat.folders.deleteFailed")) })
                       }
                     >
                       <Icon.Trash size={16} />
@@ -140,7 +141,7 @@ export function FolderManager({ open, onClose }: Props) {
             </li>
           ))}
         </ul>
-        <p className="foldermgr__hint">Чат добавляется в папку через правый клик по нему в списке.</p>
+        <p className="foldermgr__hint">{t("chat.folders.hint")}</p>
       </div>
     </Modal>
   );

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Button } from "@shared/ui";
 import { useBackHandler } from "@shared/lib/backStack";
-import { PERMISSION_COPY } from "./copy";
+import { permissionCopy } from "./copy";
+import { t } from "@shared/i18n";
 import { markOnboardingDone, onboardingDone } from "./platform";
 import { actionFor, onboardingSteps, type AppPermission } from "./sequence";
 import { usePermissionStates } from "./usePermissionStates";
@@ -68,7 +69,7 @@ function Walkthrough({ onFinish }: { onFinish: () => void }) {
 
   if (!permission || !state || !steps) return null;
 
-  const copy = PERMISSION_COPY[permission];
+  const copy = permissionCopy(permission);
   const action = actionFor(permission, state, platform);
 
   const run = async () => {
@@ -87,7 +88,7 @@ function Walkthrough({ onFinish }: { onFinish: () => void }) {
   return (
     <div className="perm-onboarding" role="dialog" aria-modal="true" aria-labelledby="perm-title">
       <div className="perm-card">
-        <div className="perm-progress" aria-label={`Шаг ${index + 1} из ${steps.length}`}>
+        <div className="perm-progress" aria-label={t("account.permissions.step", { current: index + 1, total: steps.length })}>
           {steps.map((p, i) => (
             <span key={p} className={"perm-progress__dot" + (i <= index ? " perm-progress__dot--on" : "")} />
           ))}
@@ -100,16 +101,16 @@ function Walkthrough({ onFinish }: { onFinish: () => void }) {
         <div className="perm-card__actions">
           {action === "request" && (
             <Button block loading={busy} onClick={() => void run()}>
-              Разрешить
+              {t("account.permissions.allow")}
             </Button>
           )}
           {action === "settings" && (
             <Button block loading={busy} onClick={() => void run()}>
-              Открыть настройки
+              {t("account.permissions.openSettings")}
             </Button>
           )}
           <Button variant="ghost" block onClick={next}>
-            {last ? "Готово" : "Не сейчас"}
+            {last ? t("account.permissions.done") : t("account.permissions.notNow")}
           </Button>
         </div>
       </div>

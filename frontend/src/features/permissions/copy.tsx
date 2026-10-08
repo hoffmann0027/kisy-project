@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Icon } from "@shared/ui/icons";
+import { t } from "@shared/i18n";
 import type { AppPermission, PermissionState, Platform } from "./sequence";
 
 // What each permission is for, in the user's words. Shared by the onboarding
@@ -17,46 +18,50 @@ export interface PermissionCopy {
   settingsHint: (platform: Platform) => string;
 }
 
-export const PERMISSION_COPY: Record<AppPermission, PermissionCopy> = {
-  notifications: {
-    icon: <Icon.Bell size={40} />,
-    title: "Уведомления",
-    why: "Чтобы вы узнавали о новых сообщениях, упоминаниях и звонках, даже когда KISY закрыт.",
-    again: "Без уведомлений о входящем звонке можно узнать, только если приложение открыто.",
-    settingsHint: (platform) =>
-      platform === "native"
-        ? "Android больше не покажет этот запрос. Включите уведомления для KISY в настройках — это займёт пару секунд."
-        : "Браузер больше не покажет этот запрос. Разрешите уведомления для этого сайта в настройках браузера — обычно это значок замка слева от адреса.",
-  },
-  microphone: {
-    icon: <Icon.Mic size={40} />,
-    title: "Микрофон",
-    why: "Нужен для звонков и голосовых сообщений. Он включается, только когда вы сами звоните, отвечаете или записываете голосовое.",
-    again: "Без микрофона вас не услышат в звонке, а голосовое не запишется.",
-    settingsHint: () =>
-      "Android больше не покажет этот запрос. Откройте настройки, раздел «Разрешения», и разрешите KISY микрофон.",
-  },
-  fullScreenIntent: {
-    icon: <Icon.Phone size={40} />,
-    title: "Экран входящего звонка",
-    why: "Чтобы звонок открывался на весь экран, даже когда телефон заблокирован, — а не прятался в шторке.",
-    again: "Без этого звонок на заблокированном телефоне придёт маленьким уведомлением.",
-    settingsHint: () =>
-      "Android разрешает это только в настройках. Откроется страница KISY — включите переключатель и вернитесь в приложение.",
-  },
-};
+/** The copy for one permission, in the language on screen (built on call, never at import). */
+export function permissionCopy(permission: AppPermission): PermissionCopy {
+  switch (permission) {
+    case "notifications":
+      return {
+        icon: <Icon.Bell size={40} />,
+        title: t("account.permissions.notificationsTitle"),
+        why: t("account.permissions.notificationsWhy"),
+        again: t("account.permissions.notificationsAgain"),
+        settingsHint: (platform) =>
+          platform === "native"
+            ? t("account.permissions.notificationsSettingsNative")
+            : t("account.permissions.notificationsSettingsWeb"),
+      };
+    case "microphone":
+      return {
+        icon: <Icon.Mic size={40} />,
+        title: t("account.permissions.microphoneTitle"),
+        why: t("account.permissions.microphoneWhy"),
+        again: t("account.permissions.microphoneAgain"),
+        settingsHint: () => t("account.permissions.microphoneSettings"),
+      };
+    case "fullScreenIntent":
+      return {
+        icon: <Icon.Phone size={40} />,
+        title: t("account.permissions.fullScreenTitle"),
+        why: t("account.permissions.fullScreenWhy"),
+        again: t("account.permissions.fullScreenAgain"),
+        settingsHint: () => t("account.permissions.fullScreenSettings"),
+      };
+  }
+}
 
 export function stateLabel(state: PermissionState | undefined): string {
   switch (state) {
     case "granted":
-      return "Разрешено";
+      return t("account.permissions.stateGranted");
     case "denied":
-      return "Запрещено";
+      return t("account.permissions.stateDenied");
     case "prompt":
     case "prompt-with-rationale":
-      return "Не спрашивали";
+      return t("account.permissions.statePrompt");
     case "unsupported":
-      return "Недоступно";
+      return t("account.permissions.stateUnsupported");
     default:
       return "…";
   }

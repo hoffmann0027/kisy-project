@@ -3,6 +3,7 @@ import { usersApi } from "@shared/api/endpoints";
 import { useAuthStore } from "@shared/store/auth";
 import { clearLocalConsent, hasLocalConsent, saveLocalConsent } from "@shared/lib/consent";
 import { Spinner, toast } from "@shared/ui";
+import { t } from "@shared/i18n";
 import { ConsentScreen } from "@pages/legal/ConsentScreen";
 
 /**
@@ -53,7 +54,7 @@ export function AccountConsentGate() {
       // person rather than loop.
       clearLocalConsent();
       setAsk(true);
-      if (fromScreen) toast.error("Не удалось сохранить согласие. Попробуйте ещё раз");
+      if (fromScreen) toast.error(t("common.consent.saveFailed"));
     } finally {
       setBusy(false);
     }

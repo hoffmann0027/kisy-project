@@ -2,6 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { disappearApi, messagesApi } from "@shared/api/endpoints";
 import type { ChatType } from "@shared/api/types";
+import { t } from "@shared/i18n";
 
 const key = (chatType: ChatType, chatId: string) => ["disappearing", chatType, chatId] as const;
 
@@ -32,12 +33,12 @@ export function useSetMessageExpiry() {
 export function ttlLabel(seconds: number): string {
   if (seconds % 86400 === 0) {
     const d = seconds / 86400;
-    return d === 1 ? "1 день" : `${d} дн.`;
+    return d === 1 ? t("common.duration.oneDay") : t("common.duration.days", { count: d });
   }
   if (seconds % 3600 === 0) {
     const h = seconds / 3600;
-    return h === 1 ? "1 час" : `${h} ч.`;
+    return h === 1 ? t("common.duration.oneHour") : t("common.duration.hours", { count: h });
   }
-  if (seconds % 60 === 0) return `${seconds / 60} мин`;
-  return `${seconds} сек`;
+  if (seconds % 60 === 0) return t("common.duration.minutes", { count: seconds / 60 });
+  return t("common.duration.seconds", { count: seconds });
 }

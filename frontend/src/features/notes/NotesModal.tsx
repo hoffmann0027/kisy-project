@@ -7,6 +7,7 @@ import { handleDownloadClick } from "@shared/lib/mediaSrc";
 import { ApiImage } from "@shared/ui/ApiImage";
 import type { Note } from "@shared/api/types";
 import { userFacingError } from "@shared/api/envelope";
+import { t } from "@shared/i18n";
 import { useNoteMutations, useNotes } from "@entities/note/queries";
 
 interface Props {
@@ -17,9 +18,9 @@ interface Props {
 const MAX_FILE = 10 * 1024 * 1024; // 10 MiB, mirrors the backend limit.
 
 function humanSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} Б`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} КБ`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
+  if (bytes < 1024) return t("work.notes.sizeBytes", { size: bytes });
+  if (bytes < 1024 * 1024) return t("work.notes.sizeKb", { size: (bytes / 1024).toFixed(0) });
+  return t("work.notes.sizeMb", { size: (bytes / (1024 * 1024)).toFixed(1) });
 }
 
 export function NotesModal({ open, onClose }: Props) {
@@ -37,7 +38,7 @@ export function NotesModal({ open, onClose }: Props) {
 
   const pickFile = (f: File | null) => {
     if (f && f.size > MAX_FILE) {
-      toast.error("Файл больше 10 МБ");
+      toast.error(t("work.notes.fileTooBig"));
       return;
     }
     setFile(f);
@@ -49,30 +50,30 @@ export function NotesModal({ open, onClose }: Props) {
     if (file) {
       m.createFile.mutate(
         { file, text: body || undefined },
-        { onSuccess: reset, onError: (e) => toast.error(userFacingError(e, "Не удалось сохранить заметку")) },
+        { onSuccess: reset, onError: (e) => toast.error(userFacingError(e, t("work.notes.saveFailed"))) },
       );
     } else {
       m.createText.mutate(body, {
         onSuccess: reset,
-        onError: () => toast.error("Не удалось сохранить заметку"),
+        onError: () => toast.error(t("work.notes.saveFailed")),
       });
     }
   };
 
   const remove = (id: string) => {
-    if (!window.confirm("Удалить эту заметку?")) return;
-    m.del.mutate(id, { onError: () => toast.error("Не удалось удалить") });
+    if (!window.confirm(t("work.notes.confirmDelete"))) return;
+    m.del.mutate(id, { onError: () => toast.error(t("work.notes.deleteFailed")) });
   };
 
   const saving = m.createText.isPending || m.createFile.isPending;
 
   return (
-    <Modal open={open} title="Заметки" onClose={onClose}>
+    <Modal open={open} title={t("work.notes.title")} onClose={onClose}>
       <div className="notes">
         <div className="notes__compose">
           <textarea
             className="ui-input notes__input"
-            placeholder="Запишите что-нибудь для себя…"
+            placeholder={t("work.notes.placeholder")}
             rows={3}
             maxLength={10000}
             value={text}
@@ -87,10 +88,15 @@ export function NotesModal({ open, onClose }: Props) {
           <div className="notes__compose-row">
             <button className="notes__attach" type="button" onClick={() => fileInput.current?.click()}>
               <Icon.Paperclip size={16} />
-              {file ? file.name : "Прикрепить файл"}
+              {file ? file.name : t("work.notes.attach")}
             </button>
             {file && (
-              <button className="notes__attach-clear" type="button" onClick={() => pickFile(null)} title="Убрать файл">
+              <button
+                className="notes__attach-clear"
+                type="button"
+                onClick={() => pickFile(null)}
+                title={t("work.notes.removeFile")}
+              >
                 ✕
               </button>
             )}
@@ -100,7 +106,7 @@ export function NotesModal({ open, onClose }: Props) {
               loading={saving}
               disabled={!file && !text.trim()}
             >
-              Сохранить
+              {t("work.notes.save")}
             </Button>
           </div>
         </div>
@@ -112,7 +118,7 @@ export function NotesModal({ open, onClose }: Props) {
             </div>
           )}
           {!isPending && (notes?.length ?? 0) === 0 && (
-            <div className="notes__empty">Пока нет заметок. Всё, что здесь, видите только вы.</div>
+            <div className="notes__empty">{t("work.notes.empty")}</div>
           )}
           {notes?.map((n) => (
             <NoteCard key={n.id} note={n} onDelete={() => remove(n.id)} />
@@ -141,7 +147,7 @@ function NoteCard({ note, onDelete }: { note: Note; onDelete: () => void }) {
             {isImage ? (
               // ApiImage, not <img>: inside the app shell the API needs a
               // token, and a bare tag showed a broken thumbnail (audit D-16).
-              <ApiImage className="notes__thumb" src={note.fileUrl} alt={note.fileName ?? "файл"} />
+              <ApiImage className="notes__thumb" src={note.fileUrl} alt={note.fileName ?? t("work.notes.fileAlt")} />
             ) : (
               <span className="notes__file-icon">
                 <Icon.Paperclip size={16} />
@@ -155,7 +161,7 @@ function NoteCard({ note, onDelete }: { note: Note; onDelete: () => void }) {
         )}
         <div className="notes__date">{formatRelative(note.createdAt)}</div>
       </div>
-      <button className="notes__delete" title="Удалить" onClick={onDelete}>
+      <button className="notes__delete" title={t("work.notes.delete")} onClick={onDelete}>
         <Icon.Trash size={16} />
       </button>
     </div>

@@ -1,15 +1,27 @@
 // Money is handled in integer cents end-to-end; only this formatter turns it
 // into a human-readable euro string for display.
 
-const eur = new Intl.NumberFormat("ru-RU", {
-  style: "currency",
-  currency: "EUR",
-  maximumFractionDigits: 2,
-});
+import { intlLocale } from "@shared/i18n";
 
-// formatKopecks formats an integer amount of euro cents as "1 234,56 €".
+// Built on first use, not at load: the language is chosen after this module
+// is evaluated. Kept per locale so a formatter is not rebuilt on every call.
+let eur: { locale: string; format: Intl.NumberFormat } | null = null;
+
+function euroFormat(): Intl.NumberFormat {
+  const locale = intlLocale();
+  if (eur?.locale !== locale) {
+    eur = {
+      locale,
+      format: new Intl.NumberFormat(locale, { style: "currency", currency: "EUR", maximumFractionDigits: 2 }),
+    };
+  }
+  return eur.format;
+}
+
+// formatKopecks formats an integer amount of euro cents as "1 234,56 €"
+// (in Russian; "€1,234.56" in English).
 export function formatKopecks(cents: number): string {
-  return eur.format(cents / 100);
+  return euroFormat().format(cents / 100);
 }
 
 // parseRublesToKopecks turns a user-typed euro amount ("1234,50" or "1234.5")

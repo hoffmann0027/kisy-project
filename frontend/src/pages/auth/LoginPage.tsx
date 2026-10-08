@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -6,17 +7,21 @@ import { AuthLayout } from "./AuthLayout";
 import { Button, Input, toast } from "@shared/ui";
 import { useAuthStore } from "@shared/store/auth";
 import { ApiError } from "@shared/api/envelope";
+import { t } from "@shared/i18n";
 
-const schema = z.object({
-  username: z.string().min(1, "Введите имя пользователя"),
-  password: z.string().min(1, "Введите пароль"),
-});
+// Built at render, not at import: the messages are in the language on screen.
+const makeSchema = () =>
+  z.object({
+    username: z.string().min(1, t("account.login.usernameRequired")),
+    password: z.string().min(1, t("account.login.passwordRequired")),
+  });
 
-type Form = z.infer<typeof schema>;
+type Form = z.infer<ReturnType<typeof makeSchema>>;
 
 export function LoginPage() {
   const login = useAuthStore((s) => s.login);
   const navigate = useNavigate();
+  const schema = useMemo(makeSchema, []);
   const {
     register,
     handleSubmit,
@@ -30,19 +35,19 @@ export function LoginPage() {
     } catch (e) {
       const msg =
         e instanceof ApiError && e.code === "AUTH_INVALID_CREDENTIALS"
-          ? "Неверное имя пользователя или пароль"
+          ? t("account.login.invalidCredentials")
           : e instanceof ApiError && e.status === 429
-            ? "Слишком много попыток. Попробуйте позже"
-            : "Не удалось войти";
+            ? t("account.login.tooManyAttempts")
+            : t("account.login.failed");
       toast.error(msg);
     }
   };
 
   return (
-    <AuthLayout subtitle="Корпоративный мессенджер">
+    <AuthLayout subtitle={t("account.login.subtitle")}>
       <form className="auth-form" onSubmit={handleSubmit(onSubmit)}>
         <Input
-          label="Имя пользователя"
+          label={t("account.fields.username")}
           placeholder="username"
           autoFocus
           autoComplete="username"
@@ -50,7 +55,7 @@ export function LoginPage() {
           {...register("username")}
         />
         <Input
-          label="Пароль"
+          label={t("account.fields.password")}
           type="password"
           placeholder="••••••••••••"
           autoComplete="current-password"
@@ -58,13 +63,13 @@ export function LoginPage() {
           {...register("password")}
         />
         <Button type="submit" block loading={isSubmitting}>
-          Войти
+          {t("account.login.submit")}
         </Button>
       </form>
       <p className="auth-footer">
-        Есть код приглашения?{" "}
+        {t("account.login.haveInvite")}{" "}
         <Link to="/register" className="auth-link">
-          Зарегистрироваться
+          {t("account.login.toRegister")}
         </Link>
       </p>
     </AuthLayout>

@@ -1,5 +1,6 @@
 import { Avatar } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
+import { t } from "@shared/i18n";
 import type { CallPeer, CallView } from "./useCall";
 import { SpeakerControl } from "./SpeakerControl";
 
@@ -22,15 +23,15 @@ export function OutgoingCall({
           <Avatar name={peer.displayName} url={peer.avatarUrl} size={96} />
         </div>
         <div className="call-card__name">{peer.displayName}</div>
-        <div className="call-card__status">Вызов…</div>
+        <div className="call-card__status">{t("hub.call.calling")}</div>
         <div className="call-actions">
           {/* The ringback plays at the ear, like a phone's; the loudspeaker is one tap away. */}
           {onToggleSpeaker && <SpeakerControl view={view} onToggle={onToggleSpeaker} />}
           <div className="call-btn-group">
-            <button className="call-btn call-btn--decline" onClick={onCancel} aria-label="Отменить">
+            <button className="call-btn call-btn--decline" onClick={onCancel} aria-label={t("hub.call.cancel")}>
               <Icon.PhoneOff size={26} />
             </button>
-            <span className="call-btn__label">Отменить</span>
+            <span className="call-btn__label">{t("hub.call.cancel")}</span>
           </div>
         </div>
       </div>

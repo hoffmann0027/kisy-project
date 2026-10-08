@@ -6,6 +6,7 @@ import { cn } from "@shared/lib/cn";
 import { Avatar, Button, IconButton, Spinner, toast } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import { ApiError } from "@shared/api/envelope";
+import { intlLocale, t } from "@shared/i18n";
 import { CARD_LABELS, type Board, type BoardCard, type BoardColumn, type Group, type User } from "@shared/api/types";
 import { useAuthStore } from "@shared/store/auth";
 import { useBoard, useBoardMutations, boardKeys } from "@entities/board/queries";
@@ -34,7 +35,7 @@ export function BoardView({ group }: Props) {
     qc.setQueryData<Board>(boardKeys.board(group.id), (prev) =>
       prev ? moveInBoard(prev, cardId, columnId, index) : prev,
     );
-    m.moveCard.mutate({ cardId, columnId, index }, { onError: () => toast.error("Не удалось переместить задачу") });
+    m.moveCard.mutate({ cardId, columnId, index }, { onError: () => toast.error(t("work.board.moveFailed")) });
   });
 
   // The group founder owns the board structure (create board, add/remove
@@ -58,23 +59,27 @@ export function BoardView({ group }: Props) {
           <div style={{ opacity: 0.4 }}>
             <Icon.Board size={56} />
           </div>
-          <div style={{ fontSize: 17, fontWeight: 600, color: "var(--color-text-primary)" }}>Доска задач</div>
+          <div style={{ fontSize: 17, fontWeight: 600, color: "var(--color-text-primary)" }}>
+            {t("work.board.title")}
+          </div>
           {founder ? (
             <>
-              <p style={{ maxWidth: 320 }}>Создайте Kanban-доску задач для этой группы.</p>
+              <p style={{ maxWidth: 320 }}>{t("work.board.createHint")}</p>
               <Button
                 loading={m.createBoard.isPending}
                 onClick={() =>
-                  m.createBoard.mutate("Доска задач", {
-                    onError: () => toast.error("Не удалось создать доску"),
+                  // No name: the server names the board and its first
+                  // columns in the language of whoever creates it.
+                  m.createBoard.mutate("", {
+                    onError: () => toast.error(t("work.board.createFailed")),
                   })
                 }
               >
-                Создать доску
+                {t("work.board.create")}
               </Button>
             </>
           ) : (
-            <p style={{ maxWidth: 320 }}>Основатель группы ещё не создал доску задач.</p>
+            <p style={{ maxWidth: 320 }}>{t("work.board.notCreatedYet")}</p>
           )}
         </div>
       </div>
@@ -82,7 +87,7 @@ export function BoardView({ group }: Props) {
   }
 
   if (!board) {
-    return <div className="board__empty">Не удалось загрузить доску</div>;
+    return <div className="board__empty">{t("work.board.loadFailed")}</div>;
   }
 
   const assigneeOf = (id: string | null) => (id ? memberList.find((u) => u.id === id) : undefined);
@@ -188,7 +193,7 @@ function ColumnView(p: ColumnProps) {
             </span>
             <span className="board-col__count">{p.column.cards.length}</span>
             {p.founder && (
-              <IconButton label="Удалить колонку" onClick={p.onDelete}>
+              <IconButton label={t("work.board.deleteColumn")} onClick={p.onDelete}>
                 <Icon.Trash size={15} />
               </IconButton>
             )}
@@ -217,7 +222,7 @@ function ColumnView(p: ColumnProps) {
               rows={2}
               autoFocus
               value={draft}
-              placeholder="Название задачи…"
+              placeholder={t("work.board.taskTitlePlaceholder")}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -227,15 +232,15 @@ function ColumnView(p: ColumnProps) {
               }}
             />
             <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-              <Button onClick={submitCard}>Добавить</Button>
+              <Button onClick={submitCard}>{t("work.board.add")}</Button>
               <Button variant="ghost" onClick={() => setAdding(false)}>
-                Отмена
+                {t("work.board.cancel")}
               </Button>
             </div>
           </>
         ) : (
           <button className="board-col__add-btn" onClick={() => setAdding(true)}>
-            + Добавить задачу
+            {t("work.board.addTask")}
           </button>
         )}
       </div>
@@ -274,7 +279,7 @@ function CardView({
         {due ? (
           <span className={cn("board-card__due", dueClass)}>
             <Icon.Calendar size={13} />
-            {due.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
+            {due.toLocaleDateString(intlLocale(), { day: "numeric", month: "short" })}
           </span>
         ) : (
           <span />
@@ -289,7 +294,7 @@ function AddColumn({ onAdd }: { onAdd: (title: string) => void }) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   if (!adding) {
-    return <button onClick={() => setAdding(true)}>+ Добавить колонку</button>;
+    return <button onClick={() => setAdding(true)}>{t("work.board.addColumn")}</button>;
   }
   return (
     <div className="board-col" style={{ padding: 10 }}>
@@ -297,7 +302,7 @@ function AddColumn({ onAdd }: { onAdd: (title: string) => void }) {
         className="board-col__add-input"
         autoFocus
         value={title}
-        placeholder="Название колонки"
+        placeholder={t("work.board.columnTitlePlaceholder")}
         onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && title.trim()) {
@@ -315,10 +320,10 @@ function AddColumn({ onAdd }: { onAdd: (title: string) => void }) {
             setAdding(false);
           }}
         >
-          Добавить
+          {t("work.board.add")}
         </Button>
         <Button variant="ghost" onClick={() => setAdding(false)}>
-          Отмена
+          {t("work.board.cancel")}
         </Button>
       </div>
     </div>
