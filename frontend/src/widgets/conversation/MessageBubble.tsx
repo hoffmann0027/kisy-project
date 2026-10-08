@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { cn } from "@shared/lib/cn";
 import { formatTime } from "@shared/lib/format";
 import { handleDownloadClick } from "@shared/lib/mediaSrc";
@@ -46,6 +46,9 @@ interface Props {
 }
 
 const QUICK_EMOJI = ["👍", "❤️", "😂", "🔥", "👏"];
+// What inside a bubble has a click of its own: those clicks never open the
+// action bar.
+const BUBBLE_CONTROLS = "a, button, input, textarea, audio, video, label, [role='button'], .bubble__actions";
 
 const TIMER_OPTIONS: { ttl: number; label: string }[] = [
   { ttl: 3600, label: "1 час" },
@@ -103,6 +106,11 @@ export const MessageBubble = memo(function MessageBubble({
   const [reportOpen, setReportOpen] = useState(false);
   const [timerOpen, setTimerOpen] = useState(false);
   const [draft, setDraft] = useState(message.text ?? "");
+  // The action bar opens on a click on the message, not on hover: sweeping
+  // the cursor across a chat used to light up every bubble it touched.
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const bubbleRef = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLButtonElement>(null);
   const previewUrl = message.text ? firstUrl(message.text) : null;
   // Single source of truth for the padlock. The two render paths below used
   // to decide it independently and disagreed: the compact row preferred the
@@ -112,6 +120,47 @@ export const MessageBubble = memo(function MessageBubble({
   // once": text that arrived later from the local cache makes it readable
   // whatever the flag says.
   const isLocked = Boolean(message.undecryptable) && !message.text;
+
+  const closeActions = () => {
+    setActionsOpen(false);
+    setEmojiOpen(false);
+    setTimerOpen(false);
+  };
+  /** Run an action from the bar, then put the bar away. */
+  const done = (fn: () => void) => () => {
+    fn();
+    closeActions();
+  };
+
+  // A click anywhere else — another message included — or Esc closes the
+  // bar. The emoji picker floats at the page root, so it counts as inside.
+  useEffect(() => {
+    if (!actionsOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (bubbleRef.current?.contains(t) || t.closest(".emojipick")) return;
+      closeActions();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeActions();
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [actionsOpen]);
+
+  const toggleActions = (e: React.MouseEvent) => {
+    if (editing) return;
+    // A link, a photo, a voice note, a reaction keep their own click; so does
+    // selecting text to copy it.
+    if ((e.target as HTMLElement).closest(BUBBLE_CONTROLS)) return;
+    if (window.getSelection()?.toString()) return;
+    if (actionsOpen) closeActions();
+    else setActionsOpen(true);
+  };
 
   const startEdit = () => {
     setDraft(message.text ?? "");
@@ -152,23 +201,23 @@ export const MessageBubble = memo(function MessageBubble({
     );
   }
 
-  // The action bar shows on hover only; while a popover anchored inside it
-  // (emoji picker / disappearing-timer menu) is open, pin the bar visible so
-  // moving the cursor up into the popover — across the gap, off the bubble —
-  // does not hide its own parent and dismiss it.
-  const menuOpen = emojiOpen || timerOpen;
-
   return (
     <div className={cn("bubble-row", mine ? "bubble-row--out" : "bubble-row--in")}>
-      <div className={cn("bubble", mine ? "bubble--out" : "bubble--in", menuOpen && "bubble--menu-open")}>
+      <div
+        ref={bubbleRef}
+        className={cn("bubble", mine ? "bubble--out" : "bubble--in", actionsOpen && "bubble--actions-open")}
+        onClick={toggleActions}
+      >
+        {actionsOpen && (
         <div className="bubble__actions">
           {QUICK_EMOJI.map((e) => (
-            <button key={e} className="bubble__action" onClick={() => onReact(message, e)} title={`Реакция ${e}`}>
+            <button key={e} className="bubble__action" onClick={done(() => onReact(message, e))} title={`Реакция ${e}`}>
               {e}
             </button>
           ))}
           <div className="bubble__emoji-wrap">
             <button
+              ref={moreRef}
               className="bubble__action bubble__emoji-more"
               onClick={() => setEmojiOpen((v) => !v)}
               title="Больше эмодзи"
@@ -177,31 +226,32 @@ export const MessageBubble = memo(function MessageBubble({
             </button>
             {emojiOpen && (
               <EmojiPicker
+                anchor={moreRef.current}
                 ignoreSelector=".bubble__emoji-more"
                 onPick={(char) => {
                   onReact(message, char);
-                  setEmojiOpen(false);
+                  closeActions();
                 }}
                 onClose={() => setEmojiOpen(false)}
               />
             )}
           </div>
-          <button className="bubble__action" onClick={() => onReply(message)} title="Ответить">
+          <button className="bubble__action" onClick={done(() => onReply(message))} title="Ответить">
             <Icon.Reply size={15} />
           </button>
           {onOpenThread && !message.threadRootId && (
-            <button className="bubble__action" onClick={() => onOpenThread(message)} title="Обсудить в треде">
+            <button className="bubble__action" onClick={done(() => onOpenThread(message))} title="Обсудить в треде">
               <Icon.Chat size={15} />
             </button>
           )}
           {!message.undecryptable && (
-            <button className="bubble__action" onClick={() => onForward(message)} title="Переслать">
+            <button className="bubble__action" onClick={done(() => onForward(message))} title="Переслать">
               <Icon.Forward size={15} />
             </button>
           )}
           <button
             className="bubble__action"
-            onClick={() => onPin(message, !message.pinnedAt)}
+            onClick={done(() => onPin(message, !message.pinnedAt))}
             title={message.pinnedAt ? "Открепить" : "Закрепить"}
           >
             <Icon.Pin size={15} />
@@ -221,10 +271,7 @@ export const MessageBubble = memo(function MessageBubble({
                     <button
                       key={o.ttl}
                       className="chatmenu__item"
-                      onClick={() => {
-                        onSetExpiry(message, o.ttl);
-                        setTimerOpen(false);
-                      }}
+                      onClick={done(() => onSetExpiry(message, o.ttl))}
                     >
                       {o.label}
                     </button>
@@ -232,10 +279,7 @@ export const MessageBubble = memo(function MessageBubble({
                   {message.expiresAt && (
                     <button
                       className="chatmenu__item"
-                      onClick={() => {
-                        onSetExpiry(message, null);
-                        setTimerOpen(false);
-                      }}
+                      onClick={done(() => onSetExpiry(message, null))}
                     >
                       Убрать таймер
                     </button>
@@ -245,23 +289,24 @@ export const MessageBubble = memo(function MessageBubble({
             </div>
           )}
           {canEdit && (
-            <button className="bubble__action" onClick={startEdit} title="Изменить">
+            <button className="bubble__action" onClick={done(startEdit)} title="Изменить">
               <Icon.Edit size={15} />
             </button>
           )}
           {canDelete && (
-            <button className="bubble__action" onClick={() => onDelete(message)} title="Удалить">
+            <button className="bubble__action" onClick={done(() => onDelete(message))} title="Удалить">
               <Icon.Trash size={15} />
             </button>
           )}
           {/* Жалоба — только на чужое сообщение: на своё жаловаться незачем,
               и сервер такую жалобу всё равно отклонит. */}
           {!mine && (
-            <button className="bubble__action" onClick={() => setReportOpen(true)} title="Пожаловаться">
+            <button className="bubble__action" onClick={done(() => setReportOpen(true))} title="Пожаловаться">
               <Icon.Flag size={15} />
             </button>
           )}
         </div>
+        )}
         {reportOpen && (
           <ReportDialog targetKind="message" targetId={message.id} onClose={() => setReportOpen(false)} />
         )}

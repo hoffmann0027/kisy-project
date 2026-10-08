@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Message } from "@shared/api/types";
 import { MessageBubble } from "./MessageBubble";
@@ -89,5 +89,68 @@ describe("MessageBubble padlock", () => {
     } as Partial<Message>);
     expect(screen.getByText("смотри")).toBeTruthy();
     expect(screen.queryByText(LOCK)).toBeNull();
+  });
+});
+
+// Feedback from a user: the bar of actions lit up on every message the
+// cursor crossed. It opens on a click on the message now, and goes away after
+// an action, a click elsewhere or Esc.
+describe("MessageBubble action bar", () => {
+  it("does not open on hover, opens on a click", () => {
+    renderBubble({ text: "привет" });
+    fireEvent.mouseEnter(screen.getByText("привет"));
+    fireEvent.mouseOver(screen.getByText("привет"));
+    expect(screen.queryByTitle("Ответить")).toBeNull();
+
+    fireEvent.click(screen.getByText("привет"));
+    expect(screen.getByTitle("Ответить")).toBeTruthy();
+  });
+
+  it("runs the action and puts the bar away", () => {
+    const onReply = vi.fn();
+    renderBubble({ text: "привет" }, { onReply });
+    fireEvent.click(screen.getByText("привет"));
+    fireEvent.click(screen.getByTitle("Ответить"));
+    expect(onReply).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTitle("Ответить")).toBeNull();
+  });
+
+  it("closes on a click elsewhere and on Esc", () => {
+    renderBubble({ text: "привет" });
+    fireEvent.click(screen.getByText("привет"));
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByTitle("Ответить")).toBeNull();
+
+    fireEvent.click(screen.getByText("привет"));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByTitle("Ответить")).toBeNull();
+  });
+
+  it("leaves a photo's click to the photo", () => {
+    const onOpenImage = vi.fn();
+    renderBubble(
+      {
+        text: "смотри",
+        attachments: [{ id: "a1", fileName: "pic.png", url: "/api/v1/attachments/a1", sizeBytes: 10, mimeType: "image/png", isImage: true }],
+      } as Partial<Message>,
+      { onOpenImage },
+    );
+    fireEvent.click(screen.getByTitle("pic.png"));
+    expect(onOpenImage).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTitle("Ответить")).toBeNull();
+  });
+
+  // The picker sat inside the chat's scroll area: near the top of a chat it
+  // was cut off, and focusing its search scrolled the whole chat sideways.
+  it("floats the emoji picker at the page root", () => {
+    const { container } = renderBubble({ text: "привет" });
+    fireEvent.click(screen.getByText("привет"));
+    fireEvent.click(screen.getByTitle("Больше эмодзи"));
+    const picker = screen.getByRole("dialog", { name: "Выбор эмодзи" });
+    expect(picker.classList.contains("emojipick--floating")).toBe(true);
+    expect(container.contains(picker)).toBe(false);
+    // Picking in it does not count as a click elsewhere.
+    fireEvent.mouseDown(picker);
+    expect(screen.getByTitle("Ответить")).toBeTruthy();
   });
 });

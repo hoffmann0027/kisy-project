@@ -26,6 +26,14 @@
   overflow: hidden;
 }
 
+/* Floating next to its anchor (see the `anchor` prop): the position comes
+   inline, measured against the window. */
+.emojipick--floating {
+  position: fixed;
+  bottom: auto;
+  z-index: 1000;
+}
+
 .emojipick__search {
   margin: 8px;
 }

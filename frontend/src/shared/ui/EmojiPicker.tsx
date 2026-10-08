@@ -2,7 +2,8 @@
 // persisted in localStorage. Used from the composer (insert into text) and
 // from a message's reaction menu (react with any emoji, not just the 5
 // quick ones). Closes on outside click / Esc.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useBackHandler } from "@shared/lib/backStack";
 import { EMOJI_CATEGORIES, searchEmojis } from "./emojiData";
 import "./EmojiPicker.css";
@@ -35,14 +36,70 @@ interface Props {
    * raises the keyboard over the very grid the reader came to tap.
    */
   autoFocusSearch?: boolean;
+  /**
+   * Float next to this element instead of sitting above the call site's
+   * wrapper: rendered at the page root, opened on whichever side has room,
+   * kept inside the window. A message near the top of a chat that cannot
+   * scroll any higher otherwise gets a picker cut off by the chat's edge.
+   */
+  anchor?: HTMLElement | null;
 }
 
-export function EmojiPicker({ onPick, onClose, ignoreSelector, autoFocusSearch = true }: Props) {
+const GAP = 8;
+const MARGIN = 8;
+
+/** Where a floating picker of size w×h goes next to `r` in a vw×vh window. */
+export function floatingPosition(r: { top: number; bottom: number; left: number; width: number }, w: number, h: number, vw: number, vh: number): { top: number; left: number } {
+  const roomAbove = r.top - GAP - MARGIN;
+  const roomBelow = vh - r.bottom - GAP - MARGIN;
+  // Above by default, like the rest of the app's popovers; below when only
+  // there it fits; otherwise on the roomier side, clamped into the window.
+  const goAbove = roomAbove >= h || (roomBelow < h && roomAbove >= roomBelow);
+  const top = goAbove ? r.top - GAP - h : r.bottom + GAP;
+  const left = r.left + r.width / 2 - w / 2;
+  return {
+    top: Math.max(MARGIN, Math.min(top, vh - h - MARGIN)),
+    left: Math.max(MARGIN, Math.min(left, vw - w - MARGIN)),
+  };
+}
+
+export function EmojiPicker({ onPick, onClose, ignoreSelector, autoFocusSearch = true, anchor }: Props) {
   // Mounted only while open, so it always claims the back gesture.
   useBackHandler(true, onClose);
   const [query, setQuery] = useState("");
   const [recent] = useState(loadRecent);
   const rootRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  // Not the autoFocus attribute: focusing scrolls every scrollable ancestor
+  // to bring the field into view, and the whole chat slid sideways with it.
+  useEffect(() => {
+    if (autoFocusSearch) searchRef.current?.focus({ preventScroll: true });
+  }, [autoFocusSearch]);
+
+  // Measured before paint, so the picker never flashes in the wrong place.
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!anchor || !el) return;
+    setPos(floatingPosition(anchor.getBoundingClientRect(), el.offsetWidth, el.offsetHeight, window.innerWidth, window.innerHeight));
+  }, [anchor]);
+
+  // A floating picker does not move with what it points at: scrolling the
+  // chat or resizing the window closes it rather than leave it adrift.
+  useEffect(() => {
+    if (!anchor) return;
+    const onScroll = (e: Event) => {
+      if (e.target instanceof Node && rootRef.current?.contains(e.target)) return;
+      onClose();
+    };
+    document.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onClose);
+    return () => {
+      document.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onClose);
+    };
+  }, [anchor, onClose]);
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -69,12 +126,18 @@ export function EmojiPicker({ onPick, onClose, ignoreSelector, autoFocusSearch =
     onPick(char);
   };
 
-  return (
-    <div className="emojipick" ref={rootRef} role="dialog" aria-label="Выбор эмодзи">
+  const panel = (
+    <div
+      className={anchor ? "emojipick emojipick--floating" : "emojipick"}
+      ref={rootRef}
+      role="dialog"
+      aria-label="Выбор эмодзи"
+      style={anchor ? (pos ?? { visibility: "hidden" }) : undefined}
+    >
       <input
+        ref={searchRef}
         className="emojipick__search ui-input"
         placeholder="Поиск эмодзи"
-        autoFocus={autoFocusSearch}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
@@ -121,4 +184,5 @@ export function EmojiPicker({ onPick, onClose, ignoreSelector, autoFocusSearch =
       </div>
     </div>
   );
+  return anchor ? createPortal(panel, document.body) : panel;
 }
