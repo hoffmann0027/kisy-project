@@ -39,7 +39,7 @@ func TestPreflightFromAppOriginIsAnswered(t *testing.T) {
 	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != appOrigin {
 		t.Fatalf("allow-origin = %q, want %q", got, appOrigin)
 	}
-	for _, h := range []string{"Authorization", "X-Kisy-Client", "X-File-Name"} {
+	for _, h := range []string{"Authorization", "X-Kisy-Client", "X-Kisy-App-Version", "X-File-Name"} {
 		if !strings.Contains(rec.Header().Get("Access-Control-Allow-Headers"), h) {
 			t.Fatalf("allow-headers missing %q: %q", h, rec.Header().Get("Access-Control-Allow-Headers"))
 		}

@@ -12,6 +12,9 @@ var allowedRequestHeaders = strings.Join([]string{
 	"Content-Type",
 	"Authorization",
 	"X-Kisy-Client",
+	// The app's version (internal/clientversions); without it here every
+	// request from a new build fails its preflight.
+	"X-Kisy-App-Version",
 	"X-File-Name",
 	"X-Note-Text",
 	"X-Attachment-Kind",

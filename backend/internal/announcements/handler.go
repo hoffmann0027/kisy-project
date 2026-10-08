@@ -1,6 +1,7 @@
 package announcements
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -18,6 +19,72 @@ import (
 type Handler struct {
 	svc   *Service
 	actor func(*http.Request) (ActorMeta, bool)
+	// versions reports which app builds people use (clientversions.Recent).
+	versions func(context.Context) (any, error)
+}
+
+// SetVersions wires the "who still runs an old build" numbers shown next to
+// the announced versions.
+func (h *Handler) SetVersions(f func(context.Context) (any, error)) { h.versions = f }
+
+// AdminRoutes: announcing a new version of the app. Registered through
+// admin.Mount, behind the CEO gates; the service checks the live level too.
+func (h *Handler) AdminRoutes(r chi.Router) {
+	r.Get("/releases", h.listReleases)
+	r.Post("/releases", h.sendRelease)
+}
+
+type releaseRequest struct {
+	Version     string `json:"version"`
+	Notes       string `json:"notes"`
+	DownloadURL string `json:"downloadUrl"`
+}
+
+func (h *Handler) sendRelease(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actor(r)
+	if !ok {
+		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
+		return
+	}
+	var req releaseRequest
+	if err := httpjson.Decode(w, r, &req); err != nil {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "malformed JSON body")
+		return
+	}
+	rel, err := h.svc.SendRelease(r.Context(), actor, ReleaseInput{Version: req.Version, Notes: req.Notes, DownloadURL: req.DownloadURL})
+	switch {
+	case errors.Is(err, ErrValidation):
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed,
+			fmt.Sprintf("version 1-%d and notes 1-%d characters; the link, if any, must be https", MaxReleaseVersion, MaxReleaseNotes))
+	case errors.Is(err, ErrNotCEO):
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "only the CEO announces a new version")
+	case err != nil:
+		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
+	default:
+		httpresponse.OK(w, r, http.StatusCreated, map[string]any{"release": rel})
+	}
+}
+
+func (h *Handler) listReleases(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.actor(r); !ok {
+		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
+		return
+	}
+	releases, err := h.svc.Releases(r.Context(), 20)
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
+		return
+	}
+	out := map[string]any{"releases": releases, "versions": []any{}}
+	if h.versions != nil {
+		v, err := h.versions(r.Context())
+		if err != nil {
+			httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
+			return
+		}
+		out["versions"] = v
+	}
+	httpresponse.OK(w, r, http.StatusOK, out)
 }
 
 func NewHandler(svc *Service, actor func(*http.Request) (ActorMeta, bool)) *Handler {

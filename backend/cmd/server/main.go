@@ -238,6 +238,8 @@ func newRouter(d routerDeps) http.Handler {
 			// Per-account budgets (search, link previews, new groups, uploads);
 			// messages and new private chats are limited in their services.
 			r.Use(m.accountLimits.Middleware(claimsIdentity, accountLimitedScope))
+			// Which build of the app each account runs (X-Kisy-App-Version).
+			r.Use(m.clientVersions.Middleware(claimsUserID))
 
 			r.Route("/users", func(r chi.Router) {
 				m.usersHandler.Routes(r)
@@ -356,7 +358,7 @@ func newRouter(d routerDeps) http.Handler {
 
 			// CEO only; the gates travel with the routes (admin.Mount).
 			admin.Mount(r, m.authMW, m.adminHandler, m.moderationHandler.AdminRoutes, m.reportsHandler.AdminRoutes,
-				m.dashboardHandler.AdminRoutes)
+				m.dashboardHandler.AdminRoutes, m.announcementsHandler.AdminRoutes)
 
 			r.Route("/groups", func(r chi.Router) {
 				// Reads are visibility-filtered; creation is open to any

@@ -3972,6 +3972,45 @@ paths:
         '200': { description: Overview, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/releases:
+    get:
+      tags: [admin]
+      summary: Announced app versions, and which builds people run (CEO only)
+      description: >
+        releases: announced versions, newest first. versions: Android builds
+        used in the last 30 days, newest build first, with how many accounts
+        run each. The app reports its build in the X-Kisy-App-Version header
+        ("<versionName> (<versionCode>)") on signed-in requests; the server
+        writes it down at most every 6 hours per account and build. Builds
+        older than the one that started sending it are not counted.
+      responses:
+        '200': { description: Releases and builds, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [admin]
+      summary: Announce a new version of the app to everyone ("New Update", CEO only)
+      description: >
+        Every active account but the CEO gets a notification of type
+        app_release (payload releaseId, version, notes, downloadUrl), live and
+        as a push ("Вышла версия …"; tapping it opens the app, where the
+        notification carries the link). Audited as release.announced.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, notes]
+              properties:
+                version: { type: string, minLength: 1, maxLength: 32 }
+                notes: { type: string, minLength: 1, maxLength: 4000 }
+                downloadUrl: { type: string, format: uri, description: "https only" }
+      responses:
+        '201': { description: Announced, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /admin/audit:
     get:
       tags: [admin]

@@ -77,6 +77,13 @@ func accountLimitedScope(r *http.Request) (string, bool) {
 	return "", false
 }
 
+// claimsUserID is the signed-in account of a request, for middleware that
+// needs only who it is.
+func claimsUserID(r *http.Request) (uuid.UUID, bool) {
+	id, _, ok := claimsIdentity(r)
+	return id, ok
+}
+
 func claimsIdentity(r *http.Request) (uuid.UUID, int, bool) {
 	claims, ok := auth.ClaimsFromContext(r.Context())
 	if !ok {

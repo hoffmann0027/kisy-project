@@ -386,8 +386,14 @@ func reachable(ctx context.Context, tx pgx.Tx, author uuid.UUID, authorLevel int
 // deliver sends the live event to everyone at once and the push through a
 // small pool of workers, after the request has been answered.
 func (s *Service) deliver(recipients []uuid.UUID, a *Announcement, payload map[string]any) {
+	s.fanOut(recipients, NotificationType, payload, a.Title, a.Author.DisplayName+": "+a.Body, "/")
+}
+
+// fanOut sends a stored notification live to everyone at once and as a push
+// through a small pool of workers, after the request has been answered.
+func (s *Service) fanOut(recipients []uuid.UUID, typ string, payload map[string]any, title, body, url string) {
 	if s.pub != nil {
-		live := map[string]any{"type": NotificationType}
+		live := map[string]any{"type": typ}
 		for k, v := range payload {
 			live[k] = v
 		}
@@ -398,8 +404,6 @@ func (s *Service) deliver(recipients []uuid.UUID, a *Announcement, payload map[s
 	if s.pusher == nil || len(recipients) == 0 {
 		return
 	}
-	title := a.Title
-	body := a.Author.DisplayName + ": " + a.Body
 	// #nosec G118 -- deliberate: the push must outlive the request that sent
 	// it. Each Notify is bounded by push.notifyTimeout.
 	go func() {
@@ -410,7 +414,7 @@ func (s *Service) deliver(recipients []uuid.UUID, a *Announcement, payload map[s
 			go func() {
 				defer wg.Done()
 				for id := range jobs {
-					s.pusher.Notify(context.Background(), id, title, body, "/")
+					s.pusher.Notify(context.Background(), id, title, body, url)
 				}
 			}()
 		}

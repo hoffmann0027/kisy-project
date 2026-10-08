@@ -27,6 +27,7 @@ import (
 	"kisy-backend/internal/chatfolders"
 	"kisy-backend/internal/chatmedia"
 	"kisy-backend/internal/chats"
+	"kisy-backend/internal/clientversions"
 	"kisy-backend/internal/conditions"
 	"kisy-backend/internal/config"
 	"kisy-backend/internal/dashboard"
@@ -90,6 +91,7 @@ type modules struct {
 	notificationsHandler *notifications.Handler
 	announcementsHandler *announcements.Handler
 	dashboardHandler     *dashboard.Handler
+	clientVersions       *clientversions.Recorder
 	notifprefsHandler    *notifprefs.Handler
 	boardsHandler        *boards.Handler
 	calendarHandler      *calendar.Handler
@@ -1022,6 +1024,8 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	announcementsSvc := announcements.NewService(pool, auditRec)
 	announcementsSvc.SetPublisher(wsPublisher)
 	announcementsSvc.SetPusher(pushSvc)
+	// Which app builds people run, for "New Update" (X-Kisy-App-Version).
+	clientVersions := clientversions.NewRecorder(pool, rdb, log)
 	announcementsHandler := announcements.NewHandler(announcementsSvc, func(r *http.Request) (announcements.ActorMeta, bool) {
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {
@@ -1030,6 +1034,8 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		m := authHandler.ClientMeta(r)
 		return announcements.ActorMeta{UserID: claims.UserID, SessionID: claims.SessionID, IPHash: m.IPHash, RequestID: m.RequestID}, true
 	})
+
+	announcementsHandler.SetVersions(func(ctx context.Context) (any, error) { return clientversions.Recent(ctx, pool) })
 
 	// Reporting content and people; the queue lives under /admin.
 	reportsSvc := reports.NewService(pool, auditRec)
@@ -1090,6 +1096,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		notificationsHandler: notificationsHandler,
 		announcementsHandler: announcementsHandler,
 		dashboardHandler:     dashboardHandler,
+		clientVersions:       clientVersions,
 		notifprefsHandler:    notifprefsHandler,
 		boardsHandler:        boardsHandler,
 		calendarHandler:      calendarHandler,
