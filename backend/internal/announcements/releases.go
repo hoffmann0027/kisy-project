@@ -139,7 +139,7 @@ func (s *Service) SendRelease(ctx context.Context, actor ActorMeta, in ReleaseIn
 
 	// The push opens the app, where the notification carries the link: a tap
 	// is routed inside the app, and an outside address would go nowhere.
-	s.fanOut(recipients, ReleaseNotificationType, payload, i18n.M("releases.pushTitle", r.Version), i18n.Raw(excerpt(r.Notes, 160)), "/")
+	s.fanOut(recipients, ReleaseNotificationType, payload, sharedPushTag, i18n.M("releases.pushTitle", r.Version), i18n.Raw(excerpt(r.Notes, 160)), "/")
 	return r, nil
 }
 

@@ -82,6 +82,7 @@
   /* danger/success/warning read well on both themes */
   --color-danger: #e5484d;
   --color-danger-soft: rgba(229, 72, 77, 0.16);
+  --color-on-danger: #fff;
   --color-success: #34c759;
   --color-warning: #e0a63f;
   --color-bubble-out: var(--bubout-bg);

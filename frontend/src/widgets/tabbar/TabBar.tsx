@@ -1,6 +1,8 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@shared/lib/cn";
 import { Icon } from "@shared/ui/icons";
+import { AlertBadge } from "@shared/ui";
+import { useNotifications } from "@entities/notification/queries";
 import { useCapabilities } from "@shared/lib/useCapabilities";
 import { communitiesDestination, messagesDestination, ratingOrFeed } from "@shared/lib/nav";
 import { t } from "@shared/i18n";
@@ -33,6 +35,9 @@ export function TabBar({ onProfile }: Props) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const caps = useCapabilities();
+  const { data: notif } = useNotifications();
+  // Notifications live in the Hub, so the orb is where the phone says so.
+  const unread = notif?.unreadCount ?? 0;
 
   const slots: Slot[] = [
     messagesDestination,
@@ -93,6 +98,7 @@ export function TabBar({ onProfile }: Props) {
         <span className="tabbar__orb-face">
           <Icon.Grid size={24} />
         </span>
+        <AlertBadge count={unread} label={t("hub.page.unread", { count: unread })} />
       </button>
 
       {right.map(renderSlot)}

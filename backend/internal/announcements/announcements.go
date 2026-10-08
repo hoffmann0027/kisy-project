@@ -36,6 +36,7 @@ import (
 	"kisy-backend/internal/access"
 	"kisy-backend/internal/audit"
 	"kisy-backend/internal/i18n"
+	"kisy-backend/internal/push"
 )
 
 // Audiences.
@@ -130,10 +131,22 @@ type Publisher interface {
 	PublishNotificationRevoked(userID uuid.UUID, data any)
 }
 
-// Pusher sends a push to a user's devices. Satisfied by *push.Service.
+// Pusher sends a push to a user's devices, and takes one back. Satisfied by
+// *push.Service.
 type Pusher interface {
-	Notify(ctx context.Context, userID uuid.UUID, title, body i18n.Msg, url string)
+	NotifyTagged(ctx context.Context, userID uuid.UUID, tag string, title, body i18n.Msg, url string)
+	Retract(ctx context.Context, userID uuid.UUID, tag string)
 }
+
+// PushTag is the tag an announcement's push is shown under. Its own, so that
+// revoking it takes down exactly that push, and a chat message arriving after
+// it does not replace it. The web client closes the browser's copy by the
+// same name (frontend shared/lib/shownNotifications.ts).
+func PushTag(id uuid.UUID) string { return "announcement-" + id.String() }
+
+// sharedPushTag is the tag every other push shares: a release note replaces
+// the previous push like a message does.
+const sharedPushTag = push.DefaultTag
 
 // pushWorkers bounds how many recipients are pushed to at once: an
 // announcement to everyone must not open a connection per person in one go.
@@ -387,12 +400,12 @@ func reachable(ctx context.Context, tx pgx.Tx, author uuid.UUID, authorLevel int
 // deliver sends the live event to everyone at once and the push through a
 // small pool of workers, after the request has been answered.
 func (s *Service) deliver(recipients []uuid.UUID, a *Announcement, payload map[string]any) {
-	s.fanOut(recipients, NotificationType, payload, i18n.Raw(a.Title), i18n.Raw(a.Author.DisplayName+": "+a.Body), "/")
+	s.fanOut(recipients, NotificationType, payload, PushTag(a.ID), i18n.Raw(a.Title), i18n.Raw(a.Author.DisplayName+": "+a.Body), "/")
 }
 
 // fanOut sends a stored notification live to everyone at once and as a push
 // through a small pool of workers, after the request has been answered.
-func (s *Service) fanOut(recipients []uuid.UUID, typ string, payload map[string]any, title, body i18n.Msg, url string) {
+func (s *Service) fanOut(recipients []uuid.UUID, typ string, payload map[string]any, tag string, title, body i18n.Msg, url string) {
 	if s.pub != nil {
 		live := map[string]any{"type": typ}
 		for k, v := range payload {
@@ -402,11 +415,22 @@ func (s *Service) fanOut(recipients []uuid.UUID, typ string, payload map[string]
 			s.pub.PublishNotification(id, live)
 		}
 	}
-	if s.pusher == nil || len(recipients) == 0 {
+	if s.pusher == nil {
+		return
+	}
+	s.eachInBackground(recipients, func(id uuid.UUID) {
+		s.pusher.NotifyTagged(context.Background(), id, tag, title, body, url)
+	})
+}
+
+// eachInBackground runs push work for every recipient through a small pool of
+// workers, after the request has been answered.
+func (s *Service) eachInBackground(recipients []uuid.UUID, work func(uuid.UUID)) {
+	if len(recipients) == 0 {
 		return
 	}
 	// #nosec G118 -- deliberate: the push must outlive the request that sent
-	// it. Each Notify is bounded by push.notifyTimeout.
+	// it. Each call is bounded by push.notifyTimeout.
 	go func() {
 		jobs := make(chan uuid.UUID)
 		var wg sync.WaitGroup
@@ -415,7 +439,7 @@ func (s *Service) fanOut(recipients []uuid.UUID, typ string, payload map[string]
 			go func() {
 				defer wg.Done()
 				for id := range jobs {
-					s.pusher.Notify(context.Background(), id, title, body, url)
+					work(id)
 				}
 			}()
 		}
@@ -427,8 +451,10 @@ func (s *Service) fanOut(recipients []uuid.UUID, typ string, payload map[string]
 	}()
 }
 
-// Revoke takes an announcement back: it leaves every recipient's list. Only
-// its author or the CEO may; to anyone else it does not exist.
+// Revoke takes an announcement back: it leaves every recipient's list, and
+// its push leaves their phones — a push already drawn stays in the shade
+// otherwise, long after the announcement is gone. Only its author or the CEO
+// may; to anyone else it does not exist.
 func (s *Service) Revoke(ctx context.Context, actor ActorMeta, id uuid.UUID) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -481,6 +507,12 @@ func (s *Service) Revoke(ctx context.Context, actor ActorMeta, id uuid.UUID) err
 		for _, uid := range recipients {
 			s.pub.PublishNotificationRevoked(uid, map[string]any{"announcementId": id})
 		}
+	}
+	if s.pusher != nil {
+		tag := PushTag(id)
+		s.eachInBackground(recipients, func(uid uuid.UUID) {
+			s.pusher.Retract(context.Background(), uid, tag)
+		})
 	}
 	return nil
 }

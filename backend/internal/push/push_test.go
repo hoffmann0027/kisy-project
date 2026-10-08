@@ -144,3 +144,68 @@ func TestNotifySpeaksTheRecipientsLanguage(t *testing.T) {
 		t.Fatalf("push body = %s, want it in English", body)
 	}
 }
+
+// A push that may be taken back carries its own tag — and the retraction
+// names that tag, so the phone removes exactly it and nothing that arrived
+// after it.
+func TestRetractTakesDownTheTaggedPush(t *testing.T) {
+	srv := newFCMServer(t)
+	repo := &fakeRepo{devices: []Device{{Token: "phone", Platform: "android"}}}
+	svc := NewService(nil, repo, quietLogger(), "", "", "")
+	svc.SetFCM(newTestFCM(t, srv))
+	user := uuid.New()
+
+	svc.NotifyTagged(context.Background(), user, "announcement-1", i18n.Raw("Собрание"), i18n.Raw("В пять"), "/")
+	var shown struct {
+		Message struct {
+			Android struct {
+				Notification struct {
+					Tag string `json:"tag"`
+				} `json:"notification"`
+			} `json:"android"`
+		} `json:"message"`
+	}
+	if err := json.Unmarshal(srv.lastBody.Load().(json.RawMessage), &shown); err != nil {
+		t.Fatalf("decode push: %v", err)
+	}
+	if shown.Message.Android.Notification.Tag != "announcement-1" {
+		t.Fatalf("tag = %q, want announcement-1", shown.Message.Android.Notification.Tag)
+	}
+
+	svc.Retract(context.Background(), user, "announcement-1")
+	var retract struct {
+		Message struct {
+			Notification *json.RawMessage  `json:"notification"`
+			Data         map[string]string `json:"data"`
+			Android      struct {
+				TTL string `json:"ttl"`
+			} `json:"android"`
+		} `json:"message"`
+	}
+	if err := json.Unmarshal(srv.lastBody.Load().(json.RawMessage), &retract); err != nil {
+		t.Fatalf("decode retraction: %v", err)
+	}
+	if retract.Message.Notification != nil {
+		t.Errorf("the retraction would itself be drawn: %s", *retract.Message.Notification)
+	}
+	if retract.Message.Data["type"] != RetractType || retract.Message.Data["tag"] != "announcement-1" {
+		t.Errorf("data = %v, want type %s and the push's tag", retract.Message.Data, RetractType)
+	}
+	if retract.Message.Android.TTL != "2419200s" {
+		t.Errorf("ttl = %q, want as long as the push itself is kept (2419200s)", retract.Message.Android.TTL)
+	}
+}
+
+// Everything else keeps sharing one tag, so a new message still replaces the
+// previous one in the shade instead of stacking.
+func TestNotifyKeepsTheSharedTag(t *testing.T) {
+	srv := newFCMServer(t)
+	repo := &fakeRepo{devices: []Device{{Token: "phone", Platform: "android"}}}
+	svc := NewService(nil, repo, quietLogger(), "", "", "")
+	svc.SetFCM(newTestFCM(t, srv))
+
+	svc.Notify(context.Background(), uuid.New(), i18n.Raw("Иван"), i18n.Raw("Привет"), "/chat/1")
+	if body := string(srv.lastBody.Load().(json.RawMessage)); !strings.Contains(body, `"tag":"kisy"`) {
+		t.Fatalf("push = %s, want the shared tag", body)
+	}
+}

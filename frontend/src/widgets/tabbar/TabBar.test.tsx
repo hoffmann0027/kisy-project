@@ -1,8 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { User } from "@shared/api/types";
 import { useAuthStore } from "@shared/store/auth";
+import { notificationKeys } from "@entities/notification/queries";
 import { TabBar } from "./TabBar";
 
 // The third tab is the one that differs between the two kinds of account: an
@@ -28,11 +30,15 @@ function signIn(over: Partial<User>) {
   });
 }
 
-function renderBar() {
+function renderBar(unreadCount = 0) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+  qc.setQueryData(notificationKeys.list, { notifications: [], unreadCount });
   return render(
-    <MemoryRouter initialEntries={["/"]}>
-      <TabBar onProfile={vi.fn()} />
-    </MemoryRouter>,
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={["/"]}>
+        <TabBar onProfile={vi.fn()} />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -70,5 +76,22 @@ describe("the tab bar", () => {
     for (const label of ["Сообщения", "Сообщества", "Хаб", "Профиль"]) {
       expect(screen.getByLabelText(label)).toBeTruthy();
     }
+  });
+
+  // Notifications live in the Hub; on a phone the orb is the way there, so it
+  // is the orb that has to say something is waiting.
+  it("marks the hub orb red while notifications are unread", () => {
+    signIn({});
+    renderBar(3);
+    const badge = screen.getByRole("status");
+    expect(badge.textContent).toBe("3");
+    expect(badge.className).toBe("alert-badge");
+    expect(screen.getByLabelText("Хаб").contains(badge)).toBe(true);
+  });
+
+  it("shows nothing once everything is read", () => {
+    signIn({});
+    renderBar(0);
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });

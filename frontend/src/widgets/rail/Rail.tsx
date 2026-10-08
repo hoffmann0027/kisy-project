@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@shared/lib/cn";
-import { Avatar, Badge, Logo } from "@shared/ui";
+import { AlertBadge, Avatar, Badge, Logo } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import { useAuthStore } from "@shared/store/auth";
 import { useCapabilities } from "@shared/lib/useCapabilities";
@@ -74,11 +74,7 @@ export function Rail({ onProfile }: Props) {
           onClick={() => navigate("/hub")}
         >
           <Icon.Grid />
-          {unread > 0 && (
-            <span className="rail__item-badge">
-              <Badge>{unread > 9 ? "9+" : unread}</Badge>
-            </span>
-          )}
+          <AlertBadge count={unread} label={t("hub.page.unread", { count: unread })} />
         </button>
       </div>
       <button className="rail__item" title={t("hub.rail.profile")} onClick={onProfile}>

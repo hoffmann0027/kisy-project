@@ -233,11 +233,30 @@ type payload struct {
 	Tag   string `json:"tag,omitempty"`
 }
 
+// DefaultTag is the tag most pushes share: each new one replaces the last
+// instead of piling up.
+const DefaultTag = "kisy"
+
+// RetractType is the data message that tells the app to take a shown push
+// down. The Android side (CallPushService.java) matches on it.
+const RetractType = "notification_retract"
+
+// RetractTTL is how long FCM keeps trying to deliver a retraction: as long as
+// it keeps the push it takes back (the four-week default), so a phone that
+// was off the whole time gets both, not just the push.
+const RetractTTL = 28 * 24 * time.Hour
+
 // Notify pushes a notification to every device of a user: subscribed browsers
 // and installed mobile apps, worded in that user's language. It runs its work
 // synchronously; callers typically invoke it in a goroutine. Dead endpoints
 // and tokens are pruned.
 func (s *Service) Notify(ctx context.Context, userID uuid.UUID, title, body i18n.Msg, url string) {
+	s.NotifyTagged(ctx, userID, DefaultTag, title, body, url)
+}
+
+// NotifyTagged is Notify under its own tag, for a push that may have to be
+// taken back with Retract — and that a later chat message must not replace.
+func (s *Service) NotifyTagged(ctx context.Context, userID uuid.UUID, tag string, title, body i18n.Msg, url string) {
 	ctx, cancel := context.WithTimeout(ctx, notifyTimeout)
 	defer cancel()
 	lang := i18n.Default
@@ -245,8 +264,22 @@ func (s *Service) Notify(ctx context.Context, userID uuid.UUID, title, body i18n
 		lang = s.localeOf(ctx, userID)
 	}
 	t, b := title.In(lang), body.In(lang)
-	s.notifyBrowsers(ctx, userID, t, b, url)
-	s.notifyDevices(ctx, userID, t, b, url)
+	s.notifyBrowsers(ctx, userID, tag, t, b, url)
+	s.notifyDevices(ctx, userID, tag, t, b, url)
+}
+
+// Retract takes down a push shown under tag on the user's phones. A push
+// drawn by Android stays in the shade until something removes it — deleting
+// the notification it announced does not — so the app is sent a data message
+// that it answers by cancelling the tag.
+//
+// Browsers are not sent anything: a web push that shows nothing is answered
+// by the browser with a generic notice of its own. The open app closes the
+// browser's copy instead (frontend shared/lib/shownNotifications.ts).
+func (s *Service) Retract(ctx context.Context, userID uuid.UUID, tag string) {
+	ctx, cancel := context.WithTimeout(ctx, notifyTimeout)
+	defer cancel()
+	s.SendData(ctx, userID, map[string]string{"type": RetractType, "tag": tag}, RetractTTL)
 }
 
 // CallInviteTTL bounds how long FCM keeps trying to deliver a ring. Past it
@@ -303,7 +336,7 @@ func (s *Service) SendData(ctx context.Context, userID uuid.UUID, data map[strin
 }
 
 // notifyDevices delivers to the packaged mobile apps through Firebase.
-func (s *Service) notifyDevices(ctx context.Context, userID uuid.UUID, title, body, url string) {
+func (s *Service) notifyDevices(ctx context.Context, userID uuid.UUID, tag, title, body, url string) {
 	if s.fcm == nil {
 		return
 	}
@@ -313,7 +346,7 @@ func (s *Service) notifyDevices(ctx context.Context, userID uuid.UUID, title, bo
 		return
 	}
 	for _, d := range devices {
-		switch err := s.fcm.Send(ctx, d.Token, title, body, url); {
+		switch err := s.fcm.SendTagged(ctx, d.Token, tag, title, body, url); {
 		case err == nil:
 		case errors.Is(err, ErrDeviceUnregistered):
 			// The app is gone from that phone; stop paying for the round trip.
@@ -326,7 +359,7 @@ func (s *Service) notifyDevices(ctx context.Context, userID uuid.UUID, title, bo
 	}
 }
 
-func (s *Service) notifyBrowsers(ctx context.Context, userID uuid.UUID, title, body, url string) {
+func (s *Service) notifyBrowsers(ctx context.Context, userID uuid.UUID, tag, title, body, url string) {
 	if !s.Enabled() {
 		return
 	}
@@ -338,7 +371,7 @@ func (s *Service) notifyBrowsers(ctx context.Context, userID uuid.UUID, title, b
 	if len(subs) == 0 {
 		return
 	}
-	data, _ := json.Marshal(payload{Title: title, Body: body, URL: url, Tag: "kisy"})
+	data, _ := json.Marshal(payload{Title: title, Body: body, URL: url, Tag: tag})
 
 	for _, sub := range subs {
 		// Rows stored before endpoints were checked may point anywhere: they

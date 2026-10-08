@@ -2,6 +2,7 @@ package com.kisy.messenger.calls;
 
 import androidx.annotation.NonNull;
 import android.util.Log;
+import androidx.core.app.NotificationManagerCompat;
 import com.capacitorjs.plugins.pushnotifications.MessagingService;
 import com.google.firebase.messaging.RemoteMessage;
 import java.util.Map;
@@ -11,8 +12,9 @@ import java.util.Map;
  *
  * Extends the plugin's own service and still calls through to it, so ordinary
  * notifications and the pushNotificationReceived event behave exactly as
- * before; the only thing added is that a call push rings the phone natively
- * instead of waiting for JavaScript that, in a killed app, never runs.
+ * before. Added on top: a call push rings the phone natively instead of
+ * waiting for JavaScript that, in a killed app, never runs, and a retraction
+ * takes down a push that was taken back (a revoked announcement).
  *
  * Replaces the plugin's service in the manifest — Firebase delivers to a single
  * service, and two declarations would make which one wins a matter of merge
@@ -22,10 +24,25 @@ public class CallPushService extends MessagingService {
 
     private static final String TAG = "KisyCall";
 
+    /** Must match push.RetractType on the server. */
+    private static final String RETRACT = "notification_retract";
+
     @Override
     public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
         Map<String, String> data = remoteMessage.getData();
         String type = data.get("type");
+
+        if (RETRACT.equals(type)) {
+            // Android drew the push itself, under the tag the server gave it
+            // and the id Firebase uses for every tagged notification: 0. Only
+            // that one goes; nothing else in the shade is touched. Not passed
+            // on to the app: there is nothing in it to show.
+            String tag = data.get("tag");
+            if (tag != null && !tag.isEmpty()) {
+                NotificationManagerCompat.from(this).cancel(tag, 0);
+            }
+            return;
+        }
 
         if ("call_invite".equals(type)) {
             String callId = data.get("callId");

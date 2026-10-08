@@ -13,6 +13,7 @@ import { usePresenceStore } from "@shared/store/presence";
 import { useTypingStore } from "@shared/store/typing";
 import { useReadReceiptStore } from "@shared/store/readReceipts";
 import { useAuthStore } from "@shared/store/auth";
+import { closeAnnouncementPush } from "@shared/lib/shownNotifications";
 import {
   dropPlaintext,
   e2eeSession,
@@ -206,8 +207,10 @@ export function useRealtime() {
           qc.invalidateQueries({ queryKey: notificationKeys.list });
           break;
         case "notification.revoked":
-          // An announcement was taken back by its author or the CEO.
+          // An announcement was taken back by its author or the CEO: it
+          // leaves the list, and its push leaves the screen.
           qc.invalidateQueries({ queryKey: notificationKeys.list });
+          void closeAnnouncementPush(ev.data.announcementId);
           break;
         case "board.changed":
           qc.invalidateQueries({ queryKey: ["board", ev.data.groupId] });
@@ -238,6 +241,8 @@ export function refreshAfterGap(qc: QueryClient) {
   // Fresh history for open conversations and the chat list.
   void qc.invalidateQueries({ queryKey: ["messages"] });
   void qc.invalidateQueries({ queryKey: chatKeys.list });
+  // Announcements sent or taken back in the meantime.
+  void qc.invalidateQueries({ queryKey: notificationKeys.list });
   refreshGroups(qc);
 }
 

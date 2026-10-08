@@ -169,6 +169,52 @@
   font-size: 12px;
   font-weight: 640;
 }
+/* Alert badge: a red count in the corner of a key, with a slow ring that
+   pulses out of it — unread notifications should not go unseen. */
+.alert-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  z-index: 1;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-round);
+  background: var(--color-danger);
+  color: var(--color-on-danger);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--color-bg);
+  pointer-events: none;
+}
+.alert-badge::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--color-danger);
+  opacity: 0.6;
+  z-index: -1;
+  animation: alert-badge-ring 1.8s ease-out infinite;
+}
+@keyframes alert-badge-ring {
+  from {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  to {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .alert-badge::after {
+    animation: none;
+    opacity: 0;
+  }
+}
 .ui-badge--muted {
   background: var(--color-surface-2);
   color: var(--color-text-secondary);

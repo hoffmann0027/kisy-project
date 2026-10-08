@@ -102,3 +102,20 @@ describe.runIf(existsSync(ANDROID))("android call wiring", () => {
     expect(native).toEqual(web);
   });
 });
+
+// A revoked announcement takes its push down: the server sends a data message
+// naming the push's tag, and the native service cancels it. Neither side can
+// see the other's spelling of the message type.
+describe.runIf(existsSync(ANDROID))("android push retraction", () => {
+  it("answers the retraction the server sends", () => {
+    const service = read(CALLS, "CallPushService.java");
+    const server = read(__dirname, "..", "..", "..", "..", "backend", "internal", "push", "push.go");
+    const native = /RETRACT = "([^"]+)"/.exec(service)?.[1];
+    const sent = /const RetractType = "([^"]+)"/.exec(server)?.[1];
+    expect(native).toBeTruthy();
+    expect(native).toBe(sent);
+    // Firebase shows a tagged push under id 0; cancelling any other id
+    // leaves it where it is.
+    expect(service).toMatch(/\.cancel\(tag, 0\)/);
+  });
+});

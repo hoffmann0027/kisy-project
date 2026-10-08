@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { GroupViewer } from "@shared/api/types";
 import { groupKeys } from "@entities/group/queries";
 import { chatKeys } from "@entities/chat/queries";
+import { notificationKeys } from "@entities/notification/queries";
 import { refreshAfterGap } from "./useRealtime";
 
 // Events sent while the socket was down are not replayed. A tablet that slept
@@ -22,5 +23,14 @@ describe("after a gap in the socket", () => {
     expect(qc.getQueryState(groupKeys.viewer("c1"))?.isInvalidated).toBe(true);
     expect(qc.getQueryState(groupKeys.list)?.isInvalidated).toBe(true);
     expect(qc.getQueryState(chatKeys.list)?.isInvalidated).toBe(true);
+  });
+
+  // An announcement taken back while the socket was down stayed in the list
+  // and on the badge until the next minute's poll.
+  it("re-reads the notifications", () => {
+    const qc = new QueryClient();
+    qc.setQueryData(notificationKeys.list, { notifications: [], unreadCount: 1 });
+    refreshAfterGap(qc);
+    expect(qc.getQueryState(notificationKeys.list)?.isInvalidated).toBe(true);
   });
 });

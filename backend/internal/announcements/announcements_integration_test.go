@@ -10,12 +10,14 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"kisy-backend/internal/announcements"
 	"kisy-backend/internal/audit"
+	"kisy-backend/internal/i18n"
 	"kisy-backend/internal/platform/testdb"
 )
 
@@ -386,6 +388,72 @@ func TestMalformedAnnouncementsAreRefused(t *testing.T) {
 	} {
 		if _, err := e.svc.Send(context.Background(), actor(e.ceo), in); !errors.Is(err, announcements.ErrValidation) {
 			t.Fatalf("%s: got %v, want ErrValidation", name, err)
+		}
+	}
+}
+
+// pushes records what reached the push service: the tag each push was shown
+// under, and the tags taken back.
+type pushes struct {
+	mu        sync.Mutex
+	shown     map[uuid.UUID][]string
+	retracted map[uuid.UUID][]string
+	done      chan struct{}
+}
+
+func (p *pushes) NotifyTagged(_ context.Context, id uuid.UUID, tag string, _, _ i18n.Msg, _ string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.shown[id] = append(p.shown[id], tag)
+	p.done <- struct{}{}
+}
+
+func (p *pushes) Retract(_ context.Context, id uuid.UUID, tag string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.retracted[id] = append(p.retracted[id], tag)
+	p.done <- struct{}{}
+}
+
+func (p *pushes) wait(t *testing.T, n int) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		select {
+		case <-p.done:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("only %d of %d pushes arrived", i, n)
+		}
+	}
+}
+
+// A push already drawn on a phone stayed there after the announcement was
+// taken back — on every recipient's phone. Revoking now takes the push down
+// too, by the tag it was shown under.
+func TestRevokeTakesThePushBack(t *testing.T) {
+	e := setup(t)
+	p := &pushes{shown: map[uuid.UUID][]string{}, retracted: map[uuid.UUID][]string{}, done: make(chan struct{}, 16)}
+	e.svc.SetPusher(p)
+
+	a, err := send(t, e, e.director, announcements.Input{Audience: announcements.AudienceAll})
+	if err != nil {
+		t.Fatal(err)
+	}
+	recipients := e.recipientsOf(t, a.ID)
+	p.wait(t, len(recipients))
+	tag := announcements.PushTag(a.ID)
+	for _, id := range recipients {
+		if got := p.shown[id]; len(got) != 1 || got[0] != tag {
+			t.Fatalf("pushed under %v, want its own tag %s", got, tag)
+		}
+	}
+
+	if err := e.svc.Revoke(context.Background(), actor(e.director), a.ID); err != nil {
+		t.Fatal(err)
+	}
+	p.wait(t, len(recipients))
+	for _, id := range recipients {
+		if got := p.retracted[id]; len(got) != 1 || got[0] != tag {
+			t.Fatalf("retracted %v, want %s", got, tag)
 		}
 	}
 }

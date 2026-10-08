@@ -172,8 +172,9 @@ type fcmAndroid struct {
 }
 
 type fcmAndroidNotifOpt struct {
-	// One tag for the whole app: a new notification replaces the previous one
-	// instead of stacking, matching the Web Push behaviour.
+	// Android keeps one notification per tag: a new one replaces the previous
+	// one instead of stacking. Most pushes share DefaultTag; one that may be
+	// taken back gets its own, which is what Retract names.
 	Tag string `json:"tag,omitempty"`
 	// The app creates this channel at startup with high importance, so a
 	// message pops up instead of landing silently in the shade. Without it
@@ -209,9 +210,14 @@ func (f *FCM) SendData(ctx context.Context, deviceToken string, data map[string]
 	return f.post(ctx, access, msg)
 }
 
-// Send delivers one notification to one device. A returned
+// Send delivers one notification to one device under DefaultTag. A returned
 // ErrDeviceUnregistered tells the caller to forget the token.
 func (f *FCM) Send(ctx context.Context, deviceToken, title, body, link string) error {
+	return f.SendTagged(ctx, deviceToken, DefaultTag, title, body, link)
+}
+
+// SendTagged is Send under a tag of the caller's choosing.
+func (f *FCM) SendTagged(ctx context.Context, deviceToken, tag, title, body, link string) error {
 	access, err := f.accessToken(ctx)
 	if err != nil {
 		return err
@@ -226,7 +232,7 @@ func (f *FCM) Send(ctx context.Context, deviceToken, title, body, link string) e
 	}
 	msg.Message.Android = fcmAndroid{
 		Priority:     "HIGH",
-		Notification: &fcmAndroidNotifOpt{Tag: "kisy", ChannelID: AndroidChannelID},
+		Notification: &fcmAndroidNotifOpt{Tag: tag, ChannelID: AndroidChannelID},
 	}
 
 	return f.post(ctx, access, msg)

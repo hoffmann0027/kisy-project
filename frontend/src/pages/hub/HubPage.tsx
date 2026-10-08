@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Icon } from "@shared/ui/icons";
+import { AlertBadge } from "@shared/ui";
 import { useNotifications } from "@entities/notification/queries";
 import { useCapabilities } from "@shared/lib/useCapabilities";
 import { feedLivesInHub } from "@shared/lib/nav";
@@ -35,6 +36,8 @@ export function HubPage() {
       hint: unread > 0 ? t("hub.page.unread", { count: unread }) : t("hub.page.allRead"),
       icon: Icon.Bell,
       tint: "violet",
+      // The one card that can be waiting on the user: a red count on its icon.
+      alert: unread,
     },
     // The company vote board: the CEO runs it and everyone in the organisation
     // votes. An account that nobody invited is not part of that body — and the
@@ -99,6 +102,9 @@ export function HubPage() {
             >
               <span className={`hub-card__badge hub-card__badge--${c.tint}`}>
                 <c.icon size={22} />
+                {"alert" in c && c.alert ? (
+                  <AlertBadge count={c.alert} label={t("hub.page.unread", { count: c.alert })} />
+                ) : null}
               </span>
               <span className="hub-card__body">
                 <span className="hub-card__title">{c.title}</span>

@@ -4,6 +4,7 @@ export { Input } from "./Input";
 export { Avatar } from "./Avatar";
 export { Logo } from "./Logo";
 export { Badge } from "./Badge";
+export { AlertBadge } from "./AlertBadge";
 export { Spinner } from "./Spinner";
 export { Modal } from "./Modal";
 export { ToastHost } from "./ToastHost";
