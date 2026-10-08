@@ -589,7 +589,10 @@ export interface PendingCall {
 }
 
 export const callsApi = {
-  iceConfig: () => apiClient.get<IceConfig>("/calls/ice-config"),
+  // Relay credentials are issued per call: before ringing for the partner in
+  // the chat, afterwards for the call itself.
+  iceConfig: (forCall: { callId: string } | { chatId: string; peerId: string }) =>
+    apiClient.get<IceConfig>(`/calls/ice-config?${new URLSearchParams(forCall).toString()}`),
   // Asked by a phone woken by a call push: the invite frame was published
   // over the socket while the app was asleep and is gone.
   pending: () => apiClient.get<{ call: PendingCall | null }>("/calls/pending"),

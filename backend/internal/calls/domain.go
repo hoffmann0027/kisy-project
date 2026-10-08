@@ -45,6 +45,11 @@ const (
 	phaseConnected = "connected"
 )
 
+// DefaultTURNTTL bounds relay credentials when TURN_TTL is unset. Long enough
+// for nearly every call; a longer one whose relay lapses recovers through the
+// ICE restart, which fetches fresh credentials for the same call.
+const DefaultTURNTTL = 2 * time.Hour
+
 // RingTimeout is how long an unanswered call rings before it is marked missed.
 const RingTimeout = 45 * time.Second
 

@@ -372,7 +372,7 @@ func Load() (*Config, error) {
 	cfg.ICE.TURNURLs = getEnvList("TURN_URLS")
 	cfg.ICE.TURNSecret = os.Getenv("TURN_SECRET")
 	cfg.ICE.TURNRealm = getEnv("TURN_REALM", "kisy")
-	if cfg.ICE.TURNTTL, err = getEnvDuration("TURN_TTL", 12*time.Hour); err != nil {
+	if cfg.ICE.TURNTTL, err = getEnvDuration("TURN_TTL", 2*time.Hour); err != nil {
 		return nil, err
 	}
 

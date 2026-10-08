@@ -27,9 +27,11 @@ IceConfig: iceServers[] where each entry is { urls[], username?, credential? }.
 
 ## Call Endpoints
 
-GET /calls/ice-config — RTCConfiguration for WebRTC: STUN plus, when TURN is
-configured, a TURN entry with short-lived HMAC credentials derived from the
-coturn shared secret (the secret never leaves the server). Rate-limited.
+GET /calls/ice-config?callId | ?chatId&peerId — RTCConfiguration for WebRTC:
+STUN always; a TURN entry with short-lived HMAC credentials derived from the
+coturn shared secret (the secret never leaves the server) only for a call —
+a live one the caller is part of (callId), or a partner they may ring now
+(chatId + peerId). Rate-limited.
 
 GET /calls/history?limit&offset — the caller's call journal, newest first,
 mapped to their perspective (direction + the other party). limit 1..100

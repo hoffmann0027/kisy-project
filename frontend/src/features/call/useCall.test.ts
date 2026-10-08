@@ -63,6 +63,7 @@ class FakePeerConnection {
   setRemoteDescription = vi.fn(async () => {});
   addIceCandidate = vi.fn(async () => {});
   createAnswer = vi.fn(async () => ({ type: "answer", sdp: "answer-sdp" }));
+  createOffer = vi.fn(async () => ({ type: "offer", sdp: "offer-sdp" }));
   setLocalDescription = vi.fn(async () => {});
 }
 
@@ -344,5 +345,33 @@ describe("ringing after the call connects", () => {
       await waitFor(() => expect(stopNativeRinging).toHaveBeenCalled());
       expect(ringtone.stop).toHaveBeenCalled();
     }
+  });
+});
+
+// Audit A-28: relay credentials are issued for one call. They used to be
+// fetched once and cached for the life of the tab, so a tab left open past
+// their expiry placed every later call without a relay.
+describe("relay credentials", () => {
+  it("are asked for the partner before ringing, and fresh for every call", async () => {
+    const { result } = renderHook(() => useCall());
+    const peer = { id: "user-2", displayName: "Пётр", avatarUrl: null };
+
+    await result.current.startCall(peer, "chat-1");
+    expect(api.iceConfig).toHaveBeenLastCalledWith({ chatId: "chat-1", peerId: "user-2" });
+    result.current.hangup();
+
+    await waitFor(() => expect(result.current.view.phase).not.toBe("outgoing"));
+    await result.current.startCall(peer, "chat-1");
+    expect(api.iceConfig).toHaveBeenCalledTimes(2);
+  });
+
+  it("are asked for the call itself when answering", async () => {
+    native.decision = { action: "accept", callId: ringingCall.callId };
+    api.pending.mockResolvedValue({ call: ringingCall });
+
+    renderHook(() => useCall());
+
+    await waitFor(() => expect(answers()).toHaveLength(1));
+    expect(api.iceConfig).toHaveBeenCalledWith({ callId: ringingCall.callId });
   });
 });

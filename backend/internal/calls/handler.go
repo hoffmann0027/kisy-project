@@ -76,7 +76,20 @@ func (h *Handler) iceConfig(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidToken, "authentication required")
 		return
 	}
-	httpresponse.OK(w, r, http.StatusOK, h.svc.ICEConfig(actor))
+	var req ICERequest
+	for name, dst := range map[string]*uuid.UUID{"callId": &req.CallID, "chatId": &req.ChatID, "peerId": &req.PeerID} {
+		v := r.URL.Query().Get(name)
+		if v == "" {
+			continue
+		}
+		id, err := uuid.Parse(v)
+		if err != nil {
+			httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "invalid "+name)
+			return
+		}
+		*dst = id
+	}
+	httpresponse.OK(w, r, http.StatusOK, h.svc.ICEConfig(r.Context(), actor, req))
 }
 
 func (h *Handler) history(w http.ResponseWriter, r *http.Request) {

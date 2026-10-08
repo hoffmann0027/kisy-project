@@ -76,7 +76,6 @@ export function useCall() {
   const [view, setView] = useState<CallView>(idleView);
   const session = useRef<Session | null>(null);
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
-  const iceCache = useRef<RTCConfiguration | null>(null);
   // Decisions from the native ringing screen already acted on, so a tap that
   // reaches us twice is not answered twice.
   const handledNative = useRef<Set<string>>(new Set());
@@ -95,16 +94,20 @@ export function useCall() {
     remoteAudio.current.autoplay = true;
   }
 
-  const fetchIce = useCallback(async (): Promise<RTCConfiguration> => {
-    if (iceCache.current) return iceCache.current;
-    try {
-      const cfg = await callsApi.iceConfig();
-      iceCache.current = { iceServers: cfg.iceServers };
-    } catch {
-      iceCache.current = { iceServers: [] };
-    }
-    return iceCache.current;
-  }, []);
+  // Fetched for every call, never cached: relay credentials are issued for
+  // one call and expire (audit A-28). A cached set outlived its TTL in a tab
+  // left open, and every later call went without a relay.
+  const fetchIce = useCallback(
+    async (forCall: Parameters<typeof callsApi.iceConfig>[0]): Promise<RTCConfiguration> => {
+      try {
+        const cfg = await callsApi.iceConfig(forCall);
+        return { iceServers: cfg.iceServers };
+      } catch {
+        return { iceServers: [] };
+      }
+    },
+    [],
+  );
 
   const cleanupMedia = useCallback(() => {
     ringtone.stop();
@@ -215,7 +218,7 @@ export function useCall() {
         finishWith((e as Error).message, true);
         return;
       }
-      const config = await fetchIce();
+      const config = await fetchIce({ chatId, peerId: peer.id });
       const pc = makePc(config, callId);
       localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
       session.current = { callId, role: "caller", peer, chatId, pc, localStream, remoteSet: false, pendingIce: [] };
@@ -262,7 +265,7 @@ export function useCall() {
       finishWith((e as Error).message, true);
       return;
     }
-    const config = await fetchIce();
+    const config = await fetchIce({ callId: s.callId });
     const pc = makePc(config, s.callId);
     localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
     s.pc = pc;

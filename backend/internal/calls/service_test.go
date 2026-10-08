@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"testing"
@@ -717,5 +718,67 @@ func TestRejectOverRESTEndsTheCall(t *testing.T) {
 	}
 	if err := h2.svc.Reject(context.Background(), Actor{UserID: uuid.New()}, id2); err == nil {
 		t.Fatal("an unrelated user was allowed to decline the call")
+	}
+}
+
+// Audit A-28: relay credentials went to anyone signed in, for 12 hours, for
+// no call at all — the TURN server as a free open relay. Now they are handed
+// out only for a call the actor is part of or is about to place.
+func TestRelayCredentialsOnlyForACall(t *testing.T) {
+	h := newHarness(t)
+	h.svc.ice = ICESettings{STUNURLs: []string{"stun:s"}, TURNURLs: []string{"turn:t"}, TURNSecret: "secret"}
+	ctx := context.Background()
+	relay := func(actor uuid.UUID, req ICERequest) bool {
+		servers := h.svc.ICEConfig(ctx, h.actor(actor), req).IceServers
+		if len(servers) == 0 || servers[0].URLs[0] != "stun:s" {
+			t.Fatalf("STUN must always be offered, got %+v", servers)
+		}
+		return len(servers) == 2 && servers[1].Credential != ""
+	}
+	stranger := uuid.New()
+
+	if relay(h.alice, ICERequest{}) {
+		t.Fatal("relay for a request naming no call")
+	}
+	if !relay(h.alice, ICERequest{ChatID: h.chatID, PeerID: h.bob}) {
+		t.Fatal("no relay for a caller about to ring a chat partner")
+	}
+	if relay(stranger, ICERequest{ChatID: h.chatID, PeerID: h.bob}) {
+		t.Fatal("relay for someone outside the chat")
+	}
+	if relay(h.alice, ICERequest{ChatID: h.chatID, PeerID: h.alice}) {
+		t.Fatal("relay for calling oneself")
+	}
+	h.svc.SetBlockCheck(func(context.Context, uuid.UUID, uuid.UUID) (bool, error) { return true, nil })
+	if relay(h.alice, ICERequest{ChatID: h.chatID, PeerID: h.bob}) {
+		t.Fatal("relay towards a blocked partner")
+	}
+	h.svc.SetBlockCheck(nil)
+
+	callID := uuid.New()
+	if relay(h.bob, ICERequest{CallID: callID}) {
+		t.Fatal("relay for a call that does not exist")
+	}
+	if err := h.invite(t, h.alice, h.bob, callID); err != nil {
+		t.Fatal(err)
+	}
+	if !relay(h.bob, ICERequest{CallID: callID}) || !relay(h.alice, ICERequest{CallID: callID}) {
+		t.Fatal("no relay for the two sides of a live call")
+	}
+	if relay(stranger, ICERequest{CallID: callID}) {
+		t.Fatal("relay for someone else's call")
+	}
+}
+
+func TestRelayCredentialsExpire(t *testing.T) {
+	h := newHarness(t)
+	h.svc.ice = ICESettings{TURNURLs: []string{"turn:t"}, TURNSecret: "secret"}
+	cfg := h.svc.ICEConfig(context.Background(), h.actor(h.alice), ICERequest{ChatID: h.chatID, PeerID: h.bob})
+	want := fmt.Sprintf("%d:%s", h.clock.Add(DefaultTURNTTL).Unix(), h.alice)
+	if len(cfg.IceServers) != 1 || cfg.IceServers[0].Username != want {
+		t.Fatalf("got %+v, want username %s", cfg.IceServers, want)
+	}
+	if DefaultTURNTTL > 2*time.Hour {
+		t.Fatalf("default relay lifetime %v", DefaultTURNTTL)
 	}
 }

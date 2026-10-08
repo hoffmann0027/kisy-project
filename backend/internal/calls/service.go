@@ -486,18 +486,32 @@ func (s *Service) auditCall(ctx context.Context, actorID, callID uuid.UUID, acti
 
 // --- REST ---
 
-// ICEConfig returns the WebRTC ICE servers for the actor: STUN plus, when a
-// TURN secret is configured, a TURN entry with short-lived HMAC credentials
-// (coturn static-auth-secret / TURN REST API). The secret never leaves here.
-func (s *Service) ICEConfig(actor Actor) IceConfig {
+// ICERequest names the call relay credentials are wanted for. A relay
+// carries anyone's traffic anywhere it is allowed to reach, so it is handed
+// out per call, never per login (audit A-28): to a caller about to ring a
+// partner in a shared chat, or to either side of a call the server knows.
+type ICERequest struct {
+	// CallID: a call in progress — the callee answering, or either side
+	// renewing credentials to recover the connection mid-call.
+	CallID uuid.UUID
+	// ChatID and PeerID: the caller, before the call exists.
+	ChatID uuid.UUID
+	PeerID uuid.UUID
+}
+
+// ICEConfig returns the WebRTC ICE servers for the actor: STUN always, plus a
+// TURN entry with short-lived HMAC credentials (coturn static-auth-secret /
+// TURN REST API) when a relay is configured and the request names a call the
+// actor may take part in. The secret never leaves here.
+func (s *Service) ICEConfig(ctx context.Context, actor Actor, req ICERequest) IceConfig {
 	cfg := IceConfig{IceServers: []IceServer{}}
 	if len(s.ice.STUNURLs) > 0 {
 		cfg.IceServers = append(cfg.IceServers, IceServer{URLs: s.ice.STUNURLs})
 	}
-	if s.ice.TURNSecret != "" && len(s.ice.TURNURLs) > 0 {
+	if s.ice.TURNSecret != "" && len(s.ice.TURNURLs) > 0 && s.mayRelay(ctx, actor, req) {
 		ttl := s.ice.TURNTTL
 		if ttl <= 0 {
-			ttl = 12 * time.Hour
+			ttl = DefaultTURNTTL
 		}
 		expiry := s.now().Add(ttl).Unix()
 		username := fmt.Sprintf("%d:%s", expiry, actor.UserID.String())
@@ -509,6 +523,29 @@ func (s *Service) ICEConfig(actor Actor) IceConfig {
 		})
 	}
 	return cfg
+}
+
+// mayRelay applies the same rules as ringing: a live call the actor is part
+// of, or a partner the actor could ring right now (both in the chat, no block
+// between them).
+func (s *Service) mayRelay(ctx context.Context, actor Actor, req ICERequest) bool {
+	if req.CallID != uuid.Nil {
+		st, found, err := s.store.Get(ctx, req.CallID)
+		return err == nil && found && st.involves(actor.UserID)
+	}
+	if req.ChatID == uuid.Nil || req.PeerID == uuid.Nil || req.PeerID == actor.UserID {
+		return false
+	}
+	if s.ensurePair(ctx, req.ChatID, actor.UserID, req.PeerID) != nil {
+		return false
+	}
+	if s.blocked != nil {
+		blocked, err := s.blocked(ctx, actor.UserID, req.PeerID)
+		if err != nil || blocked {
+			return false
+		}
+	}
+	return true
 }
 
 // History returns the actor's call journal, newest first, mapped to their

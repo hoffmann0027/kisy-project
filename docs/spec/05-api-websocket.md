@@ -111,7 +111,8 @@ invites are rate-limited per caller; unauthorized or malformed signaling yields
 a generic `error` frame (internal details are never leaked). Every call is
 written to `call_logs` and lifecycle transitions are audit-logged. STUN/TURN
 configuration is fetched over REST (`GET /calls/ice-config`); TURN credentials
-are short-lived and derived from the coturn shared secret server-side.
+are short-lived, derived from the coturn shared secret server-side, and issued
+only for a call (`?callId`, or `?chatId&peerId` before ringing).
 
 ## API Specification Block 1
 

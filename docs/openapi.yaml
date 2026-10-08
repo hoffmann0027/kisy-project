@@ -3312,14 +3312,23 @@ paths:
   /calls/ice-config:
     get:
       tags: [calls]
-      summary: WebRTC ICE servers for the caller (STUN + ephemeral TURN credentials)
+      summary: WebRTC ICE servers for one call (STUN + ephemeral TURN credentials)
       description: >
-        Returns an RTCConfiguration.iceServers array. TURN entries carry
-        short-lived credentials derived from the coturn shared secret
-        (username = "<expiry>:<userId>", credential = base64(HMAC-SHA1)); the
-        secret itself never leaves the server. Rate-limited.
+        Returns an RTCConfiguration.iceServers array. STUN is always included.
+        A TURN entry is added only for a call: `callId` of a live call the
+        caller takes part in, or `chatId` + `peerId` of a partner the caller
+        may ring right now (both in the chat, no block). Without either the
+        answer is STUN only. TURN credentials are derived from the coturn
+        shared secret (username = "<expiry>:<userId>", credential =
+        base64(HMAC-SHA1)), live TURN_TTL (default 2h); the secret never
+        leaves the server. Rate-limited.
+      parameters:
+        - { name: callId, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: chatId, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: peerId, in: query, required: false, schema: { type: string, format: uuid } }
       responses:
         '200': { description: ICE configuration, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { description: A parameter is not a UUID }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { description: Too many requests }
   /calls/history:
