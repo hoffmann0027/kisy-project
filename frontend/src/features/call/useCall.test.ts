@@ -76,6 +76,15 @@ class FakePeerConnection {
     FakePeerConnection.last = this;
   }
   getConfiguration = vi.fn(() => ({ iceServers: [] }));
+  sender = {
+    track: { kind: "audio" },
+    getParameters: vi.fn(() => ({ encodings: [{}] as RTCRtpEncodingParameters[] })),
+    setParameters: vi.fn(async (_p: { encodings: RTCRtpEncodingParameters[] }) => {}),
+  };
+  getSenders = vi.fn(() => [this.sender]);
+  /** What the network delivered so far, as getStats() reports it. */
+  stats: Array<Record<string, unknown>> = [];
+  getStats = vi.fn(async () => ({ forEach: (fn: (e: unknown) => void) => this.stats.forEach(fn) }));
   setConfiguration = vi.fn();
   /** The network moved the connection to a new state. */
   becomes(state: string) {
@@ -476,5 +485,44 @@ describe("a call that loses its connection", () => {
     FakePeerConnection.last!.becomes("failed");
     await waitFor(() => expect(result.current.view.endedReason).toBe("Сбой соединения"));
     expect(sent("call.renegotiate")).toHaveLength(0);
+  });
+});
+
+describe("call audio quality", () => {
+  const peer = { id: "user-2", displayName: "Пётр", avatarUrl: null };
+
+  async function connectedCall() {
+    const hook = renderHook(() => useCall());
+    await hook.result.current.startCall(peer, "chat-1");
+    const callId = (ws.send.mock.calls[0][0] as { data: { callId: string } }).data.callId;
+    serverSends({ event: "call.answered", data: { callId, sdp: "answer-sdp" } });
+    const pc = FakePeerConnection.last!;
+    await waitFor(() => expect(hook.result.current.view.phase).toBe("connecting"));
+    pc.becomes("connected");
+    await waitFor(() => expect(hook.result.current.view.phase).toBe("active"));
+    return { ...hook, pc };
+  }
+
+  it("asks for the microphone as a voice call wants it", async () => {
+    renderHook(() => useCall()).result.current.startCall(peer, "chat-1");
+    await waitFor(() => expect(mic).toHaveBeenCalled());
+    expect(mic).toHaveBeenCalledWith({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
+    });
+  });
+
+  it("marks its audio as voice for the network once connected", async () => {
+    const { pc } = await connectedCall();
+    await waitFor(() => expect(pc.sender.setParameters).toHaveBeenCalledTimes(1));
+    expect(pc.sender.setParameters.mock.calls[0][0].encodings[0]).toMatchObject({
+      priority: "high",
+      networkPriority: "high",
+    });
+  });
+
+  it("says when the network is what makes it sound bad", async () => {
+    const { result, pc } = await connectedCall();
+    pc.stats = [{ type: "inbound-rtp", id: "a", kind: "audio", packetsReceived: 80, packetsLost: 20, jitter: 0.01 }];
+    await waitFor(() => expect(result.current.view.quality).toBe("poor"), { timeout: 3_000 });
   });
 });

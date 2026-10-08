@@ -17,6 +17,7 @@ import {
 import type { CallIncomingData, ServerEvent } from "@shared/ws/events";
 import { callsApi } from "@shared/api/endpoints";
 import { ringtone } from "./ringtone";
+import { rateQuality, readSample, type CallQuality, type QualitySample } from "./quality";
 
 export interface CallPeer {
   id: string;
@@ -44,6 +45,8 @@ export interface CallView {
   audioRoute: AudioRoute | null;
   /** The connection dropped mid-call and the two sides are finding a new path. */
   reconnecting: boolean;
+  /** How the network carries the call right now; null until media flows. */
+  quality: CallQuality | null;
 }
 
 const idleView: CallView = {
@@ -58,7 +61,41 @@ const idleView: CallView = {
   speaker: false,
   audioRoute: null,
   reconnecting: false,
+  quality: null,
 };
+
+const QUALITY_SAMPLE_MS = 2_000;
+
+// The microphone as a voice call wants it. Browsers mostly default to these,
+// but not everywhere and not always on Android WebViews; mono halves what a
+// stereo device would otherwise encode for a voice that is mono anyway.
+export const VOICE_CONSTRAINTS: MediaTrackConstraints = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+  channelCount: 1,
+};
+
+// Marks the call's audio as voice for the network (DSCP): Wi-Fi access points
+// and many routers queue it ahead of bulk traffic, which is most of what a
+// busy home network does to a call. Best effort: a browser that cannot set it
+// keeps the default.
+async function prioritizeVoice(pc: RTCPeerConnection) {
+  for (const sender of pc.getSenders()) {
+    if (sender.track?.kind !== "audio") continue;
+    try {
+      const params = sender.getParameters();
+      if (!params.encodings?.length) continue;
+      for (const enc of params.encodings) {
+        enc.priority = "high";
+        enc.networkPriority = "high";
+      }
+      await sender.setParameters(params);
+    } catch (err) {
+      callLog("voice priority not applied", err);
+    }
+  }
+}
 
 // Recovering a dropped call (a switch from Wi-Fi to mobile data, a lapsed
 // relay). "disconnected" often heals by itself within a second or two, so the
@@ -276,6 +313,7 @@ export function useCall() {
       const s = session.current;
       if (st === "connected") {
         if (s?.pc === pc) {
+          if (!s.established) void prioritizeVoice(pc);
           s.established = true;
           if (s.recovery) {
             callLog("connection recovered", callId);
@@ -316,7 +354,7 @@ export function useCall() {
   // getMic acquires the microphone, mapping denial to a friendly message.
   const getMic = useCallback(async (): Promise<MediaStream> => {
     try {
-      return await navigator.mediaDevices.getUserMedia({ audio: true });
+      return await navigator.mediaDevices.getUserMedia({ audio: VOICE_CONSTRAINTS });
     } catch (err) {
       const name = (err as DOMException)?.name;
       if (name === "NotAllowedError" || name === "SecurityError") {
@@ -627,6 +665,32 @@ export function useCall() {
       window.removeEventListener("focus", onVisible);
     };
   }, [accept, applyNativeDecision, resumePending]);
+
+  // Sample the connection while the call is up. A recovering call is not
+  // sampled: its banner already says what is wrong.
+  const sampling = view.phase === "active" && !view.reconnecting;
+  useEffect(() => {
+    if (!sampling) {
+      setView((v) => (v.quality === null ? v : { ...v, quality: null }));
+      return;
+    }
+    let prev: QualitySample | null = null;
+    const id = setInterval(() => {
+      const pc = session.current?.pc;
+      if (!pc) return;
+      void pc
+        .getStats()
+        .then((report) => {
+          const cur = readSample(report);
+          if (!cur) return;
+          const quality = rateQuality(prev, cur);
+          prev = cur;
+          setView((v) => (v.phase !== "active" || v.quality === quality ? v : { ...v, quality }));
+        })
+        .catch(() => {});
+    }, QUALITY_SAMPLE_MS);
+    return () => clearInterval(id);
+  }, [sampling]);
 
   useEffect(() => {
     const unsub = wsClient.subscribe((e: ServerEvent) => {

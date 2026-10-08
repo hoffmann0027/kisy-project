@@ -68,6 +68,29 @@
   color: var(--color-warning, #e0a000);
 }
 
+/* Signal bars beside the timer: how the network carries the call. */
+.call-quality {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+  margin-left: 8px;
+  vertical-align: baseline;
+}
+.call-quality__bar {
+  width: 3px;
+  border-radius: 1px;
+  background: var(--color-text-tertiary);
+  opacity: 0.35;
+}
+.call-quality__bar:nth-child(1) { height: 4px; }
+.call-quality__bar:nth-child(2) { height: 8px; }
+.call-quality__bar:nth-child(3) { height: 12px; }
+.call-quality__bar--lit { opacity: 1; }
+.call-quality--good .call-quality__bar--lit { background: var(--color-success); }
+.call-quality--fair .call-quality__bar--lit { background: var(--color-warning); }
+.call-quality--poor .call-quality__bar--lit { background: var(--color-danger); }
+
 .call-actions {
   display: flex;
   gap: 20px;

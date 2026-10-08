@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Avatar } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import type { CallView } from "./useCall";
+import type { CallQuality } from "./quality";
 import { SpeakerControl } from "./SpeakerControl";
 
 function formatDuration(seconds: number): string {
@@ -15,6 +16,8 @@ function connLabel(view: CallView): { text: string; warn: boolean } {
   if (view.reconnecting) return { text: "Восстановление связи…", warn: true };
   switch (view.conn) {
     case "connected":
+      if (view.quality === "poor") return { text: "Плохая связь", warn: true };
+      if (view.quality === "fair") return { text: "Связь нестабильна", warn: false };
       return { text: "", warn: false };
     case "disconnected":
       return { text: "Восстановление связи…", warn: true };
@@ -23,6 +26,23 @@ function connLabel(view: CallView): { text: string; warn: boolean } {
     default:
       return { text: "Соединение…", warn: false };
   }
+}
+
+const QUALITY_LABEL: Record<CallQuality, string> = {
+  good: "Хорошая связь",
+  fair: "Связь нестабильна",
+  poor: "Плохая связь",
+};
+
+function QualityBars({ quality }: { quality: CallQuality }) {
+  const lit = quality === "good" ? 3 : quality === "fair" ? 2 : 1;
+  return (
+    <span className={`call-quality call-quality--${quality}`} role="img" aria-label={QUALITY_LABEL[quality]}>
+      {[1, 2, 3].map((n) => (
+        <span key={n} className={"call-quality__bar" + (n <= lit ? " call-quality__bar--lit" : "")} />
+      ))}
+    </span>
+  );
 }
 
 export function OngoingCall({
@@ -60,7 +80,10 @@ export function OngoingCall({
         </div>
         <div className="call-card__name">{view.peer?.displayName}</div>
         {view.phase === "active" ? (
-          <div className="call-card__timer">{formatDuration(elapsed)}</div>
+          <div className="call-card__timer">
+            {formatDuration(elapsed)}
+            {view.quality && !view.reconnecting && <QualityBars quality={view.quality} />}
+          </div>
         ) : (
           <div className="call-card__status">Соединение…</div>
         )}
