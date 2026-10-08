@@ -1,9 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { Button, Logo, Modal } from "@shared/ui";
 import { t } from "@shared/i18n";
-import { LegalSections } from "./LegalPage";
-import { LAST_UPDATED, PRIVACY_SECTIONS } from "./privacyContent";
-import { RULES_LAST_UPDATED, RULES_SECTIONS } from "./rulesContent";
+import { LegalSections, TranslationNote } from "./LegalPage";
+import { formatLegalDate, useLegalDocs } from "./legalContent";
 import "./legal.css";
 
 // The screen nobody gets past without accepting the privacy policy and the
@@ -47,6 +46,11 @@ export function ConsentScreen({ onAccept, reason = "first-run", busy = false }: 
   const [privacy, setPrivacy] = useState(false);
   const [rules, setRules] = useState(false);
   const [reading, setReading] = useState<Doc>(null);
+  const [original, setOriginal] = useState(false);
+  const view = useLegalDocs(original);
+  const docs = view.docs;
+  const note =
+    view.translated || original ? <TranslationNote original={original} onToggle={() => setOriginal((v) => !v)} /> : null;
 
   const both = privacy && rules;
 
@@ -102,20 +106,22 @@ export function ConsentScreen({ onAccept, reason = "first-run", busy = false }: 
 
       <Modal
         open={reading === "privacy"}
-        title={`${t("account.legal.privacyTitle")} · ${LAST_UPDATED}`}
+        title={`${t("account.legal.privacyTitle")} · ${formatLegalDate(docs.privacyUpdated)}`}
         onClose={() => setReading(null)}
       >
         <div className="consent__doc">
-          <LegalSections sections={PRIVACY_SECTIONS} />
+          {note}
+          <LegalSections sections={docs.privacy} />
         </div>
       </Modal>
       <Modal
         open={reading === "rules"}
-        title={`${t("account.legal.rulesTitle")} · ${RULES_LAST_UPDATED}`}
+        title={`${t("account.legal.rulesTitle")} · ${formatLegalDate(docs.rulesUpdated)}`}
         onClose={() => setReading(null)}
       >
         <div className="consent__doc">
-          <LegalSections sections={RULES_SECTIONS} />
+          {note}
+          <LegalSections sections={docs.rules} />
         </div>
       </Modal>
     </div>

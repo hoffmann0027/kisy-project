@@ -2,6 +2,9 @@ import type { Translation } from "../../types";
 import type { account as source } from "../ru/account";
 
 export const account: Translation<typeof source> = {
+  "account.legal.translationNote": "This is a translation provided for convenience. The Russian version is the legally binding one.",
+  "account.legal.showOriginal": "Show the original in Russian",
+  "account.legal.showTranslation": "Show the translation",
   "account.language": "Language",
 
   "account.fields.username": "Username",

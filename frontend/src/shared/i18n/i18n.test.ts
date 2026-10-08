@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { applyDictionary, loadDictionary, t } from "./i18n";
 import { detectLang, LANGS } from "./langs";
 import { ru, type Key } from "./locales/ru";
-import type { Msg } from "./types";
+import type { Dict, Msg, PluralMsg } from "./types";
 
 afterEach(() => applyDictionary("ru", ru));
 
@@ -47,19 +47,48 @@ describe("t", () => {
   });
 });
 
+// Every dictionary on disk, registered in LANGS or not yet: a translator can
+// check their work before the language is switched on.
+const onDisk = import.meta.glob<{ messages: Dict }>("./locales/*/index.ts", { eager: true });
+const dictionaries = Object.entries(onDisk)
+  .map(([path, mod]) => [path.split("/")[2], mod.messages] as const)
+  .filter(([lang]) => lang !== "ru");
+
 // A translator who drops "{count}" leaves a sentence with no number in it; one
-// who writes a plain string where Russian counts loses the plural forms.
+// who writes a plain string where Russian counts loses the plural forms; one
+// who gives Polish only "one" and "other" gets "5 wiadomość".
 const placeholders = (m: Msg) =>
   [...new Set((typeof m === "string" ? m : Object.values(m).join(" ")).match(/\{\w+\}/g) ?? [])].sort();
 
-describe.each(LANGS.filter((l) => l !== "ru"))("the %s dictionary", (lang) => {
-  it("has every Russian key, with the same placeholders and plurals", async () => {
-    const dict = await loadDictionary(lang);
+describe.each(dictionaries)("the %s dictionary", (lang, dict) => {
+  it("has every Russian key, with the same placeholders and plurals", () => {
     for (const [key, source] of Object.entries(ru)) {
       const msg = dict[key];
       expect(msg, key).toBeDefined();
       expect(placeholders(msg), key).toEqual(placeholders(source));
       expect(typeof msg, key).toBe(typeof source);
     }
+  });
+
+  it("is a language the app knows how to load once registered", () => {
+    expect(["ru", "en", "de", "es", "fr", "nl", "pl", "cs", "uk", "tr"]).toContain(lang);
+  });
+});
+
+describe.each([["ru", ru as Dict] as const, ...dictionaries])("countable phrases in %s", (lang, dict) => {
+  it("have each form the language needs", () => {
+    const needed = new Intl.PluralRules(lang).resolvedOptions().pluralCategories;
+    for (const [key, msg] of Object.entries(dict)) {
+      if (typeof msg === "string") continue;
+      for (const category of needed) {
+        expect((msg as PluralMsg)[category as keyof PluralMsg], `${key}.${category}`).toBeTypeOf("string");
+      }
+    }
+  });
+});
+
+describe.each(LANGS.filter((l) => l !== "ru"))("the registered %s dictionary", (lang) => {
+  it("loads", async () => {
+    expect(Object.keys(await loadDictionary(lang)).length).toBe(Object.keys(ru).length);
   });
 });

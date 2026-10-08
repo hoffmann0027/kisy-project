@@ -2,6 +2,9 @@
 import type { Dict } from "../../types";
 
 export const account = {
+  "account.legal.translationNote": "Это перевод для удобства. Юридическую силу имеет русская версия.",
+  "account.legal.showOriginal": "Показать оригинал на русском",
+  "account.legal.showTranslation": "Показать перевод",
   "account.language": "Язык",
 
   // Fields shared by the sign-in and sign-up forms.

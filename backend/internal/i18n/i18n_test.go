@@ -76,6 +76,19 @@ func TestAMessageIsWordedForWhoeverReadsIt(t *testing.T) {
 	}
 }
 
+// pluralForms are the categories pluralCategory can return for l.
+func pluralForms(l Lang) []string {
+	seen := map[string]bool{}
+	var out []string
+	for n := 0; n < 200; n++ {
+		if c := pluralCategory(l, n); !seen[c] {
+			seen[c] = true
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 var verbs = regexp.MustCompile(`%[-+# 0]*\d*(?:\.\d+)?[a-zA-Z%]`)
 
 func baseKey(k string) string {
@@ -89,9 +102,16 @@ func baseKey(k string) string {
 // same order — a dropped %d prints "%!d(MISSING)" on someone's screen.
 func TestEveryCatalogHasEveryMessage(t *testing.T) {
 	for _, l := range Supported {
-		cat, ok := catalogs[l]
-		if !ok {
-			t.Fatalf("%s: no catalog", l)
+		if _, ok := catalogs[l]; !ok {
+			t.Errorf("%s is supported but has no catalog", l)
+		}
+	}
+	// Every catalog, switched on in Supported or not yet.
+	for l, cat := range catalogs {
+		for _, form := range pluralForms(l) {
+			if _, ok := cat["quarantine.inHours#"+form]; !ok {
+				t.Errorf("%s: quarantine.inHours#%s missing — the language needs that form", l, form)
+			}
 		}
 		for key, source := range ru {
 			if strings.Contains(key, "#") {

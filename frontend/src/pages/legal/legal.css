@@ -139,3 +139,14 @@
     font-size: 15px;
   }
 }
+
+/* Over a translated document: it is a translation, the original binds. */
+.legal-note {
+  margin: 0 0 var(--space-4);
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--acc-soft);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+}

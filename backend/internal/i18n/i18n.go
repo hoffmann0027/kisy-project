@@ -30,6 +30,8 @@ var Supported = []Lang{"ru", "en"}
 // entry per plural category: "key#one", "key#few", "key#many", "key#other".
 type Catalog map[string]string
 
+// catalogs holds every language with a catalog. A translation registers
+// itself from its own file (func init), so translators never touch this one.
 var catalogs = map[Lang]Catalog{
 	"ru": ru,
 	"en": en,

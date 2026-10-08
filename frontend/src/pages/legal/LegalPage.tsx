@@ -1,8 +1,8 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Logo } from "@shared/ui";
 import { t } from "@shared/i18n";
-import { DELETION_STEPS, LAST_UPDATED, PRIVACY_SECTIONS, type LegalSection } from "./privacyContent";
-import { RULES_LAST_UPDATED, RULES_SECTIONS } from "./rulesContent";
+import { formatLegalDate, useLegalDocs, type LegalDocs, type LegalSection } from "./legalContent";
 import "./legal.css";
 
 // The pages Google Play asks for by URL — the privacy policy, and a page that
@@ -41,7 +41,44 @@ function Section({ section }: { section: LegalSection }) {
   );
 }
 
-function LegalShell({ title, subtitle, sections }: { title: string; subtitle: string; sections: LegalSection[] }) {
+/**
+ * Over a translated document: it is a translation, the Russian text is the one
+ * that binds, and here is that text.
+ */
+export function TranslationNote({ original, onToggle }: { original: boolean; onToggle: () => void }) {
+  return (
+    <p className="legal-note">
+      {!original && t("account.legal.translationNote")}{" "}
+      <button type="button" className="consent__link" onClick={onToggle}>
+        {original ? t("account.legal.showTranslation") : t("account.legal.showOriginal")}
+      </button>
+    </p>
+  );
+}
+
+/** A document in the language on screen, with a way to the binding original. */
+function useDocument(): { docs: LegalDocs; note: React.ReactNode } {
+  const [original, setOriginal] = useState(false);
+  const view = useLegalDocs(original);
+  // The note stays while the original is shown, so the way back does too.
+  const offersTranslation = view.translated || original;
+  return {
+    docs: view.docs,
+    note: offersTranslation ? <TranslationNote original={original} onToggle={() => setOriginal((v) => !v)} /> : null,
+  };
+}
+
+function LegalShell({
+  title,
+  subtitle,
+  note,
+  sections,
+}: {
+  title: string;
+  subtitle: string;
+  note: React.ReactNode;
+  sections: LegalSection[];
+}) {
   return (
     <div className="legal-screen">
       <article className="legal-card glass-surface">
@@ -50,6 +87,7 @@ function LegalShell({ title, subtitle, sections }: { title: string; subtitle: st
           <h1 className="legal-title">{title}</h1>
           <p className="legal-subtitle">{subtitle}</p>
         </header>
+        {note}
         <LegalSections sections={sections} />
         <footer className="legal-foot">
           <Link to="/login" className="auth-link">
@@ -62,31 +100,37 @@ function LegalShell({ title, subtitle, sections }: { title: string; subtitle: st
 }
 
 export function PrivacyPage() {
+  const { docs, note } = useDocument();
   return (
     <LegalShell
       title={t("account.legal.privacyTitle")}
-      subtitle={t("account.legal.updated", { date: LAST_UPDATED })}
-      sections={PRIVACY_SECTIONS}
+      subtitle={t("account.legal.updated", { date: formatLegalDate(docs.privacyUpdated) })}
+      note={note}
+      sections={docs.privacy}
     />
   );
 }
 
 export function RulesPage() {
+  const { docs, note } = useDocument();
   return (
     <LegalShell
       title={t("account.legal.rulesTitle")}
-      subtitle={t("account.legal.updated", { date: RULES_LAST_UPDATED })}
-      sections={RULES_SECTIONS}
+      subtitle={t("account.legal.updated", { date: formatLegalDate(docs.rulesUpdated) })}
+      note={note}
+      sections={docs.rules}
     />
   );
 }
 
 export function AccountDeletionPage() {
+  const { docs, note } = useDocument();
   return (
     <LegalShell
       title={t("account.legal.deletionTitle")}
       subtitle={t("account.legal.deletionSubtitle")}
-      sections={DELETION_STEPS}
+      note={note}
+      sections={docs.deletion}
     />
   );
 }
