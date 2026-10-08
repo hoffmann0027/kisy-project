@@ -24,12 +24,15 @@ const (
 	EventReactionAdded   = "reaction.added"
 	EventReactionRemoved = "reaction.removed"
 	EventNotification    = "notification.created"
-	EventBoardChanged    = "board.changed"
-	EventCalendarChanged = "calendar.changed"
-	EventGroupChanged    = "group.changed"
-	EventRatingChanged   = "rating.changed"
-	EventPollChanged     = "poll.changed"
-	EventPostCreated     = "post.created"
+	// EventNotificationRevoked: an announcement was taken back and has left the
+	// recipient's notifications (internal/announcements).
+	EventNotificationRevoked = "notification.revoked"
+	EventBoardChanged        = "board.changed"
+	EventCalendarChanged     = "calendar.changed"
+	EventGroupChanged        = "group.changed"
+	EventRatingChanged       = "rating.changed"
+	EventPollChanged         = "poll.changed"
+	EventPostCreated         = "post.created"
 
 	// Voice-call signaling (server→client). Client→server call frames are
 	// prefix-routed ("call.*") to the calls package, which owns their names.

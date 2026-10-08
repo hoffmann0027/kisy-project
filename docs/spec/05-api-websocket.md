@@ -77,7 +77,7 @@ presence.subscribe, read.confirmation.\
 \
 Server-\>Client:\
 message.created, message.deleted, message.read, typing.started,\
-typing.stopped, user.online, user.offline, notification.created,\
+typing.stopped, user.online, user.offline, notification.created, notification.revoked,\
 group.updated, role.changed, invite.used, audit.alert.
 
 ## Voice Call Signaling (1:1 audio)

@@ -13,6 +13,7 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 
 	"kisy-backend/internal/admin"
+	"kisy-backend/internal/announcements"
 	"kisy-backend/internal/attachments"
 	"kisy-backend/internal/audit"
 	"kisy-backend/internal/auth"
@@ -86,6 +87,7 @@ type modules struct {
 	searchHandler        *search.Handler
 	pushHandler          *push.Handler
 	notificationsHandler *notifications.Handler
+	announcementsHandler *announcements.Handler
 	notifprefsHandler    *notifprefs.Handler
 	boardsHandler        *boards.Handler
 	calendarHandler      *calendar.Handler
@@ -999,6 +1001,19 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	})
 	blocksHandler.SetProfileLoader(usersProfile)
 
+	// Announcements: levels 1-3 notify everyone below them, a level or a person.
+	announcementsSvc := announcements.NewService(pool, auditRec)
+	announcementsSvc.SetPublisher(wsPublisher)
+	announcementsSvc.SetPusher(pushSvc)
+	announcementsHandler := announcements.NewHandler(announcementsSvc, func(r *http.Request) (announcements.ActorMeta, bool) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			return announcements.ActorMeta{}, false
+		}
+		m := authHandler.ClientMeta(r)
+		return announcements.ActorMeta{UserID: claims.UserID, SessionID: claims.SessionID, IPHash: m.IPHash, RequestID: m.RequestID}, true
+	})
+
 	// Reporting content and people; the queue lives under /admin.
 	reportsSvc := reports.NewService(pool, auditRec)
 	wireReports(reportsSvc, pool)
@@ -1056,6 +1071,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		searchHandler:        searchHandler,
 		pushHandler:          pushHandler,
 		notificationsHandler: notificationsHandler,
+		announcementsHandler: announcementsHandler,
 		notifprefsHandler:    notifprefsHandler,
 		boardsHandler:        boardsHandler,
 		calendarHandler:      calendarHandler,

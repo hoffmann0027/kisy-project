@@ -342,6 +342,14 @@ func newRouter(d routerDeps) http.Handler {
 				m.pushHandler.Routes(r)
 			})
 
+			r.Route("/announcements", func(r chi.Router) {
+				// Who may send is the service's call (levels 1-3, live from
+				// the database); the daily quota is per author. This only
+				// keeps one client from hammering the endpoint.
+				r.Use(m.limiter.Limit("announcements", 30, time.Minute))
+				m.announcementsHandler.Routes(r)
+			})
+
 			// Reporting: open to any signed-in account (the queue is CEO-only,
 			// mounted with /admin below).
 			m.reportsHandler.Routes(r)

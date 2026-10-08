@@ -402,6 +402,23 @@ unless muted. Message content stays out of push payloads (content-less, as
 before); the preview flag is reserved for a future opt-in text preview.
 Tables: chat_mutes, notification_settings (migration 000032).
 
+## Announcements (October 2026)
+
+Notifications written by people. `POST /announcements {audience, levels?,
+userId?, title, body}` — audience all | basic | levels | user; title ≤ 100,
+body ≤ 1000 characters. Only levels 1–3, read live from the database. Only
+downwards and sideways: an author at level L reaches levels L..10 and basic
+accounts (the CEO reaches everyone); inactive accounts, the author and any
+pair with a block are skipped. Delivered as a notifications row of type
+`announcement` (payload: announcementId, title, body, author {id,
+displayName, roleLevel}), `notification.created` and a push. Levels 2–3: 10
+broadcasts and 50 personal announcements per 24 h (429 QUOTA_EXCEEDED); the
+CEO is unlimited. `GET /announcements` — sent history (the CEO sees all).
+`DELETE /announcements/{id}` — the author or the CEO revokes: rows are
+removed, open clients get `notification.revoked`. Audited as
+announcement.sent / announcement.revoked. Table: announcements (migration
+000059).
+
 ## Chat Folders & Archive (UPD3 stage H)
 
 Personal organizational metadata over chat references — never grants,

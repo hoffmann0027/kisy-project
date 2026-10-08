@@ -51,6 +51,12 @@ func (p *Publisher) PublishNotification(userID uuid.UUID, data any) {
 	p.hub.publishToUsers([]uuid.UUID{userID}, encode(EventNotification, data))
 }
 
+// PublishNotificationRevoked tells one user's clients that a notification
+// they hold was taken back; satisfies announcements.Publisher.
+func (p *Publisher) PublishNotificationRevoked(userID uuid.UUID, data any) {
+	p.hub.publishToUsers([]uuid.UUID{userID}, encode(EventNotificationRevoked, data))
+}
+
 // PublishUserUpdated pushes a user's refreshed public profile to an audience
 // (their chat partners and group co-members) so cached names/avatars update
 // live; satisfies the users.ProfileBroadcaster port structurally.
