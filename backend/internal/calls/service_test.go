@@ -85,6 +85,9 @@ type fakePublisher struct{ events []pubEvent }
 func (p *fakePublisher) Incoming(to, callID, _ uuid.UUID, _ string, _ *string, _ uuid.UUID, _ string) {
 	p.events = append(p.events, pubEvent{"incoming", to, callID})
 }
+func (p *fakePublisher) Renegotiate(to, callID uuid.UUID, kind, _ string) {
+	p.events = append(p.events, pubEvent{"renegotiate-" + kind, to, callID})
+}
 func (p *fakePublisher) Answered(to, callID uuid.UUID, _ string) {
 	p.events = append(p.events, pubEvent{"answered", to, callID})
 }
@@ -780,5 +783,56 @@ func TestRelayCredentialsExpire(t *testing.T) {
 	}
 	if DefaultTURNTTL > 2*time.Hour {
 		t.Fatalf("default relay lifetime %v", DefaultTURNTTL)
+	}
+}
+
+// A call that lost its path (Wi-Fi to mobile data, a lapsed relay) restarts
+// ICE instead of ending: the caller offers, the callee answers, over the same
+// server that already authorized the call.
+func TestRenegotiateRestartsAnAnsweredCall(t *testing.T) {
+	h := newHarness(t)
+	callID := uuid.New()
+	if err := h.invite(t, h.alice, h.bob, callID); err != nil {
+		t.Fatal(err)
+	}
+	offer := renegotiatePayload{CallID: callID, Kind: RenegotiateOffer, SDP: "restart-offer"}
+	answer := renegotiatePayload{CallID: callID, Kind: RenegotiateAnswer, SDP: "restart-answer"}
+
+	// Still ringing: there is no connection to restart.
+	if err := h.signal(t, h.alice, SignalRenegotiate, offer); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("restart before answer: got %v, want ErrForbidden", err)
+	}
+	if err := h.signal(t, h.bob, SignalAnswer, answerPayload{CallID: callID, SDP: "answer"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.signal(t, h.alice, SignalRenegotiate, offer); err != nil {
+		t.Fatalf("caller offer: %v", err)
+	}
+	if !h.pub.has("renegotiate-offer", h.bob) {
+		t.Fatal("offer not relayed to the callee")
+	}
+	if err := h.signal(t, h.bob, SignalRenegotiate, answer); err != nil {
+		t.Fatalf("callee answer: %v", err)
+	}
+	if !h.pub.has("renegotiate-answer", h.alice) {
+		t.Fatal("answer not relayed to the caller")
+	}
+
+	// Roles are fixed, so the two never offer into each other.
+	if err := h.signal(t, h.bob, SignalRenegotiate, renegotiatePayload{CallID: callID, Kind: RenegotiateOffer, SDP: "x"}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("callee offer: got %v, want ErrForbidden", err)
+	}
+	if err := h.signal(t, h.alice, SignalRenegotiate, renegotiatePayload{CallID: callID, Kind: RenegotiateAnswer, SDP: "x"}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("caller answer: got %v, want ErrForbidden", err)
+	}
+	if err := h.signal(t, uuid.New(), SignalRenegotiate, offer); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("outsider: got %v, want ErrForbidden", err)
+	}
+	if err := h.signal(t, h.alice, SignalRenegotiate, renegotiatePayload{CallID: callID, Kind: "rollback", SDP: "x"}); !errors.Is(err, ErrValidation) {
+		t.Fatalf("unknown kind: got %v, want ErrValidation", err)
+	}
+	if n := h.pub.count("renegotiate-offer") + h.pub.count("renegotiate-answer"); n != 2 {
+		t.Fatalf("%d renegotiation frames relayed, want 2", n)
 	}
 }

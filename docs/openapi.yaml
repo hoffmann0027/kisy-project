@@ -2932,10 +2932,12 @@ paths:
         server only relays these frames after authorizing that sender and target
         share the direct chat). Client→Server `type`: call.invite
         { callId, toUserId, chatId, sdp }, call.answer { callId, sdp }, call.ice
-        { callId, candidate }, call.reject/call.cancel/call.hangup { callId }.
+        { callId, candidate }, call.reject/call.cancel/call.hangup { callId },
+        call.renegotiate { callId, kind: offer|answer, sdp } (ICE restart on an
+        answered call: the caller offers, the callee answers).
         Server→Client `event`: call.incoming { callId, from{id,displayName,avatarUrl},
         chatId, sdp }, call.answered { callId, sdp }, call.ice { callId, fromUserId,
-        candidate }, call.rejected/call.canceled/call.busy/call.timeout { callId },
+        candidate }, call.renegotiate { callId, kind, sdp }, call.rejected/call.canceled/call.busy/call.timeout { callId },
         call.ended { callId, reason }.
       parameters:
         - { name: access_token, in: query, required: false, schema: { type: string } }

@@ -93,6 +93,8 @@ func (s *Service) HandleSignal(ctx context.Context, actor Actor, msgType string,
 		return s.onAnswer(ctx, actor, data)
 	case SignalICE:
 		return s.onICE(ctx, actor, data)
+	case SignalRenegotiate:
+		return s.onRenegotiate(ctx, actor, data)
 	case SignalReject, SignalCancel, SignalHangup:
 		return s.onTerminate(ctx, actor, data, msgType)
 	default:
@@ -254,6 +256,41 @@ func (s *Service) onICE(ctx context.Context, actor Actor, data json.RawMessage) 
 		return ErrForbidden
 	}
 	s.pub.ICE(st.other(actor.UserID), p.CallID, actor.UserID, p.Candidate)
+	return nil
+}
+
+// onRenegotiate relays an ICE restart on an answered call: the offer from
+// the caller, the answer from the callee — the same roles as the call's first
+// exchange, so the two can never offer into each other.
+func (s *Service) onRenegotiate(ctx context.Context, actor Actor, data json.RawMessage) error {
+	var p renegotiatePayload
+	if err := json.Unmarshal(data, &p); err != nil || p.CallID == uuid.Nil || p.SDP == "" {
+		return ErrValidation
+	}
+	st, ok, err := s.store.Get(ctx, p.CallID)
+	if err != nil {
+		return ErrValidation
+	}
+	if !ok {
+		return nil // the call ended meanwhile
+	}
+	if !st.involves(actor.UserID) {
+		return ErrForbidden
+	}
+	var mayDoThis bool
+	switch p.Kind {
+	case RenegotiateOffer:
+		mayDoThis = actor.UserID == st.Caller
+	case RenegotiateAnswer:
+		mayDoThis = actor.UserID == st.Callee
+	default:
+		return ErrValidation
+	}
+	// Nothing to restart before the call is answered.
+	if !mayDoThis || st.Phase != phaseConnected {
+		return ErrForbidden
+	}
+	s.pub.Renegotiate(st.other(actor.UserID), p.CallID, p.Kind, p.SDP)
 	return nil
 }
 

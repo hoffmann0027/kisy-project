@@ -42,6 +42,8 @@ export interface CallView {
    * native layer answers, and always null in a browser, which cannot route.
    */
   audioRoute: AudioRoute | null;
+  /** The connection dropped mid-call and the two sides are finding a new path. */
+  reconnecting: boolean;
 }
 
 const idleView: CallView = {
@@ -55,7 +57,16 @@ const idleView: CallView = {
   startedAt: null,
   speaker: false,
   audioRoute: null,
+  reconnecting: false,
 };
+
+// Recovering a dropped call (a switch from Wi-Fi to mobile data, a lapsed
+// relay). "disconnected" often heals by itself within a second or two, so the
+// restart waits that long; "failed" never does. The caller re-offers until the
+// path is back, and both sides give up after RECOVERY_GIVE_UP_MS.
+const RECOVERY_GRACE_MS = 2_000;
+const RECOVERY_RETRY_MS = 8_000;
+const RECOVERY_GIVE_UP_MS = 30_000;
 
 interface Session {
   callId: string;
@@ -67,6 +78,22 @@ interface Session {
   remoteSet: boolean;
   pendingIce: RTCIceCandidateInit[];
   offerSdp?: string; // callee: remote offer held until the call is accepted
+  /** The media path has been up at least once: only then is a drop recovered. */
+  established?: boolean;
+  recovery?: {
+    start: ReturnType<typeof setTimeout>;
+    giveUp?: ReturnType<typeof setTimeout>;
+    retry?: ReturnType<typeof setInterval>;
+  };
+}
+
+function stopRecovery(s: Session) {
+  const r = s.recovery;
+  if (!r) return;
+  clearTimeout(r.start);
+  if (r.giveUp) clearTimeout(r.giveUp);
+  if (r.retry) clearInterval(r.retry);
+  s.recovery = undefined;
 }
 
 // useCall encapsulates the whole 1:1 audio call lifecycle: a single active
@@ -115,6 +142,7 @@ export function useCall() {
     // here has to silence it too.
     void stopNativeRinging();
     const s = session.current;
+    if (s) stopRecovery(s);
     if (s?.pc) {
       s.pc.onicecandidate = null;
       s.pc.ontrack = null;
@@ -156,6 +184,81 @@ export function useCall() {
     s.pendingIce = [];
   }, []);
 
+  // restartIce: the caller's half of recovering a dropped call. Fresh relay
+  // credentials (the old ones may be what lapsed), then an ICE-restart offer.
+  // Candidates that arrive before the answer belong to the new exchange and
+  // wait for it, as on the call's first one.
+  const restartIce = useCallback(
+    async (s: Session) => {
+      const pc = s.pc;
+      if (!pc) return;
+      try {
+        const { iceServers } = await fetchIce({ callId: s.callId });
+        if (session.current !== s) return;
+        if (iceServers?.length) pc.setConfiguration({ ...pc.getConfiguration(), iceServers });
+        // A previous restart offer that was never answered.
+        if (pc.signalingState === "have-local-offer") await pc.setLocalDescription({ type: "rollback" });
+        const offer = await pc.createOffer({ iceRestart: true });
+        s.remoteSet = false;
+        await pc.setLocalDescription(offer);
+        callLog("restarting ICE", s.callId);
+        wsClient.send({ type: "call.renegotiate", data: { callId: s.callId, kind: "offer", sdp: offer.sdp ?? "" } });
+      } catch (err) {
+        callLog("ICE restart failed", err);
+      }
+    },
+    [fetchIce],
+  );
+
+  // answerRestart: the callee's half, answering the caller's restart offer.
+  const answerRestart = useCallback(
+    async (s: Session, sdp: string) => {
+      const pc = s.pc;
+      if (!pc) return;
+      s.remoteSet = false; // the offer's candidates wait for the offer
+      try {
+        const { iceServers } = await fetchIce({ callId: s.callId });
+        if (session.current !== s) return;
+        if (iceServers?.length) pc.setConfiguration({ ...pc.getConfiguration(), iceServers });
+        await pc.setRemoteDescription({ type: "offer", sdp });
+        s.remoteSet = true;
+        flushIce(s);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        wsClient.send({ type: "call.renegotiate", data: { callId: s.callId, kind: "answer", sdp: answer.sdp ?? "" } });
+      } catch (err) {
+        callLog("answering an ICE restart failed", err);
+      }
+    },
+    [fetchIce, flushIce],
+  );
+
+  const beginRecovery = useCallback(
+    (s: Session, immediately: boolean) => {
+      if (s.recovery) return;
+      const start = setTimeout(
+        () => {
+          const recovery = s.recovery;
+          if (session.current !== s || !recovery) return;
+          setView((v) => (v.phase === "idle" || v.phase === "ended" ? v : { ...v, reconnecting: true }));
+          recovery.giveUp = setTimeout(() => {
+            if (session.current !== s) return;
+            wsClient.send({ type: "call.hangup", data: { callId: s.callId } });
+            finishWith("Связь потеряна", true);
+          }, RECOVERY_GIVE_UP_MS);
+          // Only the caller offers, so the two never offer into each other.
+          if (s.role === "caller") {
+            void restartIce(s);
+            recovery.retry = setInterval(() => void restartIce(s), RECOVERY_RETRY_MS);
+          }
+        },
+        immediately ? 0 : RECOVERY_GRACE_MS,
+      );
+      s.recovery = { start };
+    },
+    [finishWith, restartIce],
+  );
+
   const makePc = useCallback((config: RTCConfiguration, callId: string): RTCPeerConnection => {
     const pc = new RTCPeerConnection(config);
     pc.onicecandidate = (ev) => {
@@ -170,7 +273,26 @@ export function useCall() {
     pc.onconnectionstatechange = () => {
       const st = pc.connectionState;
       setView((v) => (v.phase === "idle" || v.phase === "ended" ? v : { ...v, conn: st }));
+      const s = session.current;
       if (st === "connected") {
+        if (s?.pc === pc) {
+          s.established = true;
+          if (s.recovery) {
+            callLog("connection recovered", callId);
+            stopRecovery(s);
+            setView((v) => ({ ...v, reconnecting: false }));
+          }
+          // The old path came back before a restart offer was answered.
+          if (pc.signalingState === "have-local-offer") {
+            void pc.setLocalDescription({ type: "rollback" }).then(
+              () => {
+                s.remoteSet = true;
+                s.pendingIce = [];
+              },
+              () => {},
+            );
+          }
+        }
         // Both ringers, not only the in-app tone: the native one can have been
         // started after the answer by a late call push, and nothing else would
         // stop it before its own 50-second timeout.
@@ -181,12 +303,15 @@ export function useCall() {
             ? v
             : { ...v, phase: "active", startedAt: v.startedAt ?? Date.now() },
         );
+      } else if ((st === "disconnected" || st === "failed") && s?.pc === pc && s.established) {
+        beginRecovery(s, st === "failed");
       } else if (st === "failed") {
+        // Never connected at all: there is no path to recover.
         finishWith("Сбой соединения", true);
       }
     };
     return pc;
-  }, [finishWith]);
+  }, [beginRecovery, finishWith]);
 
   // getMic acquires the microphone, mapping denial to a friendly message.
   const getMic = useCallback(async (): Promise<MediaStream> => {
@@ -523,6 +648,22 @@ export function useCall() {
             .catch(() => finishWith("Сбой соединения", true));
           break;
         }
+        case "call.renegotiate": {
+          const s = session.current;
+          if (!s || s.callId !== e.data.callId || !s.pc) return;
+          if (e.data.kind === "offer" && s.role === "callee") {
+            void answerRestart(s, e.data.sdp);
+          } else if (e.data.kind === "answer" && s.role === "caller" && s.pc.signalingState === "have-local-offer") {
+            void s.pc
+              .setRemoteDescription({ type: "answer", sdp: e.data.sdp })
+              .then(() => {
+                s.remoteSet = true;
+                flushIce(s);
+              })
+              .catch((err) => callLog("applying an ICE restart answer failed", err));
+          }
+          break;
+        }
         case "call.ice": {
           const s = session.current;
           if (!s || s.callId !== e.data.callId) return;
@@ -555,7 +696,7 @@ export function useCall() {
       void stopCallAudio();
       if (endTimer.current) clearTimeout(endTimer.current);
     };
-  }, [cleanupMedia, finishWith, flushIce, onIncoming]);
+  }, [answerRestart, cleanupMedia, finishWith, flushIce, onIncoming]);
 
   return { view, startCall, accept, reject, hangup, toggleMute, toggleSpeaker };
 }

@@ -12,6 +12,7 @@ function formatDuration(seconds: number): string {
 
 function connLabel(view: CallView): { text: string; warn: boolean } {
   if (view.phase === "connecting") return { text: "Соединение…", warn: false };
+  if (view.reconnecting) return { text: "Восстановление связи…", warn: true };
   switch (view.conn) {
     case "connected":
       return { text: "", warn: false };

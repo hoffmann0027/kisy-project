@@ -39,7 +39,19 @@ vi.mock("@shared/lib/nativeCall", () => ({
 
 vi.mock("@shared/lib/nativePush", () => ({ CALL_PUSH_EVENT: "kisy:call-push" }));
 
-const ws = vi.hoisted(() => ({ send: vi.fn(), subscribe: vi.fn(() => () => {}) }));
+const ws = vi.hoisted(() => {
+  const handlers = new Set<(e: unknown) => void>();
+  return {
+    handlers,
+    send: vi.fn(),
+    subscribe: vi.fn((fn: (e: unknown) => void) => {
+      handlers.add(fn);
+      return () => handlers.delete(fn);
+    }),
+  };
+});
+/** Deliver a server event to the hook, as the socket would. */
+const serverSends = (e: unknown) => ws.handlers.forEach((fn) => fn(e));
 vi.mock("@shared/ws/client", () => ({ wsClient: ws }));
 
 const api = vi.hoisted(() => ({
@@ -54,17 +66,31 @@ vi.mock("./ringtone", () => ({ ringtone: { incoming: vi.fn(), outgoing: vi.fn(),
 const mic = vi.fn(async () => ({ getTracks: () => [], getAudioTracks: () => [] }));
 
 class FakePeerConnection {
+  static last: FakePeerConnection | null = null;
   onicecandidate: unknown = null;
   ontrack: unknown = null;
-  onconnectionstatechange: unknown = null;
+  onconnectionstatechange: (() => void) | null = null;
   connectionState = "new";
+  signalingState = "stable";
+  constructor() {
+    FakePeerConnection.last = this;
+  }
+  getConfiguration = vi.fn(() => ({ iceServers: [] }));
+  setConfiguration = vi.fn();
+  /** The network moved the connection to a new state. */
+  becomes(state: string) {
+    this.connectionState = state;
+    this.onconnectionstatechange?.();
+  }
   addTrack = vi.fn();
   close = vi.fn();
   setRemoteDescription = vi.fn(async () => {});
   addIceCandidate = vi.fn(async () => {});
   createAnswer = vi.fn(async () => ({ type: "answer", sdp: "answer-sdp" }));
-  createOffer = vi.fn(async () => ({ type: "offer", sdp: "offer-sdp" }));
-  setLocalDescription = vi.fn(async () => {});
+  createOffer = vi.fn(async (_opts?: RTCOfferOptions) => ({ type: "offer", sdp: "offer-sdp" }));
+  setLocalDescription = vi.fn(async (d: { type: string }) => {
+    this.signalingState = d.type === "offer" ? "have-local-offer" : "stable";
+  });
 }
 
 const ringingCall = {
@@ -80,6 +106,8 @@ const { useCall } = await import("./useCall");
 
 beforeEach(() => {
   vi.clearAllMocks();
+  ws.handlers.clear();
+  FakePeerConnection.last = null;
   mic.mockResolvedValue({ getTracks: () => [], getAudioTracks: () => [] });
   Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
   native.decision = null;
@@ -373,5 +401,80 @@ describe("relay credentials", () => {
 
     await waitFor(() => expect(answers()).toHaveLength(1));
     expect(api.iceConfig).toHaveBeenCalledWith({ callId: ringingCall.callId });
+  });
+});
+
+// A call whose path drops mid-conversation (Wi-Fi to mobile data, a lapsed
+// relay) used to end on the spot with "Сбой соединения". Now the caller
+// restarts ICE over the call's own signaling and the call carries on.
+describe("a call that loses its connection", () => {
+  const peer = { id: "user-2", displayName: "Пётр", avatarUrl: null };
+  const sent = (type: string) => ws.send.mock.calls.map(([f]) => f as { type: string; data: Record<string, unknown> }).filter((f) => f.type === type);
+
+  async function callerInCall() {
+    const hook = renderHook(() => useCall());
+    await hook.result.current.startCall(peer, "chat-1");
+    const callId = sent("call.invite")[0].data.callId as string;
+    serverSends({ event: "call.answered", data: { callId, sdp: "answer-sdp" } });
+    const pc = FakePeerConnection.last!;
+    await waitFor(() => expect(hook.result.current.view.phase).toBe("connecting"));
+    pc.becomes("connected");
+    await waitFor(() => expect(hook.result.current.view.phase).toBe("active"));
+    return { ...hook, pc, callId };
+  }
+
+  it("is restarted by the caller with fresh relay credentials, and recovers", async () => {
+    const { result, pc, callId } = await callerInCall();
+
+    pc.becomes("failed");
+    await waitFor(() => expect(sent("call.renegotiate")).toHaveLength(1));
+    expect(api.iceConfig).toHaveBeenLastCalledWith({ callId });
+    expect(pc.createOffer).toHaveBeenLastCalledWith({ iceRestart: true });
+    expect(sent("call.renegotiate")[0].data).toMatchObject({ callId, kind: "offer" });
+    expect(result.current.view.reconnecting).toBe(true);
+    expect(result.current.view.phase).toBe("active");
+
+    serverSends({ event: "call.renegotiate", data: { callId, kind: "answer", sdp: "restart-answer" } });
+    await waitFor(() => expect(pc.setRemoteDescription).toHaveBeenLastCalledWith({ type: "answer", sdp: "restart-answer" }));
+    pc.becomes("connected");
+    await waitFor(() => expect(result.current.view.reconnecting).toBe(false));
+    expect(result.current.view.phase).toBe("active");
+    expect(sent("call.hangup")).toHaveLength(0);
+  });
+
+  it("is answered by the callee when the caller restarts it", async () => {
+    native.decision = { action: "accept", callId: ringingCall.callId };
+    api.pending.mockResolvedValue({ call: ringingCall });
+    renderHook(() => useCall());
+    await waitFor(() => expect(answers()).toHaveLength(1));
+    const pc = FakePeerConnection.last!;
+    pc.becomes("connected");
+
+    serverSends({ event: "call.renegotiate", data: { callId: ringingCall.callId, kind: "offer", sdp: "restart-offer" } });
+    await waitFor(() => expect(sent("call.renegotiate")).toHaveLength(1));
+    expect(pc.setRemoteDescription).toHaveBeenLastCalledWith({ type: "offer", sdp: "restart-offer" });
+    expect(sent("call.renegotiate")[0].data).toMatchObject({ callId: ringingCall.callId, kind: "answer", sdp: "answer-sdp" });
+    expect(api.iceConfig).toHaveBeenLastCalledWith({ callId: ringingCall.callId });
+  });
+
+  it("ends when no path comes back", async () => {
+    const { result, pc } = await callerInCall();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      pc.becomes("disconnected");
+      await vi.advanceTimersByTimeAsync(33_000); // the grace period, then the give-up
+      expect(sent("call.hangup")).toHaveLength(1);
+      expect(result.current.view.endedReason).toBe("Связь потеряна");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("still fails at once when it never connected", async () => {
+    const { result } = renderHook(() => useCall());
+    await result.current.startCall(peer, "chat-1");
+    FakePeerConnection.last!.becomes("failed");
+    await waitFor(() => expect(result.current.view.endedReason).toBe("Сбой соединения"));
+    expect(sent("call.renegotiate")).toHaveLength(0);
   });
 });

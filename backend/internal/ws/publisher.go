@@ -132,6 +132,10 @@ func (p *Publisher) ICE(to, callID, from uuid.UUID, candidate json.RawMessage) {
 	p.hub.publishToUsers([]uuid.UUID{to}, encode(EventCallICE, callICEData{CallID: callID, FromUserID: from, Candidate: candidate}))
 }
 
+func (p *Publisher) Renegotiate(to, callID uuid.UUID, kind, sdp string) {
+	p.hub.publishToUsers([]uuid.UUID{to}, encode(EventCallRenegotiate, callRenegotiateData{CallID: callID, Kind: kind, SDP: sdp}))
+}
+
 func (p *Publisher) Rejected(to, callID uuid.UUID) {
 	p.hub.publishToUsers([]uuid.UUID{to}, encode(EventCallRejected, callRefData{CallID: callID}))
 }

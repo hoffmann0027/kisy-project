@@ -28,6 +28,18 @@ const (
 	SignalReject = "call.reject"
 	SignalCancel = "call.cancel"
 	SignalHangup = "call.hangup"
+	// SignalRenegotiate carries an ICE-restart offer (caller) or its answer
+	// (callee) on a call that is already up: the connection dropped — a
+	// switch from Wi-Fi to mobile data, a relay that lapsed — and the two
+	// sides look for a new path without ending the call.
+	SignalRenegotiate = "call.renegotiate"
+)
+
+// Renegotiation kinds. Only the caller offers, so the two sides never offer
+// at the same time.
+const (
+	RenegotiateOffer  = "offer"
+	RenegotiateAnswer = "answer"
 )
 
 // Call log statuses (mirror the call_logs CHECK constraint).
@@ -126,6 +138,7 @@ type CallPublisher interface {
 	Incoming(to, callID, fromID uuid.UUID, fromName string, fromAvatar *string, chatID uuid.UUID, sdp string)
 	Answered(to, callID uuid.UUID, sdp string)
 	ICE(to, callID, from uuid.UUID, candidate json.RawMessage)
+	Renegotiate(to, callID uuid.UUID, kind, sdp string)
 	Rejected(to, callID uuid.UUID)
 	Canceled(to, callID uuid.UUID)
 	Ended(to, callID uuid.UUID, reason string)
@@ -242,6 +255,12 @@ type invitePayload struct {
 
 type answerPayload struct {
 	CallID uuid.UUID `json:"callId"`
+	SDP    string    `json:"sdp"`
+}
+
+type renegotiatePayload struct {
+	CallID uuid.UUID `json:"callId"`
+	Kind   string    `json:"kind"`
 	SDP    string    `json:"sdp"`
 }
 

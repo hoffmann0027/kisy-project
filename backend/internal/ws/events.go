@@ -36,11 +36,14 @@ const (
 	EventCallIncoming = "call.incoming"
 	EventCallAnswered = "call.answered"
 	EventCallICE      = "call.ice"
-	EventCallRejected = "call.rejected"
-	EventCallCanceled = "call.canceled"
-	EventCallEnded    = "call.ended"
-	EventCallBusy     = "call.busy"
-	EventCallTimeout  = "call.timeout"
+	// EventCallRenegotiate: an ICE restart on an answered call (offer from
+	// the caller, answer from the callee).
+	EventCallRenegotiate = "call.renegotiate"
+	EventCallRejected    = "call.rejected"
+	EventCallCanceled    = "call.canceled"
+	EventCallEnded       = "call.ended"
+	EventCallBusy        = "call.busy"
+	EventCallTimeout     = "call.timeout"
 
 	// E2EE (MLS) handshake delivery: a commit/proposal reached the chat, or
 	// a welcome awaits one of the user's devices. Payloads are references —
@@ -155,6 +158,12 @@ type callIncomingData struct {
 
 type callAnsweredData struct {
 	CallID uuid.UUID `json:"callId"`
+	SDP    string    `json:"sdp"`
+}
+
+type callRenegotiateData struct {
+	CallID uuid.UUID `json:"callId"`
+	Kind   string    `json:"kind"`
 	SDP    string    `json:"sdp"`
 }
 

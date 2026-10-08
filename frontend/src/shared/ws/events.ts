@@ -22,6 +22,7 @@ export type ServerEvent =
   | { event: "call.incoming"; data: CallIncomingData }
   | { event: "call.answered"; data: { callId: string; sdp: string } }
   | { event: "call.ice"; data: { callId: string; fromUserId: string; candidate: RTCIceCandidateInit } }
+  | { event: "call.renegotiate"; data: { callId: string; kind: "offer" | "answer"; sdp: string } }
   | { event: "call.rejected"; data: { callId: string } }
   | { event: "call.canceled"; data: { callId: string } }
   | { event: "call.ended"; data: { callId: string; reason: string } }
@@ -77,6 +78,7 @@ export type ClientFrame =
   | { type: "call.invite"; data: { callId: string; toUserId: string; chatId: string; sdp: string } }
   | { type: "call.answer"; data: { callId: string; sdp: string } }
   | { type: "call.ice"; data: { callId: string; candidate: RTCIceCandidateInit } }
+  | { type: "call.renegotiate"; data: { callId: string; kind: "offer" | "answer"; sdp: string } }
   | { type: "call.reject"; data: { callId: string } }
   | { type: "call.cancel"; data: { callId: string } }
   | { type: "call.hangup"; data: { callId: string } };

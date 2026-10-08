@@ -97,11 +97,18 @@ Client→Server:
 - `call.reject` — `{ callId }` (callee declines)
 - `call.cancel` — `{ callId }` (caller aborts before answer)
 - `call.hangup` — `{ callId }` (either party ends an answered call)
+- `call.renegotiate` — `{ callId, kind, sdp }`: an ICE restart on an answered
+  call whose connection dropped (Wi-Fi to mobile data, a lapsed relay). Only
+  the caller sends `kind: "offer"` and only the callee `kind: "answer"`, so
+  the two never offer at once. The caller re-offers every 8 s; both sides
+  hang up if no path returns within 30 s. A call that never connected is not
+  restarted.
 
 Server→Client:
 - `call.incoming` — `{ callId, from: { id, displayName, avatarUrl }, chatId, sdp }`
 - `call.answered` — `{ callId, sdp }`
 - `call.ice` — `{ callId, fromUserId, candidate }`
+- `call.renegotiate` — `{ callId, kind, sdp }` (relayed to the other party)
 - `call.rejected` / `call.canceled` / `call.busy` / `call.timeout` — `{ callId }`
 - `call.ended` — `{ callId, reason }`
 
