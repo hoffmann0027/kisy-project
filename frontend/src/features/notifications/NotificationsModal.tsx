@@ -53,6 +53,22 @@ function FeedbackReplyView({ payload }: { payload: Record<string, unknown> }) {
   );
 }
 
+/** A new version of the app, announced by the CEO: what changed, where to get it. */
+function ReleaseView({ payload }: { payload: Record<string, unknown> }) {
+  const link = typeof payload.downloadUrl === "string" && payload.downloadUrl.startsWith("https://") ? payload.downloadUrl : null;
+  return (
+    <div className="announce-note">
+      <div className="announce-note__title">Вышла версия {String(payload.version ?? "")}</div>
+      <div className="announce-note__body">{String(payload.notes ?? "")}</div>
+      {link && (
+        <a className="announce-note__link" href={link} target="_blank" rel="noopener noreferrer">
+          Скачать
+        </a>
+      )}
+    </div>
+  );
+}
+
 export function NotificationsModal({ open, onClose }: Props) {
   const { data, isPending } = useNotifications();
   const markRead = useMarkNotificationsRead();
@@ -99,6 +115,8 @@ export function NotificationsModal({ open, onClose }: Props) {
               <AnnouncementView payload={n.payload} />
             ) : n.type === "feedback_reply" ? (
               <FeedbackReplyView payload={n.payload} />
+            ) : n.type === "app_release" ? (
+              <ReleaseView payload={n.payload} />
             ) : (
               <div style={{ fontSize: 14 }}>{describe(n.type, n.payload)}</div>
             )}

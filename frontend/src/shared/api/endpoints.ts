@@ -62,6 +62,9 @@ import type {
   SendAnnouncementInput,
   FeedbackScope,
   AdminUserFilter,
+  DashboardOverview,
+  AppRelease,
+  AppBuildCount,
 } from "./types";
 
 // On native the backend also returns the raw tokens (the app has no cookie
@@ -631,6 +634,10 @@ export const reportsApi = {
 };
 
 export const adminApi = {
+  dashboard: () => apiClient.get<DashboardOverview>("/admin/dashboard"),
+  releases: () => apiClient.get<{ releases: AppRelease[]; versions: AppBuildCount[] }>("/admin/releases"),
+  sendRelease: (input: { version: string; notes: string; downloadUrl?: string }) =>
+    apiClient.post<{ release: AppRelease }>("/admin/releases", input),
   users: (filter: AdminUserFilter = {}, limit = 100, offset = 0) => {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
     if (filter.q) params.set("q", filter.q);

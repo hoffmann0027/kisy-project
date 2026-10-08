@@ -53,12 +53,22 @@ export function saveTokens(t: NativeTokens | null): void {
   }
 }
 
+// "<versionName> (<versionCode>)" of this build, once shared/lib/appVersion
+// has read it; sent as X-Kisy-App-Version so the admin panel can count who
+// still runs an old build.
+let appVersionHeader: string | null = null;
+
+export function setAppVersionHeader(value: string | null): void {
+  appVersionHeader = value;
+}
+
 /** Headers that mark a native client and carry its bearer token. */
 export function nativeAuthHeaders(): Record<string, string> {
   if (!isNative()) return {};
   // The header tells the backend to include the tokens in the response body;
   // browsers keep getting cookie-only responses.
   const headers: Record<string, string> = { "X-Kisy-Client": "native" };
+  if (appVersionHeader) headers["X-Kisy-App-Version"] = appVersionHeader;
   const tokens = loadTokens();
   if (tokens?.accessToken) headers.Authorization = `Bearer ${tokens.accessToken}`;
   return headers;

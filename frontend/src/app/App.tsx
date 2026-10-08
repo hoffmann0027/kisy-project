@@ -6,6 +6,7 @@ import { useAuthStore } from "@shared/store/auth";
 import { useThemeStore } from "@shared/store/theme";
 import { useVisualViewport } from "@shared/lib/useVisualViewport";
 import { initNativeCallPush, initNativePushNavigation, refreshNativePushToken } from "@shared/lib/nativePush";
+import { initAppVersion } from "@shared/lib/appVersion";
 import { initAndroidBack } from "@shared/lib/nativeBack";
 import { ToastHost } from "@shared/ui";
 
@@ -27,6 +28,8 @@ export function App() {
     // Data-only call pushes: the listener only announces them, useCall picks
     // the invite up from the server.
     initNativeCallPush();
+    // Which build this is, for the admin panel's "who still runs an old one".
+    void initAppVersion();
   }, []);
 
   // Android's back gesture. Without it the gesture closed the app from any

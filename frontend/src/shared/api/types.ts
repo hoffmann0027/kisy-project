@@ -369,6 +369,51 @@ export interface Notification {
   createdAt: string;
 }
 
+/** The admin overview ("Обзор"), GET /admin/dashboard — real data only. */
+export interface DashboardOverview {
+  kpi: {
+    usersTotal: number;
+    usersNew24h: number;
+    usersNew7d: number;
+    active24h: number;
+    messages24h: number;
+    communities: number;
+    groups: number;
+  };
+  /** Registrations per day for 90 days, with the running total. */
+  growth: { day: string; registrations: number; total: number }[];
+  inbox: { openReports: number; unansweredFeedback: number; pendingJoinRequests: number };
+  activity: { action: string; actorName: string | null; targetType: string | null; createdAt: string }[];
+  reports: { id: string; targetKind: string; reason: string; severity: "high" | "medium" | "low"; createdAt: string }[];
+  system: {
+    version: string;
+    startedAt: string;
+    checks: { name: string; state: "ok" | "down" | "off"; latencyMs?: number; detail?: string }[];
+  };
+  limits: {
+    database: { usedBytes: number; limitBytes: number };
+    filesInDatabase: number;
+    redis: { usedBytes: number; limitBytes: number } | null;
+  };
+}
+
+/** An announced version of the app ("Обновления"). */
+export interface AppRelease {
+  id: string;
+  version: string;
+  notes: string;
+  downloadUrl?: string;
+  recipientCount: number;
+  createdAt: string;
+}
+
+/** How many accounts ran one Android build in the last 30 days. */
+export interface AppBuildCount {
+  version: string;
+  build: number;
+  users: number;
+}
+
 /**
  * Search and filters of the admin "Пользователи" tab. role: "basic" or a level
  * "1".."10"; empty fields filter nothing.
