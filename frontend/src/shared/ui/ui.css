@@ -213,7 +213,12 @@
   width: 100%;
   max-width: 440px;
   max-height: 88vh;
-  overflow: auto;
+  /* The header stays put and only the body scrolls: a long modal (the
+     profile settings) used to scroll its close button away with it, leaving
+     no way to close it from the middle of the page. */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   animation: pop-in var(--transition-medium);
 }
 /* Dynamic viewport height so a tall modal stays fully reachable on mobile
@@ -227,6 +232,7 @@
   }
 }
 .ui-modal__header {
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -238,6 +244,10 @@
   margin: 0;
 }
 .ui-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0 var(--space-5) var(--space-5);
   display: flex;
   flex-direction: column;
