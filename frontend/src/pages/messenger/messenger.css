@@ -1385,12 +1385,34 @@
 .mviewer__btn:hover {
   background: rgba(255, 255, 255, 0.22);
 }
+/* The stage takes every gesture on the picture and around it (zoom/pan in
+   shared/lib/zoomPan): the browser's own pinch and scroll stay out of it. */
+.mviewer__stage {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+}
 .mviewer__img {
   max-width: 92vw;
   max-height: 86vh;
   border-radius: var(--radius-md);
   cursor: zoom-in;
+  transform-origin: center;
   transition: transform 0.2s ease;
+  will-change: transform;
+  -webkit-user-drag: none;
+}
+/* Following a finger: no easing, or the picture lags behind it. */
+.mviewer__img--live {
+  transition: none;
+}
+.mviewer__stage--zoomed .mviewer__img {
+  cursor: grab;
+  border-radius: 0;
 }
 @supports (height: 100dvh) {
   .mviewer__img {
@@ -1423,16 +1445,18 @@
     width: 44px;
     height: 44px;
   }
+  .mviewer__stage {
+    /* The same room the padding above leaves: below the notch, above the
+       controls. */
+    top: calc(8px + var(--safe-top));
+    bottom: calc(72px + var(--safe-bottom));
+  }
   .mviewer__img {
     max-width: 100%;
     max-height: 100%;
   }
 }
 
-.mviewer__img--zoomed {
-  transform: scale(2);
-  cursor: zoom-out;
-}
 .mviewer__nav {
   position: absolute;
   top: 50%;
