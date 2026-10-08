@@ -61,6 +61,7 @@ import type {
   Announcement,
   SendAnnouncementInput,
   FeedbackScope,
+  AdminUserFilter,
 } from "./types";
 
 // On native the backend also returns the raw tokens (the app has no cookie
@@ -630,8 +631,13 @@ export const reportsApi = {
 };
 
 export const adminApi = {
-  users: (limit = 100, offset = 0) =>
-    apiClient.get<{ users: User[] }>(`/admin/users?limit=${limit}&offset=${offset}`),
+  users: (filter: AdminUserFilter = {}, limit = 100, offset = 0) => {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (filter.q) params.set("q", filter.q);
+    if (filter.role) params.set("role", filter.role);
+    if (filter.status) params.set("status", filter.status);
+    return apiClient.get<{ users: User[] }>(`/admin/users?${params.toString()}`);
+  },
   changeRole: (userId: string, roleLevel: number) =>
     apiClient.patch<{ ok: boolean }>(`/admin/users/${userId}/role`, { roleLevel }),
   resetPassword: (userId: string, newPassword: string) =>

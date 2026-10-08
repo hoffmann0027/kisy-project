@@ -397,3 +397,24 @@
   gap: var(--space-2);
   flex-wrap: wrap;
 }
+
+/* "Пользователи": search and filters, as in "Верификация". */
+.admin-users__filters {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
+}
+@media (max-width: 760px), (max-height: 500px) {
+  .admin-users__filters {
+    grid-template-columns: 1fr 1fr;
+  }
+  .admin-users__filters > input {
+    grid-column: 1 / -1;
+  }
+}
+.admin-users__count {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}

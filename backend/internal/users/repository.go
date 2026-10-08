@@ -57,7 +57,8 @@ type Repository interface {
 	AdminResetPasswordHash(ctx context.Context, q db.DBTX, id uuid.UUID, hash string) error
 	UpdateRole(ctx context.Context, q db.DBTX, id uuid.UUID, roleID int) error
 	SetActive(ctx context.Context, q db.DBTX, id uuid.UUID, active bool) error
-	List(ctx context.Context, q db.DBTX, limit, offset int) ([]User, error)
+	// List is the CEO's user table, newest first, narrowed by f.
+	List(ctx context.Context, q db.DBTX, f ListFilter, limit, offset int) ([]User, error)
 	// SetVerified gives or takes away the verification mark (CEO only, via admin).
 	SetVerified(ctx context.Context, q db.DBTX, id, by uuid.UUID, verified bool) error
 	// AdminSearch finds any account by login prefix or part of the name.
@@ -273,9 +274,31 @@ func (r *PostgresRepository) SetActive(ctx context.Context, q db.DBTX, id uuid.U
 	return nil
 }
 
-func (r *PostgresRepository) List(ctx context.Context, q db.DBTX, limit, offset int) ([]User, error) {
+// ListFilter narrows the admin user table. Zero values filter nothing.
+type ListFilter struct {
+	// Query matches a login by prefix or a display name anywhere, the same
+	// way as AdminSearch.
+	Query string
+	// Level: one role level 1-10. Basic: accounts with no level. Setting
+	// both matches nothing — a basic account has no level.
+	Level int
+	Basic bool
+	// Active: only active (true) or only switched-off (false) accounts.
+	Active *bool
+}
+
+func (r *PostgresRepository) List(ctx context.Context, q db.DBTX, f ListFilter, limit, offset int) ([]User, error) {
+	query := strings.TrimSpace(f.Query)
 	rows, err := q.Query(ctx, `SELECT`+userColumns+`
-		FROM users ORDER BY created_at DESC, id DESC LIMIT $1 OFFSET $2`, limit, offset)
+		FROM users
+		WHERE ($1 = ''
+		       OR strpos(lower(username::text), lower($1)) = 1
+		       OR strpos(display_name_key, kisy_display_name_key($1)) > 0)
+		  AND ($2 = 0 OR role_id = (SELECT id FROM roles WHERE level = $2))
+		  AND (NOT $3 OR account_kind = 'basic')
+		  AND ($4::boolean IS NULL OR is_active = $4)
+		ORDER BY created_at DESC, id DESC
+		LIMIT $5 OFFSET $6`, query, f.Level, f.Basic, f.Active, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("users: list: %w", err)
 	}

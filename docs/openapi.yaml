@@ -3689,10 +3689,13 @@ paths:
   /admin/users:
     get:
       tags: [admin]
-      summary: List accounts (CEO only)
+      summary: List accounts (CEO only), newest first, searched and filtered
       parameters:
         - { name: limit, in: query, required: false, schema: { type: integer, default: 50, maximum: 200 } }
         - { name: offset, in: query, required: false, schema: { type: integer, default: 0 } }
+        - { name: q, in: query, required: false, schema: { type: string }, description: "Login by prefix or display name anywhere (as /admin/verification)" }
+        - { name: role, in: query, required: false, schema: { type: string }, description: "basic, or a level 1-10" }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [active, inactive] } }
       responses:
         '200':
           description: Users
@@ -3708,6 +3711,7 @@ paths:
                           users:
                             type: array
                             items: { $ref: '#/components/schemas/User' }
+        '400': { description: role or status is not one of the allowed values }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 

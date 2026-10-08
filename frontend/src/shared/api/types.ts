@@ -369,6 +369,16 @@ export interface Notification {
   createdAt: string;
 }
 
+/**
+ * Search and filters of the admin "Пользователи" tab. role: "basic" or a level
+ * "1".."10"; empty fields filter nothing.
+ */
+export interface AdminUserFilter {
+  q?: string;
+  role?: string;
+  status?: "active" | "inactive";
+}
+
 /** Who an announcement goes to. */
 export type AnnouncementAudience = "all" | "basic" | "levels" | "user";
 

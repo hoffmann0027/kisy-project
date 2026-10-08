@@ -1,18 +1,41 @@
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Avatar, Button, Input, Modal, Spinner, toast } from "@shared/ui";
 import { adminApi } from "@shared/api/endpoints";
-import { ROLE_LABELS, roleLabel, type User } from "@shared/api/types";
+import { ROLE_LABELS, roleLabel, type AdminUserFilter, type User } from "@shared/api/types";
 import { useAuthStore } from "@shared/store/auth";
 import { PASSWORD_RULE_TEXT, passwordProblem } from "@shared/lib/password";
 
+const PAGE = 100;
+
+function useDebounced(value: string, ms = 300) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), ms);
+    return () => clearTimeout(id);
+  }, [value, ms]);
+  return debounced;
+}
+
+// The CEO's user table. It used to load the newest hundred accounts and stop:
+// anyone older could not be found. Search and filters now run on the server
+// (GET /admin/users?q=&role=&status=), the way "Верификация" searches.
 export function UsersTab() {
   const me = useAuthStore((s) => s.user!);
   const qc = useQueryClient();
-  const { data, isPending } = useQuery({
-    queryKey: ["admin", "users"],
-    queryFn: async () => (await adminApi.users()).users,
+  const [query, setQuery] = useState("");
+  const [role, setRole] = useState("");
+  const [status, setStatus] = useState<"" | "active" | "inactive">("");
+  const q = useDebounced(query.trim());
+  const filter: AdminUserFilter = { q: q || undefined, role: role || undefined, status: status || undefined };
+  const { data: pages, isPending, hasNextPage, fetchNextPage, isFetchingNextPage } = useInfiniteQuery({
+    queryKey: ["admin", "users", filter],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => (await adminApi.users(filter, PAGE, pageParam)).users,
+    getNextPageParam: (last, all) => (last.length === PAGE ? all.length * PAGE : undefined),
   });
+  const data = pages?.pages.flat();
+  const filtered = !!(q || role || status);
 
   const [resetFor, setResetFor] = useState<User | null>(null);
 
@@ -31,16 +54,56 @@ export function UsersTab() {
     onError: () => toast.error("Не удалось изменить статус"),
   });
 
+  const filters = (
+    <div className="admin-users__filters">
+      <input
+        className="ui-input"
+        placeholder="Логин или имя"
+        aria-label="Поиск пользователей"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      <select className="ui-input" aria-label="Роль" value={role} onChange={(e) => setRole(e.target.value)}>
+        <option value="">Все роли</option>
+        <option value="basic">Без уровня (basic)</option>
+        {Object.entries(ROLE_LABELS).map(([lvl, label]) => (
+          <option key={lvl} value={lvl}>
+            {lvl}. {label}
+          </option>
+        ))}
+      </select>
+      <select
+        className="ui-input"
+        aria-label="Статус"
+        value={status}
+        onChange={(e) => setStatus(e.target.value as "" | "active" | "inactive")}
+      >
+        <option value="">Любой статус</option>
+        <option value="active">Активные</option>
+        <option value="inactive">Отключённые</option>
+      </select>
+    </div>
+  );
+
   if (isPending) {
     return (
-      <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
-        <Spinner size={28} />
-      </div>
+      <>
+        {filters}
+        <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
+          <Spinner size={28} />
+        </div>
+      </>
     );
   }
 
   return (
     <>
+      {filters}
+      <p className="admin-users__count">
+        {data?.length ?? 0}
+        {hasNextPage ? "+" : ""} {filtered ? "найдено" : "всего"}
+      </p>
+      {data?.length === 0 && <p className="admin-verify__empty">Никого не найдено</p>}
       <table className="table">
         <thead>
           <tr>
@@ -113,6 +176,11 @@ export function UsersTab() {
           ))}
         </tbody>
       </table>
+      {hasNextPage && (
+        <Button variant="ghost" loading={isFetchingNextPage} onClick={() => void fetchNextPage()}>
+          Показать ещё
+        </Button>
+      )}
 
       <ResetPasswordModal user={resetFor} onClose={() => setResetFor(null)} />
     </>

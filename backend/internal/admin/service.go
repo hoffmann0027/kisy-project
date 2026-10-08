@@ -77,14 +77,14 @@ func NewService(pool *pgxpool.Pool, usersRepo users.Repository, sessions auth.Se
 }
 
 // ListUsers returns a page of accounts (offset pagination).
-func (s *Service) ListUsers(ctx context.Context, limit, offset int) ([]users.DTO, error) {
+func (s *Service) ListUsers(ctx context.Context, f users.ListFilter, limit, offset int) ([]users.DTO, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
 	if offset < 0 {
 		offset = 0
 	}
-	list, err := s.users.List(ctx, s.pool, limit, offset)
+	list, err := s.users.List(ctx, s.pool, f, limit, offset)
 	if err != nil {
 		return nil, err
 	}

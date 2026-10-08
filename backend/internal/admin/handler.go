@@ -10,6 +10,7 @@ import (
 
 	"kisy-backend/internal/access"
 	"kisy-backend/internal/audit"
+	"kisy-backend/internal/users"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
 )
@@ -135,12 +136,48 @@ func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit, offset := pageParams(r)
-	list, err := h.svc.ListUsers(r.Context(), limit, offset)
+	f, ok := userFilter(r)
+	if !ok {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed,
+			"role must be basic or 1-10; status must be active or inactive")
+		return
+	}
+	list, err := h.svc.ListUsers(r.Context(), f, limit, offset)
 	if err != nil {
 		internal(w, r)
 		return
 	}
 	httpresponse.OK(w, r, http.StatusOK, map[string]any{"users": list})
+}
+
+// userFilter reads ?q=, ?role= (basic | 1-10) and ?status= (active |
+// inactive) — the search and filters of the "Пользователи" tab.
+func userFilter(r *http.Request) (users.ListFilter, bool) {
+	qs := r.URL.Query()
+	f := users.ListFilter{Query: qs.Get("q")}
+	switch role := qs.Get("role"); role {
+	case "":
+	case "basic":
+		f.Basic = true
+	default:
+		lvl, err := strconv.Atoi(role)
+		if err != nil || lvl < 1 || lvl > 10 {
+			return f, false
+		}
+		f.Level = lvl
+	}
+	switch qs.Get("status") {
+	case "":
+	case "active":
+		t := true
+		f.Active = &t
+	case "inactive":
+		v := false
+		f.Active = &v
+	default:
+		return f, false
+	}
+	return f, true
 }
 
 type changeRoleRequest struct {
