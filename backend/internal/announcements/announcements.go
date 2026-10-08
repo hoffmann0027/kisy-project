@@ -275,12 +275,12 @@ func (s *Service) Send(ctx context.Context, actor ActorMeta, in Input) (*Announc
 		Title:    in.Title,
 		Body:     in.Body,
 	}
-	var levels []int16
+	// nil (SQL NULL) unless the audience is levels. pgx writes []int into the
+	// smallint[] column itself, range-checked; normalize allowed only 1-10.
+	var levels []int
 	if in.Audience == AudienceLevels {
 		a.Levels = in.Levels
-		for _, l := range in.Levels {
-			levels = append(levels, int16(l))
-		}
+		levels = in.Levels
 	}
 	var target *uuid.UUID
 	if in.Audience == AudienceUser {
@@ -512,14 +512,10 @@ func (s *Service) List(ctx context.Context, actor ActorMeta, limit int) ([]Annou
 	out := []Announcement{}
 	for rows.Next() {
 		var a Announcement
-		var levels []int16
 		if err := rows.Scan(&a.ID, &a.Author.ID, &a.Author.DisplayName, &a.Author.RoleLevel,
-			&a.Audience, &levels, &a.TargetUserID, &a.TargetName,
+			&a.Audience, &a.Levels, &a.TargetUserID, &a.TargetName,
 			&a.Title, &a.Body, &a.RecipientCount, &a.CreatedAt, &a.RevokedAt); err != nil {
 			return nil, fmt.Errorf("announcements: scan: %w", err)
-		}
-		for _, l := range levels {
-			a.Levels = append(a.Levels, int(l))
 		}
 		out = append(out, a)
 	}
