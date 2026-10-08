@@ -29,6 +29,7 @@ import (
 	"kisy-backend/internal/chats"
 	"kisy-backend/internal/conditions"
 	"kisy-backend/internal/config"
+	"kisy-backend/internal/dashboard"
 	"kisy-backend/internal/disappear"
 	"kisy-backend/internal/e2ee"
 	"kisy-backend/internal/favorites"
@@ -88,6 +89,7 @@ type modules struct {
 	pushHandler          *push.Handler
 	notificationsHandler *notifications.Handler
 	announcementsHandler *announcements.Handler
+	dashboardHandler     *dashboard.Handler
 	notifprefsHandler    *notifprefs.Handler
 	boardsHandler        *boards.Handler
 	calendarHandler      *calendar.Handler
@@ -974,6 +976,19 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		m := authHandler.ClientMeta(r)
 		return moderation.ActorMeta{UserID: claims.UserID, SessionID: claims.SessionID, RoleLevel: claims.RoleLevel, IPHash: m.IPHash, RequestID: m.RequestID}, true
 	})
+	// The admin overview ("Обзор"): real counts, live checks, plan limits.
+	feats := cfg.Features()
+	dashboardHandler := dashboard.NewHandler(dashboard.NewService(pool, rdb, dashboard.Settings{
+		Version:   cfg.Version,
+		StartedAt: time.Now(),
+		Features: dashboard.Features{
+			WebPush: feats.WebPush, FCM: feats.FCM, TURN: feats.TURN, BlobS3: feats.BlobS3, Turnstile: feats.Turnstile,
+		},
+		TURNURLs:        cfg.ICE.TURNURLs,
+		DBLimitBytes:    cfg.DBLimitBytes,
+		RedisLimitBytes: cfg.RedisLimitBytes,
+	}))
+
 	adminHandler := admin.NewHandler(adminSvc, audit.NewReader(pool), func(r *http.Request) (admin.ActorMeta, bool) {
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {
@@ -1074,6 +1089,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		pushHandler:          pushHandler,
 		notificationsHandler: notificationsHandler,
 		announcementsHandler: announcementsHandler,
+		dashboardHandler:     dashboardHandler,
 		notifprefsHandler:    notifprefsHandler,
 		boardsHandler:        boardsHandler,
 		calendarHandler:      calendarHandler,

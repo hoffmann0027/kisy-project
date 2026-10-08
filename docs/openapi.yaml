@@ -3950,6 +3950,28 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /admin/dashboard:
+    get:
+      tags: [admin]
+      summary: The admin overview ("Обзор"), CEO only
+      description: >
+        Real data only. kpi: accounts (total, new in 24 h and 7 days), active in
+        24 h (a session refreshed or a socket closed), messages in 24 h (counted,
+        never read), communities and groups. growth: registrations per day for
+        the last 90 days with the running total. inbox: open reports,
+        unanswered feedback, pending join requests. activity: the last 8 audit
+        events. reports: the last 5 open ones with a severity derived from the
+        reason (fraud/illegal high, abuse medium, else low). system: the
+        deployed commit, process start, and checks — database and Redis
+        pinged now, the TURN relay probed with a STUN binding request, push,
+        Web Push and captcha as configured (state ok | down | off). limits:
+        database size against DB_SIZE_LIMIT_MB, bytes of files held in the
+        database, Redis memory against REDIS_MEMORY_LIMIT_MB (null when the
+        server does not report it).
+      responses:
+        '200': { description: Overview, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /admin/audit:
     get:
       tags: [admin]

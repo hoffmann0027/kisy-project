@@ -355,7 +355,8 @@ func newRouter(d routerDeps) http.Handler {
 			m.reportsHandler.Routes(r)
 
 			// CEO only; the gates travel with the routes (admin.Mount).
-			admin.Mount(r, m.authMW, m.adminHandler, m.moderationHandler.AdminRoutes, m.reportsHandler.AdminRoutes)
+			admin.Mount(r, m.authMW, m.adminHandler, m.moderationHandler.AdminRoutes, m.reportsHandler.AdminRoutes,
+				m.dashboardHandler.AdminRoutes)
 
 			r.Route("/groups", func(r chi.Router) {
 				// Reads are visibility-filtered; creation is open to any

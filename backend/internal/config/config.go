@@ -92,6 +92,15 @@ type Config struct {
 	// that directory (single-service same-origin deployment).
 	WebDir string
 
+	// Version is the deployed commit, shown in the admin overview: Render sets
+	// RENDER_GIT_COMMIT on every deploy; KISY_VERSION overrides it elsewhere.
+	Version string
+	// DBLimitBytes / RedisLimitBytes are the hosting plan's ceilings the admin
+	// overview measures against (DB_SIZE_LIMIT_MB, REDIS_MEMORY_LIMIT_MB;
+	// defaults: Neon free 512 MB, Upstash free 256 MB; 0 = unknown).
+	DBLimitBytes    int64
+	RedisLimitBytes int64
+
 	// RegistrationOpen allows accounts to be created without an invitation
 	// (users.KindBasic). Defaults to true; setting it false returns the
 	// deployment to the invitation-only product described in
@@ -375,6 +384,18 @@ func Load() (*Config, error) {
 	if cfg.ICE.TURNTTL, err = getEnvDuration("TURN_TTL", 2*time.Hour); err != nil {
 		return nil, err
 	}
+
+	cfg.Version = getEnv("KISY_VERSION", os.Getenv("RENDER_GIT_COMMIT"))
+	dbLimitMB, err := getEnvInt("DB_SIZE_LIMIT_MB", 512)
+	if err != nil {
+		return nil, err
+	}
+	redisLimitMB, err := getEnvInt("REDIS_MEMORY_LIMIT_MB", 256)
+	if err != nil {
+		return nil, err
+	}
+	cfg.DBLimitBytes = int64(dbLimitMB) << 20
+	cfg.RedisLimitBytes = int64(redisLimitMB) << 20
 
 	// Attachment upload limits (stage A). Values are megabytes in env for
 	// operator ergonomics; bytes internally.
