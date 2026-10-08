@@ -7,6 +7,7 @@ import {
   cachePlaintext,
   catchUpChat,
   e2eeSession,
+  syncChatDevices,
   hydrateMessages,
   type EncryptedBody,
 } from "@entities/e2ee";
@@ -58,7 +59,12 @@ export function useMessages(chatType: ChatType, chatId: string | null) {
       // sent: paging newest-first spends the keys of everything older, and
       // those messages could then never be read again (audit B-03).
       const s = e2eeSession();
-      if (s && chatType === "private" && !pageParam) await catchUpChat(s, chatId as string);
+      if (s && chatType === "private" && !pageParam) {
+        await catchUpChat(s, chatId as string);
+        // In the background: a device the group is missing must not hold up
+        // the history.
+        void syncChatDevices(s, chatId as string).catch(() => 0);
+      }
       return hydratePage(await messagesApi.list(chatType, chatId as string, pageParam));
     },
     getNextPageParam: (last: MessagePage) => (last.hasMore ? last.nextCursor : undefined),

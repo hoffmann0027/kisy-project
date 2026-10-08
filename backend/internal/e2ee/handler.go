@@ -33,6 +33,7 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Post("/key-packages", h.uploadKeyPackages)
 	r.Get("/key-packages/count", h.countKeyPackages)
 	r.Post("/users/{userID}/key-packages/claim", h.claimKeyPackages)
+	r.Post("/chats/{chatID}/join-request", h.requestJoin)
 
 	r.Post("/handshake", h.publishHandshake)
 	r.Get("/handshake/{chatType}/{chatID}", h.listChatHandshake)
@@ -207,12 +208,54 @@ func (h *Handler) claimKeyPackages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	claimed, err := h.svc.ClaimKeyPackages(r.Context(), actor, userID, excludeDevice)
+	onlyDevice := uuid.Nil
+	if raw := r.URL.Query().Get("device"); raw != "" {
+		onlyDevice, err = uuid.Parse(raw)
+		if err != nil {
+			badRequest(w, r, "device must be a valid UUID")
+			return
+		}
+	}
+	claimed, err := h.svc.ClaimKeyPackages(r.Context(), actor, userID, excludeDevice, onlyDevice)
 	if err != nil {
 		fail(w, r, err)
 		return
 	}
 	httpresponse.OK(w, r, http.StatusOK, map[string]any{"keyPackages": claimed})
+}
+
+type joinRequest struct {
+	DeviceID string `json:"deviceId"`
+}
+
+// requestJoin: a device outside a private chat's group asks its members to
+// add it (see Service.RequestJoin).
+func (h *Handler) requestJoin(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actor(r)
+	if !ok {
+		unauth(w, r)
+		return
+	}
+	chatID, err := uuid.Parse(chi.URLParam(r, "chatID"))
+	if err != nil {
+		notFound(w, r)
+		return
+	}
+	var req joinRequest
+	if err := httpjson.Decode(w, r, &req); err != nil {
+		badRequest(w, r, "malformed JSON body")
+		return
+	}
+	deviceID, err := uuid.Parse(req.DeviceID)
+	if err != nil {
+		badRequest(w, r, "deviceId must be a valid UUID")
+		return
+	}
+	if err := h.svc.RequestJoin(r.Context(), actor, chatID, deviceID); err != nil {
+		fail(w, r, err)
+		return
+	}
+	httpresponse.OK(w, r, http.StatusAccepted, map[string]any{"requested": true})
 }
 
 type publishHandshakeRequest struct {

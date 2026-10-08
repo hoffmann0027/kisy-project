@@ -16,6 +16,7 @@ export {
   processWelcomes,
   addDeviceToChat,
   catchUpChat,
+  syncChatDevices,
   processChatHandshake,
   type EncryptedBody,
 } from "./chats";

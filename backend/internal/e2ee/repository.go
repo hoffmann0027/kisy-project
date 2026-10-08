@@ -26,9 +26,10 @@ type Repository interface {
 
 	AddKeyPackages(ctx context.Context, q db.DBTX, deviceID uuid.UUID, packages [][]byte) error
 	// ClaimKeyPackages atomically consumes one unclaimed key package per
-	// active device of userID, skipping excludeDevice (uuid.Nil = none).
-	// Devices whose pool ran dry are skipped.
-	ClaimKeyPackages(ctx context.Context, q db.DBTX, userID, excludeDevice uuid.UUID) ([]ClaimedKeyPackage, error)
+	// active device of userID, skipping excludeDevice (uuid.Nil = none) and,
+	// when onlyDevice is set, every device but that one. Devices whose pool
+	// ran dry are skipped.
+	ClaimKeyPackages(ctx context.Context, q db.DBTX, userID, excludeDevice, onlyDevice uuid.UUID) ([]ClaimedKeyPackage, error)
 	CountKeyPackages(ctx context.Context, q db.DBTX, deviceID uuid.UUID) (int, error)
 
 	InsertGroupMessage(ctx context.Context, q db.DBTX, m *GroupMessage) error
@@ -135,7 +136,7 @@ func (r *PostgresRepository) AddKeyPackages(ctx context.Context, q db.DBTX, devi
 	return nil
 }
 
-func (r *PostgresRepository) ClaimKeyPackages(ctx context.Context, q db.DBTX, userID, excludeDevice uuid.UUID) ([]ClaimedKeyPackage, error) {
+func (r *PostgresRepository) ClaimKeyPackages(ctx context.Context, q db.DBTX, userID, excludeDevice, onlyDevice uuid.UUID) ([]ClaimedKeyPackage, error) {
 	// One package per active device, consumed atomically. FOR UPDATE SKIP
 	// LOCKED keeps concurrent claimers from racing to the same row.
 	rows, err := q.Query(ctx, `
@@ -150,10 +151,11 @@ func (r *PostgresRepository) ClaimKeyPackages(ctx context.Context, q db.DBTX, us
 				FOR UPDATE SKIP LOCKED
 			) pick
 			WHERE d.user_id = $1 AND d.revoked_at IS NULL AND d.id <> $2
+			  AND ($3 = '00000000-0000-0000-0000-000000000000'::uuid OR d.id = $3)
 		)
 		UPDATE e2ee_key_packages kp SET consumed_at = now()
 		FROM picks WHERE kp.id = picks.id
-		RETURNING kp.device_id, kp.key_package`, userID, excludeDevice)
+		RETURNING kp.device_id, kp.key_package`, userID, excludeDevice, onlyDevice)
 	if err != nil {
 		return nil, fmt.Errorf("e2ee: claim key packages: %w", err)
 	}

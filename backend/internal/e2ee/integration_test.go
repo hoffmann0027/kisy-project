@@ -124,7 +124,7 @@ func TestKeyPackageLifecycle(t *testing.T) {
 	}
 
 	// Bob claims one package per alice device; a second claim gets the next one.
-	claimed, err := h.svc.ClaimKeyPackages(h.ctx, e2ee.Actor{UserID: h.b}, h.a, uuid.Nil)
+	claimed, err := h.svc.ClaimKeyPackages(h.ctx, e2ee.Actor{UserID: h.b}, h.a, uuid.Nil, uuid.Nil)
 	if err != nil || len(claimed) != 1 {
 		t.Fatalf("claim: %v, %d packages", err, len(claimed))
 	}

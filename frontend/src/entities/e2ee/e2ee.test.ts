@@ -26,6 +26,11 @@ interface FakeServer {
   listCalls: number;
   /** Current MLS epoch per chat, as the real server keeps it (audit B-02). */
   epochs: Map<string, number>;
+  /** Join requests made, and what an online member does about them. */
+  joinRequests: { chatId: string; deviceId: string }[];
+  onJoinRequest: ((chatId: string, deviceId: string) => Promise<void>) | null;
+  /** How many directory lookups were made, to show the sync is throttled. */
+  listDevicesCalls: number;
 }
 
 const server: FakeServer = {
@@ -36,6 +41,9 @@ const server: FakeServer = {
   epochs: new Map(),
   messages: new Map(),
   listCalls: 0,
+  joinRequests: [],
+  onJoinRequest: null,
+  listDevicesCalls: 0,
 };
 
 let nextId = 0;
@@ -54,11 +62,12 @@ vi.mock("@shared/api/endpoints", () => ({
     },
   },
   e2eeApi: {
-    async claimKeyPackages(userId: string, excludeDevice?: string) {
+    async claimKeyPackages(userId: string, excludeDevice?: string, onlyDevice?: string) {
       const pool = server.keyPackages.get(userId) ?? [];
       const byDevice = new Map<string, { deviceId: string; keyPackage: string }>();
       for (const kp of pool) {
         if (kp.deviceId === excludeDevice) continue;
+        if (onlyDevice && kp.deviceId !== onlyDevice) continue;
         if (!byDevice.has(kp.deviceId)) byDevice.set(kp.deviceId, kp);
       }
       const claimed = [...byDevice.values()];
@@ -132,7 +141,13 @@ vi.mock("@shared/api/endpoints", () => ({
       if (w) w.acked = true;
       return { acked: true };
     },
+    async requestJoin(chatId: string, deviceId: string) {
+      server.joinRequests.push({ chatId, deviceId });
+      await server.onJoinRequest?.(chatId, deviceId);
+      return { requested: true };
+    },
     async listDevices(userId: string) {
+      server.listDevicesCalls++;
       const devices = [...server.deviceOwners.entries()]
         .filter(([, owner]) => owner === userId)
         .map(([id]) => ({ id, userId, name: "device", createdAt: new Date().toISOString() }));
@@ -172,7 +187,14 @@ import {
   processWelcomes,
   resetChatStatesForTests,
   resetMLSState,
+  setJoinWaitForTests,
+  syncChatDevices,
+  DEVICE_NOT_IN_CHAT,
+  DEVICE_SYNC_INTERVAL_MS,
 } from "./chats";
+
+const poolSize = (userId: string, deviceId: string) =>
+  (server.keyPackages.get(userId) ?? []).filter((kp) => kp.deviceId === deviceId).length;
 
 async function makeSession(userId: string): Promise<E2EESession> {
   const store = new MemoryKeyStore();
@@ -221,7 +243,11 @@ describe("E2EE private chat orchestration", () => {
     server.epochs.clear();
     server.messages.clear();
     server.listCalls = 0;
+    server.joinRequests.length = 0;
+    server.onJoinRequest = null;
+    server.listDevicesCalls = 0;
     resetChatStatesForTests();
+    setJoinWaitForTests(1, 1);
   });
 
   it("alice initiates, bob joins via welcome, both directions decrypt", async () => {
@@ -368,6 +394,101 @@ describe("E2EE private chat orchestration", () => {
     ];
     expect(first).toBe(true);
     expect(second).toBe(false);
+  });
+
+  // A device is announced on every start and every key upload. A member that
+  // is already in the group must not be added again, and nobody's one-time
+  // key packages may be spent finding that out.
+  it("a repeat announcement neither re-adds a member nor spends a package", async () => {
+    const alice = await makeSession("user-alice");
+    const bob = await makeSession("user-bob");
+    await publishPool(bob, 3);
+    const chatId = "chat-repeat";
+    await encryptForChat(alice, chatId, "user-bob", "первое");
+    await processWelcomes(bob);
+
+    const bob2 = await makeSession("user-bob");
+    await publishPool(bob2, 3);
+    expect(await addDeviceToChat(alice, chatId, bob2.identity.deviceId, "user-bob")).toBe(true);
+    // Bob's first device is in the group already: adding bob2 claimed only
+    // bob2's package.
+    expect(poolSize("user-bob", bob.identity.deviceId)).toBe(2);
+    expect(poolSize("user-bob", bob2.identity.deviceId)).toBe(2);
+
+    expect(await addDeviceToChat(alice, chatId, bob2.identity.deviceId, "user-bob")).toBe(false);
+    expect(poolSize("user-bob", bob2.identity.deviceId)).toBe(2);
+    expect(server.handshake.filter((h) => h.chatId === chatId && h.kind === 2)).toHaveLength(2);
+  });
+
+  // The owner's tablet: the chat existed, the tablet was new, and nobody had
+  // added it. Every send ended in "the chat is being created on another
+  // device" — for good. Now it asks the chat's members to let it in, and a
+  // member who is online does.
+  it("a device outside the group asks to be let in and sends once a member does", async () => {
+    const alice = await makeSession("user-alice");
+    const bob = await makeSession("user-bob");
+    await publishPool(bob, 3);
+    const chatId = "chat-tablet";
+    await encryptForChat(alice, chatId, "user-bob", "первое");
+    await processWelcomes(bob);
+
+    const tablet = await makeSession("user-bob");
+    await publishPool(tablet, 3);
+    // Alice is online: the announcement reaches her and she adds the tablet.
+    server.onJoinRequest = async (cid, deviceId) => {
+      await addDeviceToChat(alice, cid, deviceId, "user-bob");
+    };
+
+    const sent = await encryptForChat(tablet, chatId, "user-alice", "с планшета");
+    expect(server.joinRequests).toEqual([{ chatId, deviceId: tablet.identity.deviceId }]);
+    const seen = await hydrateMessage(alice, messageDTO("m-tab", chatId, "user-bob", sent.ciphertext));
+    expect(seen.text).toBe("с планшета");
+  });
+
+  it("says plainly that the device is waiting to be let in when nobody answers", async () => {
+    const alice = await makeSession("user-alice");
+    const bob = await makeSession("user-bob");
+    await publishPool(bob, 3);
+    const chatId = "chat-tablet-alone";
+    await encryptForChat(alice, chatId, "user-bob", "первое");
+    await processWelcomes(bob);
+
+    const tablet = await makeSession("user-bob");
+    await publishPool(tablet, 3);
+    await expect(encryptForChat(tablet, chatId, "user-alice", "никого нет")).rejects.toThrow(DEVICE_NOT_IN_CHAT);
+    expect(server.joinRequests).toHaveLength(1);
+    // And it built no group of its own.
+    expect(server.handshake.filter((h) => h.senderDevice === tablet.identity.deviceId)).toHaveLength(0);
+  });
+
+  // Nobody was online when the tablet appeared. The first member to open the
+  // chat afterwards lets it in.
+  it("a member opening the chat adds the devices its group is missing", async () => {
+    const alice = await makeSession("user-alice");
+    const bob = await makeSession("user-bob");
+    await publishPool(bob, 3);
+    const chatId = "chat-sync";
+    await encryptForChat(alice, chatId, "user-bob", "первое");
+    await processWelcomes(bob);
+    server.deviceOwners.set(alice.identity.deviceId, "user-alice");
+
+    const tablet = await makeSession("user-bob");
+    await publishPool(tablet, 3);
+
+    const now = Date.now();
+    expect(await syncChatDevices(alice, chatId, now)).toBe(1);
+    expect(await processWelcomes(tablet)).toEqual([chatId]);
+    await processChatHandshake(bob, "private", chatId);
+    const after = await encryptForChat(alice, chatId, "user-bob", "теперь видно");
+    expect((await hydrateMessage(tablet, messageDTO("m-s", chatId, "user-alice", after.ciphertext))).text).toBe("теперь видно");
+
+    // Opening the chat again soon after asks the directory nothing.
+    const calls = server.listDevicesCalls;
+    expect(await syncChatDevices(alice, chatId, now + 1000)).toBe(0);
+    expect(server.listDevicesCalls).toBe(calls);
+    // Later it looks again, finds everyone in, and adds no one.
+    expect(await syncChatDevices(alice, chatId, now + DEVICE_SYNC_INTERVAL_MS + 1)).toBe(0);
+    expect(server.listDevicesCalls).toBeGreaterThan(calls);
   });
 
   // Audit B-03: a phone that was offline for a day opens the chat and gets the

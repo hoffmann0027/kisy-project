@@ -4156,6 +4156,7 @@ paths:
       parameters:
         - { name: userID, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: excludeDevice, in: query, required: false, schema: { type: string, format: uuid }, description: Skip this device (used when claiming one's own other devices). }
+        - { name: device, in: query, required: false, schema: { type: string, format: uuid }, description: Claim for this device only (adding the one device a group is missing). }
       responses:
         '200':
           description: One package per device
@@ -4176,6 +4177,44 @@ paths:
                                 deviceId: { type: string, format: uuid }
                                 keyPackage: { type: string, format: byte }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /e2ee/chats/{chatID}/join-request:
+    post:
+      tags: [e2ee]
+      summary: Ask a private chat's members to add one of the caller's devices
+      description: >
+        A device outside the chat's MLS group cannot send — the group exists,
+        so it may not build its own. The server repeats the
+        e2ee.device.added announcement for this chat to the peer and to the
+        caller's other clients; whichever member is online adds the device
+        and sends it a Welcome. Limited per device and chat.
+      parameters:
+        - { name: chatID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deviceId]
+              properties:
+                deviceId: { type: string, format: uuid }
+      responses:
+        '202':
+          description: The members were asked
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          requested: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /e2ee/handshake:
     post:
       tags: [e2ee]

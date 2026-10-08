@@ -941,6 +941,9 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	e2eeSvc.SetClaimPolicy(chatsSvc.SharePrivateChat, func(ctx context.Context, actor, target uuid.UUID) (bool, error) {
 		return limiter.Allow(ctx, "e2ee.claim", actor.String()+":"+target.String(), 20, time.Hour), nil
 	})
+	e2eeSvc.SetJoinLimit(func(ctx context.Context, deviceID, chatID uuid.UUID) (bool, error) {
+		return limiter.Allow(ctx, "e2ee.join", deviceID.String()+":"+chatID.String(), 30, time.Hour), nil
+	})
 	e2eeHandler := e2ee.NewHandler(e2eeSvc, func(r *http.Request) (e2ee.Actor, bool) {
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {

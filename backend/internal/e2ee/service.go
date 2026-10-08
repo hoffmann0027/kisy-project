@@ -63,7 +63,17 @@ type Service struct {
 	// chatsOf lists a user's private chats, to announce a new device to the
 	// people it now has to talk to (audit B-02).
 	chatsOf ChatsOfUser
+	// joinLimit bounds how often one device may ask to be added to one chat.
+	joinLimit JoinLimit
 }
+
+// JoinLimit reports whether this device may ask again, now, to be added to
+// this chat.
+type JoinLimit func(ctx context.Context, deviceID, chatID uuid.UUID) (bool, error)
+
+// SetJoinLimit installs the bound on join requests. Without one the requests
+// are not limited — the composition root always installs it.
+func (s *Service) SetJoinLimit(l JoinLimit) { s.joinLimit = l }
 
 // PeerCheck reports whether two users share a private chat.
 type PeerCheck func(ctx context.Context, a, b uuid.UUID) (bool, error)
@@ -154,8 +164,9 @@ func (s *Service) RegisterDevice(ctx context.Context, actor Actor, in RegisterDe
 
 // announceDevice tells the owner's counterparts — and the owner's own other
 // clients — that this device needs adding to their shared chats. Best-effort:
-// a device that nobody adds now is added the next time anyone is online, and
-// the chat says it is waiting rather than pretending to work.
+// a device that nobody adds now asks again on its next start, when it next
+// uploads key packages, when it tries to send (RequestJoin), and any member
+// opening the chat adds whatever devices its group is missing.
 func (s *Service) announceDevice(ctx context.Context, d *Device) {
 	if s.pub == nil || s.chatsOf == nil {
 		return
@@ -166,13 +177,54 @@ func (s *Service) announceDevice(ctx context.Context, d *Device) {
 		return
 	}
 	for _, c := range chats {
-		s.pub.PublishE2EEDeviceAdded([]uuid.UUID{c.PeerID, d.UserID}, map[string]any{
-			"chatType": "private",
-			"chatId":   c.ChatID,
-			"deviceId": d.ID,
-			"userId":   d.UserID,
-		})
+		s.publishDeviceAdded(c, d)
 	}
+}
+
+func (s *Service) publishDeviceAdded(c ChatPeer, d *Device) {
+	s.pub.PublishE2EEDeviceAdded([]uuid.UUID{c.PeerID, d.UserID}, map[string]any{
+		"chatType": "private",
+		"chatId":   c.ChatID,
+		"deviceId": d.ID,
+		"userId":   d.UserID,
+	})
+}
+
+// RequestJoin asks the members of one private chat to add one of the actor's
+// devices to its group. A device outside the group cannot send: the chat's
+// first epoch is taken, so it may not build a group of its own, and only a
+// member can let it in. Whoever of them is online does.
+func (s *Service) RequestJoin(ctx context.Context, actor Actor, chatID, deviceID uuid.UUID) error {
+	if err := s.authz.Private(ctx, chatID, actor.UserID); err != nil {
+		return err
+	}
+	d, err := s.ownsActiveDevice(ctx, actor, deviceID)
+	if err != nil {
+		return err
+	}
+	if s.joinLimit != nil {
+		allowed, err := s.joinLimit(ctx, deviceID, chatID)
+		if err != nil {
+			return err
+		}
+		if !allowed {
+			return ErrRateLimited
+		}
+	}
+	if s.pub == nil || s.chatsOf == nil {
+		return nil
+	}
+	chats, err := s.chatsOf(ctx, actor.UserID)
+	if err != nil {
+		return err
+	}
+	for _, c := range chats {
+		if c.ChatID == chatID {
+			s.publishDeviceAdded(c, d)
+			return nil
+		}
+	}
+	return ErrNotFound
 }
 
 // SetChatsOfUser wires the lookup of a user's private chats, used to announce
@@ -244,17 +296,26 @@ func (s *Service) UploadKeyPackages(ctx context.Context, actor Actor, deviceID u
 			return ErrValidation
 		}
 	}
-	if _, err := s.ownsActiveDevice(ctx, actor, deviceID); err != nil {
+	d, err := s.ownsActiveDevice(ctx, actor, deviceID)
+	if err != nil {
 		return err
 	}
-	return s.repo.AddKeyPackages(ctx, s.pool, deviceID, packages)
+	if err := s.repo.AddKeyPackages(ctx, s.pool, deviceID, packages); err != nil {
+		return err
+	}
+	// A brand-new device registers first and uploads its packages second, so
+	// the announcement made at registration reaches the other side while
+	// there is nothing yet to add it with. Now there is.
+	s.announceDevice(ctx, d)
+	return nil
 }
 
 // ClaimKeyPackages consumes one key package per active device of userID —
 // the caller is about to add that user to an MLS group. excludeDevice
 // (uuid.Nil = none) lets a user claim their OWN other devices without
-// burning the calling device's package.
-func (s *Service) ClaimKeyPackages(ctx context.Context, actor Actor, userID, excludeDevice uuid.UUID) ([]ClaimedKeyPackage, error) {
+// burning the calling device's package; onlyDevice (uuid.Nil = all) claims
+// for that one device alone, when it is the only one missing from a group.
+func (s *Service) ClaimKeyPackages(ctx context.Context, actor Actor, userID, excludeDevice, onlyDevice uuid.UUID) ([]ClaimedKeyPackage, error) {
 	// Claiming consumes the target's one-time packages, so it is not open to
 	// anyone (audit A-09): your own other devices, or someone you already share
 	// a private chat with — and a bounded number of times per pair. Without a
@@ -280,7 +341,7 @@ func (s *Service) ClaimKeyPackages(ctx context.Context, actor Actor, userID, exc
 			}
 		}
 	}
-	claimed, err := s.repo.ClaimKeyPackages(ctx, s.pool, userID, excludeDevice)
+	claimed, err := s.repo.ClaimKeyPackages(ctx, s.pool, userID, excludeDevice, onlyDevice)
 	if err != nil {
 		return nil, err
 	}

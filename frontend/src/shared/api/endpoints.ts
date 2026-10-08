@@ -237,12 +237,19 @@ export const e2eeApi = {
     apiClient.post<{ uploaded: number }>("/e2ee/key-packages", { deviceId, keyPackages }),
   countKeyPackages: (deviceId: string) =>
     apiClient.get<{ available: number }>(`/e2ee/key-packages/count?deviceId=${deviceId}`),
-  claimKeyPackages: (userId: string, excludeDevice?: string) => {
-    const q = excludeDevice ? `?excludeDevice=${excludeDevice}` : "";
+  /** One package per device of userId; `onlyDevice` claims for that device alone. */
+  claimKeyPackages: (userId: string, excludeDevice?: string, onlyDevice?: string) => {
+    const params = new URLSearchParams();
+    if (excludeDevice) params.set("excludeDevice", excludeDevice);
+    if (onlyDevice) params.set("device", onlyDevice);
+    const q = params.size > 0 ? `?${params}` : "";
     return apiClient.post<{ keyPackages: { deviceId: string; keyPackage: string }[] }>(
       `/e2ee/users/${userId}/key-packages/claim${q}`,
     );
   },
+  /** Ask a private chat's members to add this device to its group. */
+  requestJoin: (chatId: string, deviceId: string) =>
+    apiClient.post<{ requested: boolean }>(`/e2ee/chats/${chatId}/join-request`, { deviceId }),
   publishHandshake: (body: {
     chatType: ChatType;
     chatId: string;

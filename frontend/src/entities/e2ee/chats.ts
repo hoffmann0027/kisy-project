@@ -11,6 +11,7 @@ import {
   encryptMessage,
   getSodium,
   joinChat,
+  listMembers,
   processIncoming,
   serializeChatState,
   KISY_E2EE_ALG,
@@ -25,14 +26,19 @@ const utf8 = (t: string) => new TextEncoder().encode(t);
 const utf8dec = new TextDecoder();
 
 // --- per-chat serialization: MLS state must never be mutated concurrently ---
+//
+// Keyed like the state it guards: by device and chat. Two sessions in one
+// process (the tests, or a browser that switched accounts) hold different
+// states, and one waiting on the other could only deadlock.
 
 const locks = new Map<string, Promise<unknown>>();
 
-function withChatLock<T>(chatId: string, fn: () => Promise<T>): Promise<T> {
-  const prev = locks.get(chatId) ?? Promise.resolve();
+function withChatLock<T>(s: E2EESession, chatId: string, fn: () => Promise<T>): Promise<T> {
+  const key = stateKey(s, chatId);
+  const prev = locks.get(key) ?? Promise.resolve();
   const next = prev.then(fn, fn);
   locks.set(
-    chatId,
+    key,
     next.catch(() => undefined),
   );
   return next;
@@ -69,6 +75,9 @@ async function saveState(s: E2EESession, chatId: string, state: ChatState): Prom
 export function resetChatStatesForTests(): void {
   states.clear();
   locks.clear();
+  lastDeviceSync.clear();
+  barrenDevices.clear();
+  joinWait = { tries: 4, intervalMs: 2000 };
 }
 
 // --- plaintext cache (messageId → decrypted text) ---
@@ -282,7 +291,7 @@ export async function processWelcomes(s: E2EESession): Promise<string[]> {
   const joined: string[] = [];
 
   for (const w of welcomes) {
-    const joinedChat = await withChatLock(w.chatId, () => joinFromWelcome(s, w, pool, sodium));
+    const joinedChat = await withChatLock(s, w.chatId, () => joinFromWelcome(s, w, pool, sodium));
     // Always ack: either joined, redundant, or permanently unopenable
     // (its key package is gone) — re-delivery would never succeed.
     await e2eeApi.ackWelcome(w.id, s.identity.deviceId).catch(() => {});
@@ -328,7 +337,7 @@ async function joinFromWelcome(
 
 export async function processChatHandshake(s: E2EESession, chatType: ChatType, chatId: string): Promise<void> {
   if (chatType !== "private") return; // groups are stage 5
-  await withChatLock(chatId, () => catchUpHandshake(s, chatId));
+  await withChatLock(s, chatId, () => catchUpHandshake(s, chatId));
 }
 
 /**
@@ -372,18 +381,27 @@ async function catchUpHandshake(s: E2EESession, chatId: string): Promise<void> {
  *
  * Does nothing when we have no state for the chat (then we are not in the
  * group either, and somebody else will do it) or when the device is already a
- * member — the commit would be empty.
+ * member. The device is announced on every start and every key upload, so the
+ * membership check comes before the claim: a repeat announcement must not
+ * spend anyone's one-time key packages.
  */
 export async function addDeviceToChat(s: E2EESession, chatId: string, deviceId: string, ownerUserId: string): Promise<boolean> {
   if (deviceId === s.identity.deviceId) return false;
-  return withChatLock(chatId, async () => {
+  return withChatLock(s, chatId, async () => {
     const state = await loadState(s, chatId);
     if (!state) return false;
+    if (listMembers(state).some((m) => m.deviceId === deviceId)) return false;
 
     const sodium = await getSodium();
-    const { keyPackages } = await e2eeApi.claimKeyPackages(ownerUserId, s.identity.deviceId);
+    // Only the newcomer's package: the owner's other devices are members
+    // already, and a package claimed for them would be thrown away.
+    const { keyPackages } = await e2eeApi.claimKeyPackages(ownerUserId, s.identity.deviceId, deviceId);
     const forDevice = keyPackages.filter((kp) => kp.deviceId === deviceId);
-    if (forDevice.length === 0) return false;
+    if (forDevice.length === 0) {
+      barrenDevices.add(deviceId);
+      return false;
+    }
+    barrenDevices.delete(deviceId);
 
     const packages = forDevice.map((kp) => sodium.from_base64(kp.keyPackage, sodium.base64_variants.ORIGINAL));
     const commit = await addMembers(state, packages);
@@ -423,12 +441,70 @@ export async function addDeviceToChat(s: E2EESession, chatId: string, deviceId: 
   });
 }
 
+/**
+ * Add every device the chat's group is missing (audit B-02, the offline
+ * case).
+ *
+ * An announcement reaches only whoever is online at that moment; a device
+ * whose owner and peer were both away stayed outside the group for good, and
+ * could not send a word. Any member opening the chat now looks at who the
+ * group's users are, asks the directory which devices they have, and adds the
+ * ones that are not in it.
+ *
+ * At most once per chat every few minutes, and a device with no key packages
+ * left is not asked for again in this session — every claim counts against
+ * the per-pair limit. Returns how many devices this call added.
+ */
+export async function syncChatDevices(s: E2EESession, chatId: string, now: number = Date.now()): Promise<number> {
+  const key = stateKey(s, chatId);
+  const last = lastDeviceSync.get(key);
+  if (last !== undefined && now - last < DEVICE_SYNC_INTERVAL_MS) return 0;
+  lastDeviceSync.set(key, now);
+
+  const state = await withChatLock(s, chatId, () => loadState(s, chatId));
+  if (!state) return 0;
+  const members = listMembers(state);
+  const inGroup = new Set(members.map((m) => m.deviceId));
+  const users = [...new Set(members.map((m) => m.userId))];
+
+  let added = 0;
+  try {
+    for (const userId of users) {
+      const { devices } = await e2eeApi.listDevices(userId);
+      for (const d of devices) {
+        if (inGroup.has(d.id) || d.id === s.identity.deviceId || barrenDevices.has(d.id)) continue;
+        if (await addDeviceToChat(s, chatId, d.id, userId)) added++;
+      }
+    }
+  } catch (err) {
+    // Rate-limited or offline: the next opening of the chat tries again.
+    console.warn(`E2EE: could not bring chat ${chatId}'s devices up to date`, err);
+  }
+  return added;
+}
+
+/** How often one chat's group is checked for missing devices. */
+export const DEVICE_SYNC_INTERVAL_MS = 5 * 60_000;
+const lastDeviceSync = new Map<string, number>();
+/** Devices that had no key package to be added with, this session. */
+const barrenDevices = new Set<string>();
+
 // --- chat creation (first E2EE message in a private chat) ---
 
 async function initiateChat(s: E2EESession, chatId: string, peerUserId: string): Promise<ChatState> {
   const sodium = await getSodium();
   const fromB64 = (t: string) => sodium.from_base64(t, sodium.base64_variants.ORIGINAL);
   const toB64 = (u: Uint8Array) => sodium.to_base64(u, sodium.base64_variants.ORIGINAL);
+
+  // A commit in the chat's feed means its group exists and this device is
+  // simply not in it. Building another would be refused — after spending a
+  // one-time key package of every device on both sides for nothing.
+  const { messages: feed } = await e2eeApi.listHandshake("private", chatId);
+  if (feed.length > 0) {
+    const joined = await awaitJoin(s, chatId);
+    if (joined) return joined;
+    throw new UserFacingError(DEVICE_NOT_IN_CHAT);
+  }
 
   // One key package per device: the peer's devices + our own other devices.
   const [peer, ownOthers] = await Promise.all([
@@ -472,12 +548,15 @@ async function initiateChat(s: E2EESession, chatId: string, peerUserId: string):
     });
   } catch (err) {
     if (!isEpochConflict(err)) throw err;
-    // We lost: the group we just built stays unsaved and unused — saving it
-    // is exactly how the two sides used to end up with a state each. The
-    // other side's Welcome is already on its way; take it.
-    const adopted = await adoptPeerChat(s, chatId);
+    // The chat's group exists and this device is not in it: we lost the race
+    // to create it, or the device appeared after it did. The group we just
+    // built stays unsaved and unused — saving it is exactly how the two sides
+    // used to end up with a state each. Ask the members to let us in and
+    // wait a little for the Welcome; a member who is online answers in a
+    // second or two.
+    const adopted = await awaitJoin(s, chatId);
     if (adopted) return adopted;
-    throw new UserFacingError(CHAT_BEING_CREATED);
+    throw new UserFacingError(DEVICE_NOT_IN_CHAT);
   }
 
   if (commit.welcome) {
@@ -499,6 +578,32 @@ async function initiateChat(s: E2EESession, chatId: string, peerUserId: string):
 /** The server answered "someone else moved this chat first" (409). */
 function isEpochConflict(err: unknown): boolean {
   return err instanceof ApiError && err.code === "EPOCH_CONFLICT";
+}
+
+/** How long a send waits to be let into a chat's group. */
+let joinWait = { tries: 4, intervalMs: 2000 };
+
+/** Test-only: shorten the wait for a Welcome. */
+export function setJoinWaitForTests(tries: number, intervalMs: number): void {
+  joinWait = { tries, intervalMs };
+}
+
+async function awaitJoin(s: E2EESession, chatId: string): Promise<ChatState | null> {
+  // The race's winner may have sent its Welcome already.
+  const ready = await adoptPeerChat(s, chatId);
+  if (ready) return ready;
+  try {
+    await e2eeApi.requestJoin(chatId, s.identity.deviceId);
+  } catch (err) {
+    // Asked too often: the earlier requests are still standing.
+    console.warn(`E2EE: join request for chat ${chatId} failed`, err);
+  }
+  for (let i = 0; i < joinWait.tries; i++) {
+    await new Promise((r) => setTimeout(r, joinWait.intervalMs));
+    const adopted = await adoptPeerChat(s, chatId);
+    if (adopted) return adopted;
+  }
+  return null;
 }
 
 /**
@@ -529,8 +634,8 @@ export interface EncryptedBody {
   epoch: number;
 }
 
-export const CHAT_BEING_CREATED =
-  "Чат уже создаётся на другом устройстве — подождите пару секунд и отправьте снова.";
+export const DEVICE_NOT_IN_CHAT =
+  "Это устройство ещё не подключено к защищённому чату. Его подключит собеседник или другое ваше устройство, как только окажется в сети, — тогда отправьте снова.";
 export const PEER_NO_DEVICES =
   "Собеседник ещё не входил в KISY с поддержкой шифрования — сообщение не отправлено.";
 export const PEER_KEYS_EXHAUSTED =
@@ -548,7 +653,7 @@ export async function encryptForChat(
   peerUserId: string,
   text: string,
 ): Promise<EncryptedBody> {
-  return withChatLock(chatId, async () => {
+  return withChatLock(s, chatId, async () => {
     let state = await loadState(s, chatId);
     if (!state) state = await initiateChat(s, chatId, peerUserId);
 
@@ -575,7 +680,7 @@ async function decryptOnce(
   ciphertextB64: string,
   expiresAt?: string | null,
 ): Promise<string | null> {
-  return withChatLock(chatId, () => decryptUnlocked(s, chatId, messageId, ciphertextB64, expiresAt));
+  return withChatLock(s, chatId, () => decryptUnlocked(s, chatId, messageId, ciphertextB64, expiresAt));
 }
 
 /** decryptOnce for a caller that already holds the chat's lock. */
@@ -628,7 +733,7 @@ const catchUpKey = (chatId: string) => `dec/${chatId}`;
  * one page request that immediately finds the cursor.
  */
 export async function catchUpChat(s: E2EESession, chatId: string): Promise<number> {
-  return withChatLock(chatId, async () => {
+  return withChatLock(s, chatId, async () => {
     if (!(await loadState(s, chatId))) return 0; // not in this chat's group (yet)
 
     const cursorRaw = await s.store.get(catchUpKey(chatId));
