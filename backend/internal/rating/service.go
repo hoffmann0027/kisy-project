@@ -78,6 +78,9 @@ func (s *Service) Analytics(ctx context.Context, actorLevel int) (AnalyticsDTO, 
 	if a.Monthly == nil {
 		a.Monthly = []MonthlyProfit{}
 	}
+	if a.Recent == nil {
+		a.Recent = []LedgerEntryDTO{}
+	}
 	return a, nil
 }
 

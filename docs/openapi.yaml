@@ -5014,9 +5014,16 @@ components:
         minLevel: { type: integer, minimum: 1, maximum: 10 }
         status: { type: string, enum: [active, done] }
         createdBy: { type: string, format: uuid }
-        totalProfitKopecks: { type: integer, format: int64, description: Profit in euro cents. }
+        totalIncomeKopecks: { type: integer, format: int64, description: Recorded income in euro cents. }
+        totalExpenseKopecks: { type: integer, format: int64, description: Recorded expense in euro cents. }
+        totalProfitKopecks: { type: integer, format: int64, description: Profit in euro cents (income − expense). }
         tasks: { type: array, items: { $ref: '#/components/schemas/RatingTask' } }
         createdAt: { type: string, format: date-time }
+        updatedAt:
+          type: string
+          format: date-time
+          description: When anything last happened to the project — a task moved, money recorded, the project completed.
+        completedAt: { type: [string, 'null'], format: date-time }
     RatingAnalytics:
       type: object
       properties:
@@ -5027,6 +5034,8 @@ components:
             properties:
               projectId: { type: string, format: uuid }
               title: { type: string }
+              incomeKopecks: { type: integer, format: int64 }
+              expenseKopecks: { type: integer, format: int64 }
               profitKopecks: { type: integer, format: int64 }
         monthly:
           type: array
@@ -5034,7 +5043,23 @@ components:
             type: object
             properties:
               month: { type: string, example: "2026-01" }
+              incomeKopecks: { type: integer, format: int64 }
+              expenseKopecks: { type: integer, format: int64 }
               profitKopecks: { type: integer, format: int64 }
+        recent:
+          type: array
+          description: The latest ledger entries (at most 12), newest first.
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              projectId: { type: string, format: uuid }
+              projectTitle: { type: string }
+              incomeKopecks: { type: integer, format: int64 }
+              expenseKopecks: { type: integer, format: int64 }
+              note: { type: [string, 'null'] }
+              authorName: { type: string }
+              createdAt: { type: string, format: date-time }
     AuditEntry:
       type: object
       properties:

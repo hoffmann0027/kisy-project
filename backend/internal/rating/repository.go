@@ -81,14 +81,24 @@ type PostgresRepository struct{}
 func NewPostgresRepository() *PostgresRepository { return &PostgresRepository{} }
 
 func (r *PostgresRepository) ListProjects(ctx context.Context, q db.DBTX, actorLevel int) ([]ProjectDTO, error) {
+	// updated_at of the project row is never touched by the service; the last
+	// change is whichever came last of the project's own milestones, its
+	// tasks' moves and its ledger entries.
 	rows, err := q.Query(ctx, `
 		SELECT p.id, p.title, p.description, p.difficulty, p.min_level, p.status, p.created_by, p.created_at,
-		       COALESCE(fp.profit, 0)
+		       COALESCE(fp.income, 0), COALESCE(fp.expense, 0), COALESCE(fp.income, 0) - COALESCE(fp.expense, 0),
+		       GREATEST(p.created_at, COALESCE(p.completed_at, p.created_at),
+		                COALESCE(tp.last, p.created_at), COALESCE(fp.last, p.created_at)),
+		       p.completed_at
 		FROM rating_projects p
 		LEFT JOIN (
-			SELECT project_id, SUM(income_kopecks - expense_kopecks) AS profit
+			SELECT project_id, SUM(income_kopecks) AS income, SUM(expense_kopecks) AS expense, MAX(created_at) AS last
 			FROM rating_finance_entries GROUP BY project_id
 		) fp ON fp.project_id = p.id
+		LEFT JOIN (
+			SELECT project_id, MAX(GREATEST(created_at, updated_at)) AS last
+			FROM rating_tasks GROUP BY project_id
+		) tp ON tp.project_id = p.id
 		WHERE p.min_level >= $1
 		ORDER BY p.created_at`, actorLevel)
 	if err != nil {
@@ -99,7 +109,8 @@ func (r *PostgresRepository) ListProjects(ctx context.Context, q db.DBTX, actorL
 	var out []ProjectDTO
 	for rows.Next() {
 		var p ProjectDTO
-		if err := rows.Scan(&p.ID, &p.Title, &p.Description, &p.Difficulty, &p.MinLevel, &p.Status, &p.CreatedBy, &p.CreatedAt, &p.TotalProfitKopecks); err != nil {
+		if err := rows.Scan(&p.ID, &p.Title, &p.Description, &p.Difficulty, &p.MinLevel, &p.Status, &p.CreatedBy, &p.CreatedAt,
+			&p.TotalIncomeKopecks, &p.TotalExpenseKopecks, &p.TotalProfitKopecks, &p.UpdatedAt, &p.CompletedAt); err != nil {
 			return nil, fmt.Errorf("rating: scan project: %w", err)
 		}
 		p.Tasks = []TaskDTO{}
@@ -152,19 +163,20 @@ func (r *PostgresRepository) Analytics(ctx context.Context, q db.DBTX, actorLeve
 	var a AnalyticsDTO
 
 	perRows, err := q.Query(ctx, `
-		SELECT p.id, p.title, COALESCE(SUM(f.income_kopecks - f.expense_kopecks), 0)
+		SELECT p.id, p.title, COALESCE(SUM(f.income_kopecks), 0), COALESCE(SUM(f.expense_kopecks), 0),
+		       COALESCE(SUM(f.income_kopecks - f.expense_kopecks), 0)
 		FROM rating_projects p
 		LEFT JOIN rating_finance_entries f ON f.project_id = p.id
 		WHERE p.min_level >= $1
 		GROUP BY p.id, p.title
-		ORDER BY 3 DESC`, actorLevel)
+		ORDER BY 5 DESC`, actorLevel)
 	if err != nil {
 		return a, fmt.Errorf("rating: analytics per-project: %w", err)
 	}
 	defer perRows.Close()
 	for perRows.Next() {
 		var pp ProjectProfit
-		if err := perRows.Scan(&pp.ProjectID, &pp.Title, &pp.ProfitKopecks); err != nil {
+		if err := perRows.Scan(&pp.ProjectID, &pp.Title, &pp.IncomeKopecks, &pp.ExpenseKopecks, &pp.ProfitKopecks); err != nil {
 			return a, fmt.Errorf("rating: scan per-project: %w", err)
 		}
 		a.PerProject = append(a.PerProject, pp)
@@ -175,7 +187,7 @@ func (r *PostgresRepository) Analytics(ctx context.Context, q db.DBTX, actorLeve
 
 	monRows, err := q.Query(ctx, `
 		SELECT to_char(date_trunc('month', f.created_at), 'YYYY-MM'),
-		       SUM(f.income_kopecks - f.expense_kopecks)
+		       SUM(f.income_kopecks), SUM(f.expense_kopecks), SUM(f.income_kopecks - f.expense_kopecks)
 		FROM rating_finance_entries f
 		JOIN rating_projects p ON p.id = f.project_id
 		WHERE p.min_level >= $1
@@ -186,12 +198,35 @@ func (r *PostgresRepository) Analytics(ctx context.Context, q db.DBTX, actorLeve
 	defer monRows.Close()
 	for monRows.Next() {
 		var mp MonthlyProfit
-		if err := monRows.Scan(&mp.Month, &mp.ProfitKopecks); err != nil {
+		if err := monRows.Scan(&mp.Month, &mp.IncomeKopecks, &mp.ExpenseKopecks, &mp.ProfitKopecks); err != nil {
 			return a, fmt.Errorf("rating: scan monthly: %w", err)
 		}
 		a.Monthly = append(a.Monthly, mp)
 	}
-	return a, monRows.Err()
+	if err := monRows.Err(); err != nil {
+		return a, err
+	}
+
+	recent, err := q.Query(ctx, `
+		SELECT f.id, p.id, p.title, f.income_kopecks, f.expense_kopecks, f.note, u.display_name, f.created_at
+		FROM rating_finance_entries f
+		JOIN rating_projects p ON p.id = f.project_id
+		JOIN users u ON u.id = f.created_by
+		WHERE p.min_level >= $1
+		ORDER BY f.created_at DESC, f.id DESC
+		LIMIT $2`, actorLevel, RecentLedgerLimit)
+	if err != nil {
+		return a, fmt.Errorf("rating: analytics recent: %w", err)
+	}
+	defer recent.Close()
+	for recent.Next() {
+		var e LedgerEntryDTO
+		if err := recent.Scan(&e.ID, &e.ProjectID, &e.ProjectTitle, &e.IncomeKopecks, &e.ExpenseKopecks, &e.Note, &e.AuthorName, &e.CreatedAt); err != nil {
+			return a, fmt.Errorf("rating: scan recent: %w", err)
+		}
+		a.Recent = append(a.Recent, e)
+	}
+	return a, recent.Err()
 }
 
 func (r *PostgresRepository) CreateProject(ctx context.Context, q db.DBTX, title string, description *string, difficulty string, minLevel int, createdBy uuid.UUID) (uuid.UUID, error) {

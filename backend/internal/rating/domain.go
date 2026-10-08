@@ -64,18 +64,25 @@ type TaskDTO struct {
 	CreatedAt          time.Time `json:"createdAt"`
 }
 
-// ProjectDTO is a backlog project card with its tasks embedded.
+// ProjectDTO is a project with its tasks embedded. The money is the sum of
+// its ledger: income and expense apart, and their difference as profit.
 type ProjectDTO struct {
-	ID                 uuid.UUID `json:"id"`
-	Title              string    `json:"title"`
-	Description        *string   `json:"description"`
-	Difficulty         string    `json:"difficulty"`
-	MinLevel           int       `json:"minLevel"`
-	Status             string    `json:"status"`
-	CreatedBy          uuid.UUID `json:"createdBy"`
-	TotalProfitKopecks int64     `json:"totalProfitKopecks"`
-	Tasks              []TaskDTO `json:"tasks"`
-	CreatedAt          time.Time `json:"createdAt"`
+	ID                  uuid.UUID `json:"id"`
+	Title               string    `json:"title"`
+	Description         *string   `json:"description"`
+	Difficulty          string    `json:"difficulty"`
+	MinLevel            int       `json:"minLevel"`
+	Status              string    `json:"status"`
+	CreatedBy           uuid.UUID `json:"createdBy"`
+	TotalIncomeKopecks  int64     `json:"totalIncomeKopecks"`
+	TotalExpenseKopecks int64     `json:"totalExpenseKopecks"`
+	TotalProfitKopecks  int64     `json:"totalProfitKopecks"`
+	Tasks               []TaskDTO `json:"tasks"`
+	CreatedAt           time.Time `json:"createdAt"`
+	// UpdatedAt is when anything last happened to the project: a task taken,
+	// moved or returned, money recorded, the project completed.
+	UpdatedAt   time.Time  `json:"updatedAt"`
+	CompletedAt *time.Time `json:"completedAt"`
 }
 
 // FinanceEntryDTO is one ledger record.
@@ -89,20 +96,43 @@ type FinanceEntryDTO struct {
 	CreatedAt      time.Time `json:"createdAt"`
 }
 
-// AnalyticsDTO powers the two charts: per-project profit share (pie) and
-// total monthly profit across all projects (line).
+// AnalyticsDTO powers the dashboard's charts: each project's share of the
+// money, the monthly income/expense/profit series, and the latest ledger
+// entries as a feed of what happened.
 type AnalyticsDTO struct {
-	PerProject []ProjectProfit `json:"perProject"`
-	Monthly    []MonthlyProfit `json:"monthly"`
+	PerProject []ProjectProfit  `json:"perProject"`
+	Monthly    []MonthlyProfit  `json:"monthly"`
+	Recent     []LedgerEntryDTO `json:"recent"`
 }
 
 type ProjectProfit struct {
-	ProjectID     uuid.UUID `json:"projectId"`
-	Title         string    `json:"title"`
-	ProfitKopecks int64     `json:"profitKopecks"`
+	ProjectID      uuid.UUID `json:"projectId"`
+	Title          string    `json:"title"`
+	IncomeKopecks  int64     `json:"incomeKopecks"`
+	ExpenseKopecks int64     `json:"expenseKopecks"`
+	ProfitKopecks  int64     `json:"profitKopecks"`
 }
 
 type MonthlyProfit struct {
-	Month         string `json:"month"` // "YYYY-MM"
-	ProfitKopecks int64  `json:"profitKopecks"`
+	Month          string `json:"month"` // "YYYY-MM"
+	IncomeKopecks  int64  `json:"incomeKopecks"`
+	ExpenseKopecks int64  `json:"expenseKopecks"`
+	ProfitKopecks  int64  `json:"profitKopecks"`
 }
+
+// LedgerEntryDTO is one recorded income or expense, with the project it was
+// recorded against and who recorded it.
+type LedgerEntryDTO struct {
+	ID             uuid.UUID `json:"id"`
+	ProjectID      uuid.UUID `json:"projectId"`
+	ProjectTitle   string    `json:"projectTitle"`
+	IncomeKopecks  int64     `json:"incomeKopecks"`
+	ExpenseKopecks int64     `json:"expenseKopecks"`
+	Note           *string   `json:"note"`
+	AuthorName     string    `json:"authorName"`
+	CreatedAt      time.Time `json:"createdAt"`
+}
+
+// RecentLedgerLimit is how many of the latest ledger entries the analytics
+// carry: a feed, not the whole history (that is the CSV export).
+const RecentLedgerLimit = 12

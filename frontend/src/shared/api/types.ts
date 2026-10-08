@@ -624,18 +624,50 @@ export interface RatingProject {
   minLevel: number;
   status: "active" | "done";
   createdBy: string;
+  /** The project's ledger: income and expense apart, profit their difference (euro cents). */
+  totalIncomeKopecks: number;
+  totalExpenseKopecks: number;
   totalProfitKopecks: number;
   tasks: RatingTask[];
   createdAt: string;
+  /** When anything last happened: a task moved, money recorded, the project completed. */
+  updatedAt: string;
+  completedAt: string | null;
 }
 
 export interface RatingBoard {
   projects: RatingProject[];
 }
 
+export interface RatingProjectMoney {
+  projectId: string;
+  title: string;
+  incomeKopecks: number;
+  expenseKopecks: number;
+  profitKopecks: number;
+}
+export interface RatingMonth {
+  /** "YYYY-MM" */
+  month: string;
+  incomeKopecks: number;
+  expenseKopecks: number;
+  profitKopecks: number;
+}
+/** One recorded income or expense (GET /rating/analytics, the latest few). */
+export interface RatingLedgerEntry {
+  id: string;
+  projectId: string;
+  projectTitle: string;
+  incomeKopecks: number;
+  expenseKopecks: number;
+  note: string | null;
+  authorName: string;
+  createdAt: string;
+}
 export interface RatingAnalytics {
-  perProject: { projectId: string; title: string; profitKopecks: number }[];
-  monthly: { month: string; profitKopecks: number }[];
+  perProject: RatingProjectMoney[];
+  monthly: RatingMonth[];
+  recent: RatingLedgerEntry[];
 }
 
 export interface BoardColumn {
