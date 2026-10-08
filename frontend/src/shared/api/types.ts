@@ -152,6 +152,12 @@ export interface GroupMember {
   role: GroupRole;
 }
 
+/** Someone kept out of a group (GET /groups/:id/bans). */
+export interface GroupBan {
+  user: User;
+  bannedAt: string;
+}
+
 /** The caller's own standing in a group (GET /groups/:id/me). */
 export interface GroupViewer {
   member: boolean;

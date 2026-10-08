@@ -134,6 +134,7 @@ export const work: Translation<typeof source> = {
   "work.post.joined": "Je bent lid geworden van de community",
   "work.post.requestSent": "Aanvraag verstuurd — de beheerders bekijken hem",
   "work.post.joinFailed": "Kan geen lid worden",
+  "work.post.joinBanned": "Je bent geblokkeerd in deze community",
   "work.post.reactFailed": "Kan de reactie niet plaatsen",
   "work.post.delete": "Post verwijderen",
   "work.post.deleteFailed": "Kan de post niet verwijderen",

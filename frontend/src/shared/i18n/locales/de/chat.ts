@@ -157,6 +157,7 @@ export const chat: Translation<typeof source> = {
   "chat.findGroup.joined": "Du bist der Gruppe beigetreten",
   "chat.findGroup.requestSent": "Anfrage gesendet",
   "chat.findGroup.joinFailed": "Beitritt fehlgeschlagen",
+  "chat.findGroup.joinBanned": "Du wurdest aus dieser Community gesperrt",
   "chat.findGroup.empty": "Keine Gruppen zum Beitreten verfügbar.",
   "chat.findGroup.openFromLevel": "Öffentlich · ab {level} aufwärts",
   "chat.findGroup.requestFromLevel": "Geschlossen (auf Anfrage) · ab {level} aufwärts",

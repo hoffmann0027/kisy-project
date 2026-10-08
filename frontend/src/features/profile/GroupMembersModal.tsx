@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Avatar, Button, Modal, Spinner, VerifiedName, toast } from "@shared/ui";
+import { Icon } from "@shared/ui/icons";
 import { ROLE_LABELS, roleLabel, userSubtitle, type Group, type GroupRole, type JoinPolicy, type PostPolicy } from "@shared/api/types";
 import { groupsApi, usersApi } from "@shared/api/endpoints";
 import {
@@ -9,8 +10,12 @@ import {
   useAddMember,
   useDecideRequest,
   useDeleteGroup,
+  useGroupBans,
   useGroupMembers,
   useGroupRequests,
+  useLeaveGroup,
+  useRemoveMember,
+  useSetBan,
   useSetMemberRole,
   useUpdateGroupLevel,
   useUpdateGroupSettings,
@@ -30,6 +35,15 @@ interface Props {
 }
 
 const EDITOR_TIER: GroupRole[] = ["owner", "editor", "moderator"];
+
+// Who may show whom the door, as the server decides it (groups.mayDiscipline):
+// the founder and owners over editors, editors over moderators, moderators
+// over members. Equals do not remove each other.
+const RANK: Record<GroupRole, number> = { owner: 3, editor: 2, moderator: 1, member: 0 };
+function rankOf(group: Group, userId: string, role: GroupRole | undefined): number {
+  if (userId === group.createdBy) return RANK.owner;
+  return role === undefined ? -1 : RANK[role];
+}
 
 // Human labels for the in-group roles (keys, resolved at render).
 const GROUP_ROLE_LABEL: Record<GroupRole, Key> = {
@@ -62,6 +76,58 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
 
   const { data: requests } = useGroupRequests(group.id, open && canApprove);
   const decide = useDecideRequest();
+  // Leaving, removal and bans.
+  const leave = useLeaveGroup();
+  const removeMember = useRemoveMember();
+  const setBan = useSetBan();
+  const { data: bans } = useGroupBans(group.id, open && canApprove);
+  const isFounder = me.id === group.createdBy;
+  const amMember = myRole !== undefined;
+  const myRank = rankOf(group, me.id, myRole);
+  const mayDiscipline = (userId: string, role: GroupRole) =>
+    userId !== me.id && userId !== group.createdBy && (isCEO || (myRank >= 1 && myRank > rankOf(group, userId, role)));
+
+  const leaveGroup = () => {
+    const question = isCommunity ? "account.groupMembers.confirmLeaveCommunity" : "account.groupMembers.confirmLeaveGroup";
+    if (!window.confirm(t(question, { name: group.name }))) return;
+    leave.mutate(group.id, {
+      onSuccess: () => {
+        toast.success(isCommunity ? t("account.groupMembers.leftCommunity") : t("account.groupMembers.leftGroup"));
+        onClose();
+        navigate("/communities", { replace: true });
+      },
+      onError: (e) =>
+        toast.error(
+          e instanceof ApiError && e.status === 409 ? t("account.groupMembers.founderStays") : t("account.groupMembers.actionFailed"),
+        ),
+    });
+  };
+
+  const disciplineError = (e: unknown) =>
+    toast.error(e instanceof ApiError && e.status === 403 ? t("account.groupMembers.notAllowed") : t("account.groupMembers.actionFailed"));
+
+  const kick = (userId: string, name: string) => {
+    if (!window.confirm(t("account.groupMembers.confirmRemove", { name }))) return;
+    removeMember.mutate(
+      { groupId: group.id, userId },
+      { onSuccess: () => toast.success(t("account.groupMembers.memberRemoved", { name })), onError: disciplineError },
+    );
+  };
+
+  const ban = (userId: string, name: string) => {
+    if (!window.confirm(t("account.groupMembers.confirmBan", { name }))) return;
+    setBan.mutate(
+      { groupId: group.id, userId, banned: true },
+      { onSuccess: () => toast.success(t("account.groupMembers.memberBanned", { name })), onError: disciplineError },
+    );
+  };
+
+  const unban = (userId: string, name: string) => {
+    setBan.mutate(
+      { groupId: group.id, userId, banned: false },
+      { onSuccess: () => toast.success(t("account.groupMembers.memberUnbanned", { name })), onError: disciplineError },
+    );
+  };
 
   const changeLevel = (level: number) => {
     if (level === group.minRoleLevel) return;
@@ -256,6 +322,30 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
                   {m.role === "editor" ? t("account.groupMembers.removeEditor") : t("account.groupMembers.makeEditor")}
                 </Button>
               )}
+              {mayDiscipline(m.user.id, m.role) && (
+                <>
+                  <button
+                    type="button"
+                    className="ui-icon-btn"
+                    title={t("account.groupMembers.removeMember")}
+                    aria-label={`${t("account.groupMembers.removeMember")}: ${m.user.displayName}`}
+                    disabled={removeMember.isPending}
+                    onClick={() => kick(m.user.id, m.user.displayName)}
+                  >
+                    <Icon.X size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="ui-icon-btn"
+                    title={t("account.groupMembers.banMember")}
+                    aria-label={`${t("account.groupMembers.banMember")}: ${m.user.displayName}`}
+                    disabled={setBan.isPending}
+                    onClick={() => ban(m.user.id, m.user.displayName)}
+                  >
+                    <Icon.Ban size={16} />
+                  </button>
+                </>
+              )}
               {/* The one place someone you have never written to is visible:
                   a community's members. Without this, reporting a person
                   required opening a private chat with them first. */}
@@ -273,6 +363,36 @@ export function GroupMembersModal({ group, canAdd, open, onClose }: Props) {
         })}
       </div>
 
+      {canApprove && bans && bans.length > 0 && (
+        <div className="ui-field">
+          <label className="ui-field__label">{t("account.groupMembers.bannedList")}</label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {bans.map((b) => (
+              <div key={b.user.id} className="user-row" style={{ cursor: "default" }}>
+                <Avatar name={b.user.displayName} url={b.user.avatarUrl} size={34} />
+                <div style={{ flex: 1 }}>
+                  <div className="user-row__name">
+                    <VerifiedName name={b.user.displayName} verified={!!b.user.verifiedAt} />
+                  </div>
+                  <div className="user-row__role">{userSubtitle(b.user)}</div>
+                </div>
+                <Button variant="ghost" loading={setBan.isPending} onClick={() => unban(b.user.id, b.user.displayName)}>
+                  {t("account.groupMembers.unbanMember")}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* The founder deletes; everyone else leaves. */}
+      {amMember && !isFounder && (
+        <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 14 }}>
+          <Button variant="ghost" block loading={leave.isPending} onClick={leaveGroup}>
+            {isCommunity ? t("account.groupMembers.leaveCommunity") : t("account.groupMembers.leaveGroup")}
+          </Button>
+        </div>
+      )}
       {canDelete && (
         <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 14 }}>
           <Button variant="danger" block loading={del.isPending} onClick={removeGroup}>

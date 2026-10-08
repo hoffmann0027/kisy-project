@@ -128,6 +128,7 @@ export const work: Translation<typeof source> = {
   "work.post.joined": "You've joined the community",
   "work.post.requestSent": "Request sent — the admins will review it",
   "work.post.joinFailed": "Couldn't join",
+  "work.post.joinBanned": "You have been banned from this community",
   "work.post.reactFailed": "Couldn't add the reaction",
   "work.post.delete": "Delete post",
   "work.post.deleteFailed": "Couldn't delete the post",

@@ -162,6 +162,7 @@ export const chat: Translation<typeof source> = {
   "chat.findGroup.joined": "Dołączono do grupy",
   "chat.findGroup.requestSent": "Prośba wysłana",
   "chat.findGroup.joinFailed": "Nie udało się dołączyć",
+  "chat.findGroup.joinBanned": "Zostałeś zablokowany w tej społeczności",
   "chat.findGroup.empty": "Brak grup, do których możesz dołączyć.",
   "chat.findGroup.openFromLevel": "Publiczna · od {level} wzwyż",
   "chat.findGroup.requestFromLevel": "Zamknięta (na prośbę) · od {level} wzwyż",

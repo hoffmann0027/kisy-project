@@ -1027,7 +1027,8 @@ paths:
       description: >
         For an open group the cleared caller becomes a member immediately
         (idempotent). For a request group a pending join request is created.
-        A caller who cannot see the group by clearance gets 404.
+        A caller who cannot see the group by clearance gets 404; one banned
+        from it gets 403.
       parameters:
         - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
@@ -1045,6 +1046,99 @@ paths:
                           joined: { type: boolean }
                           status: { type: string, enum: ['', pending] }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /groups/{groupID}/leave:
+    post:
+      tags: [groups]
+      summary: Leave a group or community
+      description: >
+        Any member may leave, whether or not they can still see the group. The
+        founder cannot (409) — a group is deleted instead. Audited; emits
+        group.changed to the remaining members and to the leaver.
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Left, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /groups/{groupID}/members/{userID}:
+    delete:
+      tags: [groups]
+      summary: Remove a member (those who run the group, over lower ranks)
+      description: >
+        The CEO may remove anyone; the founder or an owner, an editor or a
+        moderator may remove someone ranked below them (owner > editor >
+        moderator > member). Nobody removes the founder or themselves. The
+        removed member may come back by the group's usual way in. Audited.
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: userID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Removed, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /groups/{groupID}/bans:
+    get:
+      tags: [groups]
+      summary: Who is banned (editor tier or CEO)
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Banned users, most recent first
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          bans:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                user: { $ref: '#/components/schemas/User' }
+                                bannedAt: { type: string, format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /groups/{groupID}/bans/{userID}:
+    post:
+      tags: [groups]
+      summary: Ban someone (same rule as removing a member)
+      description: >
+        Removes the user if they are a member, drops their pending join
+        request, and refuses joining, applying and being added until the ban
+        is lifted. Audited.
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: userID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Banned, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [groups]
+      summary: Lift a ban (editor tier or CEO)
+      description: Lets the user back by the group's usual way in; does not add them. Audited.
+      parameters:
+        - { name: groupID, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: userID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Lifted, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
   /groups/{groupID}/requests:

@@ -134,6 +134,7 @@ export const work: Translation<typeof source> = {
   "work.post.joined": "Ви приєдналися до спільноти",
   "work.post.requestSent": "Заявку надіслано — її розглянуть адміністратори",
   "work.post.joinFailed": "Не вдалося приєднатися",
+  "work.post.joinBanned": "Вас заблоковано в цій спільноті",
   "work.post.reactFailed": "Не вдалося поставити реакцію",
   "work.post.delete": "Видалити допис",
   "work.post.deleteFailed": "Не вдалося видалити допис",

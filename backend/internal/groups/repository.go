@@ -64,6 +64,18 @@ type Repository interface {
 	// DecidePendingRequest marks the pending request approved/rejected. Returns
 	// ErrRequestNotFound if there is no pending request.
 	DecidePendingRequest(ctx context.Context, q db.DBTX, groupID, userID, decidedBy uuid.UUID, status string) error
+	// RemoveMember deletes a membership. ErrNotMember when there was none.
+	RemoveMember(ctx context.Context, q db.DBTX, groupID, userID uuid.UUID) error
+	// DropPendingRequests deletes the user's pending join request, if any.
+	DropPendingRequests(ctx context.Context, q db.DBTX, groupID, userID uuid.UUID) error
+	// Ban keeps the user out of the group; banning twice is harmless.
+	Ban(ctx context.Context, q db.DBTX, groupID, userID, by uuid.UUID) error
+	// Unban lets the user back; false when they were not banned.
+	Unban(ctx context.Context, q db.DBTX, groupID, userID uuid.UUID) (bool, error)
+	// IsBanned reports whether the user is kept out of the group.
+	IsBanned(ctx context.Context, q db.DBTX, groupID, userID uuid.UUID) (bool, error)
+	// ListBans returns who is kept out, most recent first.
+	ListBans(ctx context.Context, q db.DBTX, groupID uuid.UUID) ([]Ban, error)
 }
 
 // DirectoryEntry is a group plus the actor's pending-request status.
@@ -211,6 +223,7 @@ func (r *PostgresRepository) ListDirectory(ctx context.Context, q db.DBTX, actor
 		WHERE g.is_archived = false AND g.deleted_at IS NULL
 		  AND (g.min_role_level IS NULL OR ($2 BETWEEN 1 AND 10 AND g.min_role_level >= $2))
 		  AND NOT EXISTS (SELECT 1 FROM group_members m WHERE m.group_id = g.id AND m.user_id = $1)
+		  AND NOT EXISTS (SELECT 1 FROM group_bans b WHERE b.group_id = g.id AND b.user_id = $1)
 		ORDER BY g.created_at DESC, g.id DESC`, actorID, actorLevel)
 	if err != nil {
 		return nil, fmt.Errorf("groups: list directory: %w", err)
@@ -329,6 +342,68 @@ func (r *PostgresRepository) AddMember(ctx context.Context, q db.DBTX, m *Member
 		return fmt.Errorf("groups: add member: %w", err)
 	}
 	return nil
+}
+
+func (r *PostgresRepository) RemoveMember(ctx context.Context, q db.DBTX, groupID, userID uuid.UUID) error {
+	tag, err := q.Exec(ctx, `DELETE FROM group_members WHERE group_id = $1 AND user_id = $2`, groupID, userID)
+	if err != nil {
+		return fmt.Errorf("groups: remove member: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotMember
+	}
+	return nil
+}
+
+func (r *PostgresRepository) DropPendingRequests(ctx context.Context, q db.DBTX, groupID, userID uuid.UUID) error {
+	if _, err := q.Exec(ctx, `DELETE FROM group_join_requests WHERE group_id = $1 AND user_id = $2 AND status = 'pending'`, groupID, userID); err != nil {
+		return fmt.Errorf("groups: drop pending requests: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepository) Ban(ctx context.Context, q db.DBTX, groupID, userID, by uuid.UUID) error {
+	if _, err := q.Exec(ctx, `
+		INSERT INTO group_bans (group_id, user_id, banned_by) VALUES ($1, $2, $3)
+		ON CONFLICT (group_id, user_id) DO NOTHING`, groupID, userID, by); err != nil {
+		return fmt.Errorf("groups: ban: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepository) Unban(ctx context.Context, q db.DBTX, groupID, userID uuid.UUID) (bool, error) {
+	tag, err := q.Exec(ctx, `DELETE FROM group_bans WHERE group_id = $1 AND user_id = $2`, groupID, userID)
+	if err != nil {
+		return false, fmt.Errorf("groups: unban: %w", err)
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
+func (r *PostgresRepository) IsBanned(ctx context.Context, q db.DBTX, groupID, userID uuid.UUID) (bool, error) {
+	var banned bool
+	if err := q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM group_bans WHERE group_id = $1 AND user_id = $2)`, groupID, userID).Scan(&banned); err != nil {
+		return false, fmt.Errorf("groups: is banned: %w", err)
+	}
+	return banned, nil
+}
+
+func (r *PostgresRepository) ListBans(ctx context.Context, q db.DBTX, groupID uuid.UUID) ([]Ban, error) {
+	rows, err := q.Query(ctx, `
+		SELECT user_id, banned_by, created_at FROM group_bans
+		WHERE group_id = $1 ORDER BY created_at DESC`, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("groups: list bans: %w", err)
+	}
+	defer rows.Close()
+	var out []Ban
+	for rows.Next() {
+		var b Ban
+		if err := rows.Scan(&b.UserID, &b.BannedBy, &b.CreatedAt); err != nil {
+			return nil, fmt.Errorf("groups: scan ban: %w", err)
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
 }
 
 func (r *PostgresRepository) IsMember(ctx context.Context, q db.DBTX, groupID, userID uuid.UUID) (bool, error) {

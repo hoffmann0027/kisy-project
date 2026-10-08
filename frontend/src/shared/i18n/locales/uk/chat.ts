@@ -162,6 +162,7 @@ export const chat: Translation<typeof source> = {
   "chat.findGroup.joined": "Ви приєдналися до групи",
   "chat.findGroup.requestSent": "Заявку надіслано",
   "chat.findGroup.joinFailed": "Не вдалося приєднатися",
+  "chat.findGroup.joinBanned": "Вас заблоковано в цій спільноті",
   "chat.findGroup.empty": "Немає груп, до яких можна приєднатися.",
   "chat.findGroup.openFromLevel": "Публічна · від {level} і вище",
   "chat.findGroup.requestFromLevel": "Закрита (за заявкою) · від {level} і вище",

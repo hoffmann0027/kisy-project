@@ -157,6 +157,7 @@ export const chat: Translation<typeof source> = {
   "chat.findGroup.joined": "Gruba katıldınız",
   "chat.findGroup.requestSent": "İstek gönderildi",
   "chat.findGroup.joinFailed": "Katılınamadı",
+  "chat.findGroup.joinBanned": "Bu toplulukta engellendiniz",
   "chat.findGroup.empty": "Katılabileceğiniz grup yok.",
   "chat.findGroup.openFromLevel": "Herkese açık · {level} ve üstü",
   "chat.findGroup.requestFromLevel": "Kapalı (istekle) · {level} ve üstü",

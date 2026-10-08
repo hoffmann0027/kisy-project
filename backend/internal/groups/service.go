@@ -35,6 +35,10 @@ const (
 	actionGroupRequestApproved = "group.request_approved"
 	actionGroupRequestRejected = "group.request_rejected"
 	actionGroupRoleChanged     = "group.role_changed"
+	actionGroupLeft            = "group.left"
+	actionGroupMemberRemoved   = "group.member_removed"
+	actionGroupMemberBanned    = "group.member_banned"
+	actionGroupMemberUnbanned  = "group.member_unbanned"
 )
 
 // ProfileLoader resolves a user's public profile, injected to avoid a
@@ -49,6 +53,11 @@ type ChangePublisher func(groupID uuid.UUID)
 // Injected to avoid a groups→ws cycle; optional.
 type DecisionNotifier func(userID, groupID uuid.UUID, approved bool)
 
+// FormerMemberPublisher tells one user who is no longer a member — they left,
+// were removed or banned — that the group changed, so their open clients
+// drop it. The ordinary change signal goes to member rows, and theirs is gone.
+type FormerMemberPublisher func(userID, groupID uuid.UUID)
+
 type Service struct {
 	pool     *pgxpool.Pool
 	repo     Repository
@@ -56,6 +65,7 @@ type Service struct {
 	profiles ProfileLoader
 	changed  ChangePublisher
 	decided  DecisionNotifier
+	former   FormerMemberPublisher
 	// quarantine holds new accounts back from creating communities.
 	quarantine *quarantine.Checker
 }
@@ -72,6 +82,9 @@ func (s *Service) SetProfileLoader(l ProfileLoader) { s.profiles = l }
 
 // SetChangePublisher wires real-time "group changed" notifications.
 func (s *Service) SetChangePublisher(p ChangePublisher) { s.changed = p }
+
+// SetFormerMemberPublisher wires the signal to people who just left a group.
+func (s *Service) SetFormerMemberPublisher(p FormerMemberPublisher) { s.former = p }
 
 // SetDecisionNotifier wires per-user join-request decision notifications.
 func (s *Service) SetDecisionNotifier(n DecisionNotifier) { s.decided = n }
@@ -480,6 +493,12 @@ func (s *Service) AddMember(ctx context.Context, groupID, targetID uuid.UUID, ta
 	if !access.CanAccessGroup(targetLevel, g.MinRoleLevel) {
 		return ErrNotFound
 	}
+	// A ban is lifted first, on purpose — not walked around by adding.
+	if banned, err := s.repo.IsBanned(ctx, s.pool, groupID, targetID); err != nil {
+		return err
+	} else if banned {
+		return ErrBanned
+	}
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -662,6 +681,12 @@ func (s *Service) Join(ctx context.Context, groupID uuid.UUID, actor ActorMeta) 
 		return JoinResult{}, err
 	} else if member {
 		return JoinResult{Joined: true}, nil
+	}
+	// Banned: no way back in, neither by "Вступить" nor by a request.
+	if banned, err := s.repo.IsBanned(ctx, s.pool, groupID, actor.UserID); err != nil {
+		return JoinResult{}, err
+	} else if banned {
+		return JoinResult{}, ErrBanned
 	}
 
 	if g.JoinPolicy == PolicyJoinOpen {
@@ -888,4 +913,219 @@ func (s *Service) SetMemberRole(ctx context.Context, groupID, targetID uuid.UUID
 	}
 	s.broadcast(groupID)
 	return nil
+}
+
+// --- leaving, removal and bans ---
+
+// rank orders who may act on whom inside a group: the founder and owners
+// above editors, editors above moderators, moderators above members, and a
+// non-member below everyone.
+func rank(g *Group, userID uuid.UUID, role string, member bool) int {
+	switch {
+	case !member:
+		return -1
+	case userID == g.CreatedBy || role == RoleOwner:
+		return 3
+	case role == RoleEditor:
+		return 2
+	case role == RoleModerator:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// mayDiscipline decides whether the actor may remove or ban the target: the
+// CEO may, and so may anyone who runs the group and ranks above the target.
+// Nobody may do it to the founder — a group is not taken from the one who
+// made it — or to themselves, which is leaving.
+func (s *Service) mayDiscipline(ctx context.Context, g *Group, actor ActorMeta, targetID uuid.UUID) error {
+	if targetID == actor.UserID || targetID == g.CreatedBy {
+		return ErrForbidden
+	}
+	if access.IsCEO(actor.RoleLevel) {
+		return nil
+	}
+	actorRole, actorMember, err := s.repo.MemberRole(ctx, s.pool, g.ID, actor.UserID)
+	if err != nil {
+		return err
+	}
+	targetRole, targetMember, err := s.repo.MemberRole(ctx, s.pool, g.ID, targetID)
+	if err != nil {
+		return err
+	}
+	mine := rank(g, actor.UserID, actorRole, actorMember)
+	if mine < 1 || mine <= rank(g, targetID, targetRole, targetMember) {
+		return ErrForbidden
+	}
+	return nil
+}
+
+// tellFormerMember lets a user who is no longer in the group drop it.
+func (s *Service) tellFormerMember(userID, groupID uuid.UUID) {
+	if s.former != nil {
+		s.former(userID, groupID)
+	}
+}
+
+// Leave takes the actor out of a group. Any member may, whether or not they
+// can still see the group — except its founder, who deletes it instead.
+func (s *Service) Leave(ctx context.Context, groupID uuid.UUID, actor ActorMeta) error {
+	g, err := s.repo.GetByID(ctx, s.pool, groupID)
+	if err != nil {
+		return err
+	}
+	if g.CreatedBy == actor.UserID {
+		return ErrFounderStays
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("groups: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	if err := s.repo.RemoveMember(ctx, tx, groupID, actor.UserID); err != nil {
+		return err
+	}
+	if err := s.record(ctx, tx, actor, actionGroupLeft, groupID, nil); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("groups: commit: %w", err)
+	}
+	s.broadcast(groupID)
+	s.tellFormerMember(actor.UserID, groupID)
+	return nil
+}
+
+// RemoveMember takes someone out of a group; they may come back by the
+// group's usual way in. See mayDiscipline for who may.
+func (s *Service) RemoveMember(ctx context.Context, groupID, targetID uuid.UUID, actor ActorMeta) error {
+	g, err := s.Get(ctx, groupID, actor)
+	if err != nil {
+		return err
+	}
+	if err := s.mayDiscipline(ctx, g, actor, targetID); err != nil {
+		return err
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("groups: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	if err := s.repo.RemoveMember(ctx, tx, groupID, targetID); err != nil {
+		return err
+	}
+	if err := s.record(ctx, tx, actor, actionGroupMemberRemoved, groupID, map[string]any{"userId": targetID.String()}); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("groups: commit: %w", err)
+	}
+	s.broadcast(groupID)
+	s.tellFormerMember(targetID, groupID)
+	return nil
+}
+
+// Ban takes someone out of a group and keeps them out: their pending request
+// goes, and joining, applying and being added are refused until the ban is
+// lifted. Someone who is not a member — an applicant, say — may be banned
+// too. See mayDiscipline for who may.
+func (s *Service) Ban(ctx context.Context, groupID, targetID uuid.UUID, actor ActorMeta) error {
+	g, err := s.Get(ctx, groupID, actor)
+	if err != nil {
+		return err
+	}
+	if err := s.mayDiscipline(ctx, g, actor, targetID); err != nil {
+		return err
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("groups: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	if err := s.repo.RemoveMember(ctx, tx, groupID, targetID); err != nil && !errors.Is(err, ErrNotMember) {
+		return err
+	}
+	if err := s.repo.DropPendingRequests(ctx, tx, groupID, targetID); err != nil {
+		return err
+	}
+	if err := s.repo.Ban(ctx, tx, groupID, targetID, actor.UserID); err != nil {
+		return err
+	}
+	if err := s.record(ctx, tx, actor, actionGroupMemberBanned, groupID, map[string]any{"userId": targetID.String()}); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("groups: commit: %w", err)
+	}
+	s.broadcast(groupID)
+	s.tellFormerMember(targetID, groupID)
+	return nil
+}
+
+// Unban lets someone back: the CEO or anyone who runs the group may. It does
+// not bring them back — they join by the group's usual way in.
+func (s *Service) Unban(ctx context.Context, groupID, targetID uuid.UUID, actor ActorMeta) error {
+	g, err := s.Get(ctx, groupID, actor)
+	if err != nil {
+		return err
+	}
+	ok, err := s.canApprove(ctx, g, actor)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrForbidden
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("groups: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	lifted, err := s.repo.Unban(ctx, tx, groupID, targetID)
+	if err != nil {
+		return err
+	}
+	if !lifted {
+		return ErrNotFound
+	}
+	if err := s.record(ctx, tx, actor, actionGroupMemberUnbanned, groupID, map[string]any{"userId": targetID.String()}); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("groups: commit: %w", err)
+	}
+	s.broadcast(groupID)
+	s.tellFormerMember(targetID, groupID)
+	return nil
+}
+
+// ListBans returns who is kept out of the group, for those who may lift it.
+// Shape: [{ "user": <profile>, "bannedAt": ... }].
+func (s *Service) ListBans(ctx context.Context, groupID uuid.UUID, actor ActorMeta) ([]any, error) {
+	g, err := s.Get(ctx, groupID, actor)
+	if err != nil {
+		return nil, err
+	}
+	ok, err := s.canApprove(ctx, g, actor)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, ErrForbidden
+	}
+	bans, err := s.repo.ListBans(ctx, s.pool, groupID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]any, 0, len(bans))
+	if s.profiles == nil {
+		return out, nil
+	}
+	for _, b := range bans {
+		if profile, ok := s.profiles(ctx, b.UserID); ok {
+			out = append(out, map[string]any{"user": profile, "bannedAt": b.CreatedAt})
+		}
+	}
+	return out, nil
 }

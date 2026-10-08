@@ -134,6 +134,7 @@ export const work = {
   "work.post.joined": "Вы вступили в сообщество",
   "work.post.requestSent": "Заявка отправлена — её рассмотрят администраторы",
   "work.post.joinFailed": "Не удалось вступить",
+  "work.post.joinBanned": "Вас заблокировали в этом сообществе",
   "work.post.reactFailed": "Не удалось поставить реакцию",
   "work.post.delete": "Удалить пост",
   "work.post.deleteFailed": "Не удалось удалить пост",

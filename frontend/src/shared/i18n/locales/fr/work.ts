@@ -136,6 +136,7 @@ export const work: Translation<typeof source> = {
   "work.post.joined": "Vous avez rejoint la communauté",
   "work.post.requestSent": "Demande envoyée — les administrateurs l'examineront",
   "work.post.joinFailed": "Impossible de rejoindre",
+  "work.post.joinBanned": "Vous avez été banni de cette communauté",
   "work.post.reactFailed": "Impossible d'ajouter la réaction",
   "work.post.delete": "Supprimer la publication",
   "work.post.deleteFailed": "Impossible de supprimer la publication",

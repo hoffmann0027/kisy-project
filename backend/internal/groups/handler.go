@@ -56,7 +56,12 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Get("/{groupID}/me", h.viewer) // caller's membership/role/post-right
 	r.Get("/{groupID}/members", h.listMembers)
 	r.Post("/{groupID}/members", h.addMember)
+	r.Delete("/{groupID}/members/{userID}", h.removeMember)     // those who run it, over lower ranks
 	r.Post("/{groupID}/members/{userID}/role", h.setMemberRole) // owner/CEO
+	r.Post("/{groupID}/leave", h.leave)
+	r.Get("/{groupID}/bans", h.listBans)
+	r.Post("/{groupID}/bans/{userID}", h.ban)
+	r.Delete("/{groupID}/bans/{userID}", h.unban)
 	r.Post("/{groupID}/avatar", h.uploadAvatar)
 	r.Post("/{groupID}/join", h.join)
 	r.Get("/{groupID}/requests", h.listRequests)
@@ -451,6 +456,8 @@ func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := h.svc.Join(r.Context(), groupID, actor)
 	switch {
+	case errors.Is(err, ErrBanned):
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, i18n.T(i18n.FromRequest(r), "groups.banned"))
 	case errors.Is(err, ErrNotFound):
 		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "group not found")
 	case err != nil:
@@ -584,5 +591,109 @@ func (h *Handler) setMemberRole(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "failed to change role")
 	default:
 		httpresponse.OK(w, r, http.StatusOK, map[string]any{"ok": true})
+	}
+}
+
+func (h *Handler) leave(w http.ResponseWriter, r *http.Request) {
+	actor, groupID, ok := h.reqActorGroup(w, r)
+	if !ok {
+		return
+	}
+	err := h.svc.Leave(r.Context(), groupID, actor)
+	switch {
+	case errors.Is(err, ErrFounderStays):
+		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrAccessDenied, i18n.T(i18n.FromRequest(r), "groups.founderStays"))
+	case errors.Is(err, ErrNotFound), errors.Is(err, ErrNotMember):
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "group or membership not found")
+	case err != nil:
+		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "failed to leave")
+	default:
+		httpresponse.OK(w, r, http.StatusOK, map[string]any{"left": true})
+	}
+}
+
+// failDiscipline answers a removal or a ban that did not happen.
+func failDiscipline(w http.ResponseWriter, r *http.Request, err error, what string) {
+	switch {
+	case errors.Is(err, ErrNotFound), errors.Is(err, ErrNotMember):
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "group or member not found")
+	case errors.Is(err, ErrForbidden):
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, i18n.T(i18n.FromRequest(r), "groups.cannotDiscipline"))
+	default:
+		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "failed to "+what)
+	}
+}
+
+func (h *Handler) removeMember(w http.ResponseWriter, r *http.Request) {
+	actor, groupID, ok := h.reqActorGroup(w, r)
+	if !ok {
+		return
+	}
+	targetID, err := uuid.Parse(chi.URLParam(r, "userID"))
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "group or member not found")
+		return
+	}
+	if err := h.svc.RemoveMember(r.Context(), groupID, targetID, actor); err != nil {
+		failDiscipline(w, r, err, "remove")
+		return
+	}
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"removed": true})
+}
+
+func (h *Handler) ban(w http.ResponseWriter, r *http.Request) {
+	actor, groupID, ok := h.reqActorGroup(w, r)
+	if !ok {
+		return
+	}
+	targetID, _, ok := h.reqTargetUser(w, r)
+	if !ok {
+		return
+	}
+	if err := h.svc.Ban(r.Context(), groupID, targetID, actor); err != nil {
+		failDiscipline(w, r, err, "ban")
+		return
+	}
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"banned": true})
+}
+
+func (h *Handler) unban(w http.ResponseWriter, r *http.Request) {
+	actor, groupID, ok := h.reqActorGroup(w, r)
+	if !ok {
+		return
+	}
+	targetID, err := uuid.Parse(chi.URLParam(r, "userID"))
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "ban not found")
+		return
+	}
+	err = h.svc.Unban(r.Context(), groupID, targetID, actor)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "ban not found")
+	case errors.Is(err, ErrForbidden):
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "not permitted")
+	case err != nil:
+		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "failed to unban")
+	default:
+		httpresponse.OK(w, r, http.StatusOK, map[string]any{"unbanned": true})
+	}
+}
+
+func (h *Handler) listBans(w http.ResponseWriter, r *http.Request) {
+	actor, groupID, ok := h.reqActorGroup(w, r)
+	if !ok {
+		return
+	}
+	bans, err := h.svc.ListBans(r.Context(), groupID, actor)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "group not found")
+	case errors.Is(err, ErrForbidden):
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "not permitted")
+	case err != nil:
+		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
+	default:
+		httpresponse.OK(w, r, http.StatusOK, map[string]any{"bans": bans})
 	}
 }

@@ -8,6 +8,7 @@ export const groupKeys = {
   members: (groupId: string) => ["group-members", groupId] as const,
   requests: (groupId: string) => ["group-requests", groupId] as const,
   viewer: (groupId: string) => ["group-viewer", groupId] as const,
+  bans: (groupId: string) => ["group-bans", groupId] as const,
 };
 
 export function useGroups() {
@@ -146,5 +147,54 @@ export function useSetMemberRole() {
     mutationFn: (args: { groupId: string; userId: string; role: GroupRole }) =>
       groupsApi.setMemberRole(args.groupId, args.userId, args.role),
     onSuccess: (_res, args) => qc.invalidateQueries({ queryKey: groupKeys.members(args.groupId) }),
+  });
+}
+
+// --- leaving, removal and bans ---
+
+/** Leave a group. The founder cannot — the server answers 409. */
+export function useLeaveGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (groupId: string) => groupsApi.leave(groupId),
+    onSuccess: (_res, groupId) => {
+      qc.invalidateQueries({ queryKey: groupKeys.list });
+      qc.invalidateQueries({ queryKey: groupKeys.directory });
+      qc.invalidateQueries({ queryKey: groupKeys.viewer(groupId) });
+    },
+  });
+}
+
+/** Take someone out of a group; they may come back by the usual way in. */
+export function useRemoveMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { groupId: string; userId: string }) => groupsApi.removeMember(args.groupId, args.userId),
+    onSuccess: (_res, args) => qc.invalidateQueries({ queryKey: groupKeys.members(args.groupId) }),
+  });
+}
+
+/** Who is kept out of a group — for those who run it. */
+export function useGroupBans(groupId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: groupKeys.bans(groupId ?? ""),
+    enabled: enabled && !!groupId,
+    queryFn: async () => (await groupsApi.bans(groupId as string)).bans,
+  });
+}
+
+/** Ban someone, or lift their ban. */
+export function useSetBan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { groupId: string; userId: string; banned: boolean }) => {
+      if (args.banned) await groupsApi.ban(args.groupId, args.userId);
+      else await groupsApi.unban(args.groupId, args.userId);
+    },
+    onSuccess: (_res, args) => {
+      qc.invalidateQueries({ queryKey: groupKeys.members(args.groupId) });
+      qc.invalidateQueries({ queryKey: groupKeys.bans(args.groupId) });
+      qc.invalidateQueries({ queryKey: groupKeys.requests(args.groupId) });
+    },
   });
 }

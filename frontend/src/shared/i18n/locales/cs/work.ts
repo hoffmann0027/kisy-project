@@ -134,6 +134,7 @@ export const work: Translation<typeof source> = {
   "work.post.joined": "Teď jsi v komunitě",
   "work.post.requestSent": "Žádost odeslána — posoudí ji administrátoři",
   "work.post.joinFailed": "Nepodařilo se vstoupit",
+  "work.post.joinBanned": "V této komunitě jste zablokováni",
   "work.post.reactFailed": "Reakci se nepodařilo přidat",
   "work.post.delete": "Smazat příspěvek",
   "work.post.deleteFailed": "Příspěvek se nepodařilo smazat",

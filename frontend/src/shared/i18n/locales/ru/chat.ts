@@ -157,6 +157,7 @@ export const chat = {
   "chat.findGroup.joined": "Вы вступили в группу",
   "chat.findGroup.requestSent": "Заявка отправлена",
   "chat.findGroup.joinFailed": "Не удалось вступить",
+  "chat.findGroup.joinBanned": "Вас заблокировали в этом сообществе",
   "chat.findGroup.empty": "Нет доступных для вступления групп.",
   "chat.findGroup.openFromLevel": "Публичная · от {level} и выше",
   "chat.findGroup.requestFromLevel": "Закрытая (по заявке) · от {level} и выше",

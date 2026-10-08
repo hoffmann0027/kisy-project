@@ -3,6 +3,7 @@ import { t } from "@shared/i18n";
 import { Avatar, Button, Modal, Spinner, toast } from "@shared/ui";
 import { roleLabel, type DirectoryGroup } from "@shared/api/types";
 import { useGroupDirectory, useJoinGroup } from "@entities/group/queries";
+import { ApiError } from "@shared/api/envelope";
 
 interface Props {
   open: boolean;
@@ -28,7 +29,8 @@ export function FindGroupModal({ open, onClose }: Props) {
           toast.success(t("chat.findGroup.requestSent"));
         }
       },
-      onError: () => toast.error(t("chat.findGroup.joinFailed")),
+      onError: (e) =>
+        toast.error(e instanceof ApiError && e.status === 403 ? t("chat.findGroup.joinBanned") : t("chat.findGroup.joinFailed")),
     });
   };
 

@@ -488,6 +488,11 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		wsPublisher.PublishGroupChangedTo(ids, groupID)
 	}
 	groupsSvc.SetChangePublisher(groupChanged)
+	// Someone who left, was removed or banned has no member row for the
+	// ordinary signal to reach; their clients still have to drop the group.
+	groupsSvc.SetFormerMemberPublisher(func(userID, groupID uuid.UUID) {
+		wsPublisher.PublishGroupChangedTo([]uuid.UUID{userID}, groupID)
+	})
 	// Notify a join-request applicant (a non-member for a rejection) of the
 	// decision via a per-user realtime notification.
 	groupsSvc.SetDecisionNotifier(func(userID, groupID uuid.UUID, approved bool) {

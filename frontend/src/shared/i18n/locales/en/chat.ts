@@ -157,6 +157,7 @@ export const chat: Translation<typeof source> = {
   "chat.findGroup.joined": "You joined the group",
   "chat.findGroup.requestSent": "Request sent",
   "chat.findGroup.joinFailed": "Couldn't join",
+  "chat.findGroup.joinBanned": "You have been banned from this community",
   "chat.findGroup.empty": "No groups available to join.",
   "chat.findGroup.openFromLevel": "Public · {level} and above",
   "chat.findGroup.requestFromLevel": "Private (by request) · {level} and above",

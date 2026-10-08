@@ -157,6 +157,7 @@ export const chat: Translation<typeof source> = {
   "chat.findGroup.joined": "Je bent lid geworden van de groep",
   "chat.findGroup.requestSent": "Aanvraag verstuurd",
   "chat.findGroup.joinFailed": "Kan geen lid worden",
+  "chat.findGroup.joinBanned": "Je bent geblokkeerd in deze community",
   "chat.findGroup.empty": "Geen groepen waar je lid van kunt worden.",
   "chat.findGroup.openFromLevel": "Openbaar · {level} en hoger",
   "chat.findGroup.requestFromLevel": "Besloten (op aanvraag) · {level} en hoger",

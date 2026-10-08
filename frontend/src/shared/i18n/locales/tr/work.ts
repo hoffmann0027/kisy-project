@@ -134,6 +134,7 @@ export const work: Translation<typeof source> = {
   "work.post.joined": "Topluluğa katıldınız",
   "work.post.requestSent": "İstek gönderildi — yöneticiler inceleyecek",
   "work.post.joinFailed": "Katılınamadı",
+  "work.post.joinBanned": "Bu toplulukta engellendiniz",
   "work.post.reactFailed": "Tepki eklenemedi",
   "work.post.delete": "Gönderiyi sil",
   "work.post.deleteFailed": "Gönderi silinemedi",

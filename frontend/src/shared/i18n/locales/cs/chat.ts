@@ -162,6 +162,7 @@ export const chat: Translation<typeof source> = {
   "chat.findGroup.joined": "Teď jsi ve skupině",
   "chat.findGroup.requestSent": "Žádost odeslána",
   "chat.findGroup.joinFailed": "Nepodařilo se vstoupit",
+  "chat.findGroup.joinBanned": "V této komunitě jste zablokováni",
   "chat.findGroup.empty": "Žádné skupiny, do kterých by šlo vstoupit.",
   "chat.findGroup.openFromLevel": "Veřejná · {level} a výše",
   "chat.findGroup.requestFromLevel": "Uzavřená (na žádost) · {level} a výše",

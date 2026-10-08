@@ -25,7 +25,20 @@ var (
 	// ErrUnderSanction refuses a founder's delete while moderation sanctions
 	// are live: deleting would erase them along with the group (audit A-38).
 	ErrUnderSanction = errors.New("groups: live moderation sanctions")
+	// ErrBanned refuses joining, applying or being added to a group the user
+	// was banned from.
+	ErrBanned = errors.New("groups: banned from this group")
+	// ErrFounderStays refuses the founder's leave: a group is never left
+	// without the one who runs it — it is deleted instead.
+	ErrFounderStays = errors.New("groups: the founder cannot leave")
 )
+
+// Ban is one person kept out of a group.
+type Ban struct {
+	UserID    uuid.UUID
+	BannedBy  *uuid.UUID
+	CreatedAt time.Time
+}
 
 // Join and post policy values (Stage N — group access settings).
 const (

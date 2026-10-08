@@ -29,6 +29,7 @@ import type {
   CalendarMonth,
   DirectoryGroup,
   GroupMember,
+  GroupBan,
   GroupViewer,
   GroupRole,
   GroupKind,
@@ -407,6 +408,13 @@ export const groupsApi = {
     apiClient.post<{ rejected: boolean }>(`/groups/${groupId}/requests/${userId}/reject`),
   setMemberRole: (groupId: string, userId: string, role: GroupRole) =>
     apiClient.post<{ ok: boolean }>(`/groups/${groupId}/members/${userId}/role`, { role }),
+  // Leaving, removal and bans.
+  leave: (groupId: string) => apiClient.post<{ left: boolean }>(`/groups/${groupId}/leave`),
+  removeMember: (groupId: string, userId: string) =>
+    apiClient.del<{ removed: boolean }>(`/groups/${groupId}/members/${userId}`),
+  bans: (groupId: string) => apiClient.get<{ bans: GroupBan[] }>(`/groups/${groupId}/bans`),
+  ban: (groupId: string, userId: string) => apiClient.post<{ banned: boolean }>(`/groups/${groupId}/bans/${userId}`),
+  unban: (groupId: string, userId: string) => apiClient.del<{ unbanned: boolean }>(`/groups/${groupId}/bans/${userId}`),
 };
 
 export const calendarApi = {

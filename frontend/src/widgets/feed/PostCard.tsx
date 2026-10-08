@@ -7,6 +7,7 @@ import { formatRelative } from "@shared/lib/format";
 import { t } from "@shared/i18n";
 import type { Post } from "@shared/api/types";
 import { useJoinGroup } from "@entities/group/queries";
+import { ApiError } from "@shared/api/envelope";
 import { useDeletePost, useReactToPost } from "@entities/post/queries";
 import { ReportButton } from "@features/reports/ReportButton";
 
@@ -63,7 +64,8 @@ export function PostCard({ post, showCommunity = true }: Props) {
         toast.success(
           post.community.joinPolicy === "open" ? t("work.post.joined") : t("work.post.requestSent"),
         ),
-      onError: () => toast.error(t("work.post.joinFailed")),
+      onError: (e) =>
+        toast.error(e instanceof ApiError && e.status === 403 ? t("work.post.joinBanned") : t("work.post.joinFailed")),
     });
   };
 
