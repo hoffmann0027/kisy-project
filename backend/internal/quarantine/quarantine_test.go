@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"kisy-backend/internal/i18n"
 )
 
 var now = time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
@@ -85,7 +87,8 @@ func TestQuarantineEndsAndNeverStartsForInvited(t *testing.T) {
 // wait, rounded up to whole hours.
 func TestRefusalSaysWhenItOpens(t *testing.T) {
 	c := checker(t, Account{CreatedAt: now.Add(-6*time.Hour - 55*time.Minute)}, 0)
-	status, message, ok := Describe(c.AllowPost(context.Background(), uuid.New()))
+	refusal := c.AllowPost(context.Background(), uuid.New())
+	status, message, ok := Describe(refusal, i18n.Default)
 	if !ok || status != http.StatusForbidden {
 		t.Fatalf("status %d ok=%v", status, ok)
 	}
@@ -93,7 +96,11 @@ func TestRefusalSaysWhenItOpens(t *testing.T) {
 	if !strings.Contains(message, "через 18 часов") {
 		t.Fatalf("message = %q", message)
 	}
-	if _, _, ok := Describe(errors.New("something else")); ok {
+	// And in the language of the app that asked.
+	if _, message, _ := Describe(refusal, "en"); !strings.Contains(message, "in 18 hours") {
+		t.Fatalf("en message = %q", message)
+	}
+	if _, _, ok := Describe(errors.New("something else"), i18n.Default); ok {
 		t.Fatal("an unrelated error was described as a quarantine refusal")
 	}
 }

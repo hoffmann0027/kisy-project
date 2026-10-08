@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/i18n"
 	"kisy-backend/pkg/httpresponse"
 )
 
@@ -82,7 +83,7 @@ func (h *Handler) change(w http.ResponseWriter, r *http.Request, block bool) {
 	}
 	switch {
 	case errors.Is(err, ErrSelf):
-		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "нельзя заблокировать себя")
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, i18n.T(i18n.FromRequest(r), "blocks.self"))
 	case err != nil:
 		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
 	default:

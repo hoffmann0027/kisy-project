@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"kisy-backend/internal/i18n"
 	"kisy-backend/pkg/httpresponse"
 )
 
@@ -212,51 +213,45 @@ func hoursLeft(d time.Duration) int {
 }
 
 // Describe maps a quarantine refusal onto the API contract: 403 plus the
-// wording the screen shows.
-func Describe(err error) (status int, message string, ok bool) {
+// wording the screen shows, in lang.
+func Describe(err error, lang i18n.Lang) (status int, message string, ok bool) {
 	var qe *Error
 	if !errors.As(err, &qe) {
 		return 0, "", false
 	}
-	opens := opensIn(qe.Remaining)
+	opens := opensIn(lang, qe.Remaining)
 	switch {
 	case errors.Is(err, ErrPosts):
-		return http.StatusForbidden, "Публикация постов откроется " + opens, true
+		return http.StatusForbidden, i18n.T(lang, "quarantine.posts", opens), true
 	case errors.Is(err, ErrCommunities):
-		return http.StatusForbidden, "Создание сообществ откроется " + opens, true
+		return http.StatusForbidden, i18n.T(lang, "quarantine.communities", opens), true
 	case errors.Is(err, ErrNewChats):
-		return http.StatusForbidden, "Пока можно начинать немного новых переписок в сутки. Ограничение снимется " + opens, true
+		return http.StatusForbidden, i18n.T(lang, "quarantine.newChats", opens), true
 	case errors.Is(err, ErrUpload):
-		return http.StatusRequestEntityTooLarge, "Новый аккаунт может отправлять файлы поменьше. Ограничение снимется " + opens, true
+		return http.StatusRequestEntityTooLarge, i18n.T(lang, "quarantine.upload", opens), true
 	}
-	return http.StatusForbidden, "Функция откроется " + opens, true
+	return http.StatusForbidden, i18n.T(lang, "quarantine.other", opens), true
 }
 
 // Is reports whether err is a quarantine refusal.
 func Is(err error) bool {
-	_, _, ok := Describe(err)
+	_, _, ok := Describe(err, i18n.Default)
 	return ok
 }
 
-// opensIn renders the wait in Russian: "через 18 часов", "через час".
-func opensIn(d time.Duration) string {
+// opensIn renders the wait in lang: "через 18 часов", "через час".
+func opensIn(lang i18n.Lang, d time.Duration) string {
 	h := hoursLeft(d)
-	switch {
-	case h <= 1:
-		return "через час"
-	case h%10 == 1 && h%100 != 11:
-		return fmt.Sprintf("через %d час", h)
-	case h%10 >= 2 && h%10 <= 4 && (h%100 < 10 || h%100 >= 20):
-		return fmt.Sprintf("через %d часа", h)
-	default:
-		return fmt.Sprintf("через %d часов", h)
+	if h <= 1 {
+		return i18n.T(lang, "quarantine.inAnHour")
 	}
+	return i18n.N(lang, "quarantine.inHours", h)
 }
 
 // Write answers a quarantine refusal on the API contract and reports whether
 // it did, so a handler can put it first in its error mapping.
 func Write(w http.ResponseWriter, r *http.Request, err error) bool {
-	status, message, ok := Describe(err)
+	status, message, ok := Describe(err, i18n.FromRequest(r))
 	if !ok {
 		return false
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"kisy-backend/internal/consent"
+	"kisy-backend/internal/i18n"
 	"kisy-backend/internal/quarantine"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
@@ -140,10 +141,19 @@ func (h *Handler) getMe(w http.ResponseWriter, r *http.Request) {
 	httpresponse.OK(w, r, http.StatusOK, body)
 }
 
-// DeleteConfirmation is the word the owner types to delete their account.
-// A second, deliberate action beside the password: the password is proof of
-// who is asking, this is proof that they meant it.
-const DeleteConfirmation = "УДАЛИТЬ"
+// confirmsDeletion reports whether typed is the word the owner types to
+// delete their account — in any of the app's languages, since the app asks for
+// it in its own. A second, deliberate action beside the password: the password
+// is proof of who is asking, this is proof that they meant it.
+func confirmsDeletion(typed string) bool {
+	typed = strings.TrimSpace(typed)
+	for _, l := range i18n.Supported {
+		if strings.EqualFold(typed, i18n.T(l, "users.deleteWord")) {
+			return true
+		}
+	}
+	return false
+}
 
 type deleteMeRequest struct {
 	Password string `json:"password"`
@@ -170,9 +180,10 @@ func (h *Handler) deleteMe(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "malformed JSON body")
 		return
 	}
-	if strings.TrimSpace(req.Confirm) != DeleteConfirmation {
+	if !confirmsDeletion(req.Confirm) {
+		lang := i18n.FromRequest(r)
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed,
-			"подтвердите удаление словом "+DeleteConfirmation)
+			i18n.T(lang, "users.deleteConfirm", i18n.T(lang, "users.deleteWord")))
 		return
 	}
 
@@ -182,7 +193,7 @@ func (h *Handler) deleteMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !okPassword {
-		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidCredentials, "неверный пароль")
+		httpresponse.Fail(w, r, http.StatusUnauthorized, httpresponse.ErrAuthInvalidCredentials, i18n.T(i18n.FromRequest(r), "users.wrongPassword"))
 		return
 	}
 
@@ -190,7 +201,7 @@ func (h *Handler) deleteMe(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(err, ErrLastCEO):
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied,
-			"аккаунт владельца удалить нельзя: сначала передайте управление")
+			i18n.T(i18n.FromRequest(r), "users.ownerCannotDelete"))
 		return
 	case errors.Is(err, ErrNotFound):
 		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "user not found")
@@ -343,10 +354,10 @@ func (h *Handler) acceptConsent(w http.ResponseWriter, r *http.Request) {
 func FailDisplayName(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, ErrDisplayNameTaken):
-		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrDisplayNameTaken, "Имя занято")
+		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrDisplayNameTaken, i18n.T(i18n.FromRequest(r), "users.nameTaken"))
 	case errors.Is(err, ErrDisplayNameCharacters):
-		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrDisplayNameInvalid, "Только буквы и одиночные пробелы между словами")
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrDisplayNameInvalid, i18n.T(i18n.FromRequest(r), "users.nameChars"))
 	default:
-		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrDisplayNameInvalid, "Имя: от 2 до 40 символов")
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrDisplayNameInvalid, i18n.T(i18n.FromRequest(r), "users.nameLength"))
 	}
 }

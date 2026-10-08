@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"kisy-backend/internal/access"
+	"kisy-backend/internal/i18n"
 	"kisy-backend/internal/quarantine"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
@@ -157,7 +158,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, ErrNotFound):
 		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "group not found")
 	case errors.Is(err, ErrForbidden):
-		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "только CEO может менять уровень группы")
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, i18n.T(i18n.FromRequest(r), "groups.onlyCeoLevel"))
 	case err != nil:
 		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "failed to update group")
 	default:
@@ -185,7 +186,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "only the CEO or the group founder may delete this group")
 	case errors.Is(err, ErrUnderSanction):
 		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrUnderModeration,
-			"Сообщество под санкциями модерации — пока они действуют, удалить его нельзя")
+			i18n.T(i18n.FromRequest(r), "groups.sanctionedDelete"))
 	case err != nil:
 		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "failed to delete group")
 	default:
@@ -267,7 +268,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		IsPublic:     req.IsPublic,
 	}, actor)
 	if errors.Is(err, ErrLevelTooHigh) {
-		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "нельзя создать группу с уровнем доступа выше вашего")
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, i18n.T(i18n.FromRequest(r), "groups.levelAboveYours"))
 		return
 	}
 	if quarantine.Write(w, r, err) {
@@ -369,7 +370,7 @@ func (h *Handler) addMember(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrValidationFailed, "user is already a member")
 	case errors.Is(err, ErrForbidden):
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied,
-			"участников добавляет только владелец группы, а в сообщество вступают сами")
+			i18n.T(i18n.FromRequest(r), "groups.membersByOwnerOnly"))
 	case err != nil:
 		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "failed to add member")
 	default:

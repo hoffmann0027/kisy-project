@@ -17,6 +17,8 @@ import (
 	webpush "github.com/SherClockHolmes/webpush-go"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"kisy-backend/internal/i18n"
 )
 
 // Subscription is a browser push endpoint with its encryption keys.
@@ -161,7 +163,14 @@ type Service struct {
 
 	// web is the client browser pushes go through (endpoint.go).
 	web *http.Client
+
+	// localeOf finds the language a push is written in: the recipient's.
+	localeOf func(context.Context, uuid.UUID) i18n.Lang
 }
+
+// SetLocaleOf wires how a recipient's language is found. Unset, every push is
+// in i18n.Default.
+func (s *Service) SetLocaleOf(f func(context.Context, uuid.UUID) i18n.Lang) { s.localeOf = f }
 
 func NewService(pool *pgxpool.Pool, repo Repository, log *slog.Logger, publicKey, privateKey, subject string) *Service {
 	return &Service{
@@ -225,13 +234,19 @@ type payload struct {
 }
 
 // Notify pushes a notification to every device of a user: subscribed browsers
-// and installed mobile apps. It runs its work synchronously; callers typically
-// invoke it in a goroutine. Dead endpoints and tokens are pruned.
-func (s *Service) Notify(ctx context.Context, userID uuid.UUID, title, body, url string) {
+// and installed mobile apps, worded in that user's language. It runs its work
+// synchronously; callers typically invoke it in a goroutine. Dead endpoints
+// and tokens are pruned.
+func (s *Service) Notify(ctx context.Context, userID uuid.UUID, title, body i18n.Msg, url string) {
 	ctx, cancel := context.WithTimeout(ctx, notifyTimeout)
 	defer cancel()
-	s.notifyBrowsers(ctx, userID, title, body, url)
-	s.notifyDevices(ctx, userID, title, body, url)
+	lang := i18n.Default
+	if s.localeOf != nil {
+		lang = s.localeOf(ctx, userID)
+	}
+	t, b := title.In(lang), body.In(lang)
+	s.notifyBrowsers(ctx, userID, t, b, url)
+	s.notifyDevices(ctx, userID, t, b, url)
 }
 
 // CallInviteTTL bounds how long FCM keeps trying to deliver a ring. Past it

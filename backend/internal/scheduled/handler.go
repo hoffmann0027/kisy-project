@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/i18n"
 	"kisy-backend/internal/messages"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
@@ -204,7 +205,7 @@ func notFound(w http.ResponseWriter, r *http.Request) {
 func fail(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, messages.ErrEncryptionRequired):
-		httpresponse.Fail(w, r, http.StatusUnprocessableEntity, httpresponse.ErrE2EERequired, messages.EncryptionRequiredMessage)
+		httpresponse.Fail(w, r, http.StatusUnprocessableEntity, httpresponse.ErrE2EERequired, i18n.T(i18n.FromRequest(r), "messages.encryptionRequired"))
 	case errors.Is(err, ErrValidation):
 		badRequest(w, r, "invalid request")
 	case errors.Is(err, ErrNotFound):

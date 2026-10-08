@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/i18n"
 	"kisy-backend/internal/messages"
 )
 
@@ -152,7 +153,7 @@ func (s *Service) raiseMention(ctx context.Context, target uuid.UUID, m messages
 		// request. Bounded by push.notifyTimeout (30 s for the whole fan-out)
 		// and a 10 s client per delivery — this used to claim a timeout that
 		// did not exist (audit A-17, D-07).
-		go s.pusher.Notify(context.Background(), target, "KISY", "Вас упомянули в сообщении", s.chatURL(m))
+		go s.pusher.Notify(context.Background(), target, i18n.Raw("KISY"), i18n.M("push.mentioned"), s.chatURL(m))
 	}
 }
 
@@ -167,5 +168,5 @@ func (s *Service) pushNewMessage(ctx context.Context, target uuid.UUID, m messag
 	// request. Bounded by push.notifyTimeout (30 s for the whole fan-out)
 	// and a 10 s client per delivery — this used to claim a timeout that
 	// did not exist (audit A-17, D-07).
-	go s.pusher.Notify(context.Background(), target, "KISY", "Новое сообщение", s.chatURL(m))
+	go s.pusher.Notify(context.Background(), target, i18n.Raw("KISY"), i18n.M("push.newMessage"), s.chatURL(m))
 }

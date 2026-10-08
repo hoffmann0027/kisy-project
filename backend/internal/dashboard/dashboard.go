@@ -30,6 +30,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+
+	"kisy-backend/internal/i18n"
 )
 
 // GrowthDays is how far back the registrations chart reaches.
@@ -311,12 +313,13 @@ func ms(d time.Duration) *int64 {
 
 func (s *Service) system(ctx context.Context) System {
 	sys := System{Version: s.set.Version, StartedAt: s.set.StartedAt}
+	lang := i18n.FromContext(ctx)
 	check := func(name string, f func(context.Context) error) {
 		c, cancel := context.WithTimeout(ctx, 2*time.Second)
 		defer cancel()
 		start := s.now()
 		if err := f(c); err != nil {
-			sys.Checks = append(sys.Checks, Check{Name: name, State: "down", Detail: "не отвечает"})
+			sys.Checks = append(sys.Checks, Check{Name: name, State: "down", Detail: i18n.T(lang, "dashboard.down")})
 			return
 		}
 		sys.Checks = append(sys.Checks, Check{Name: name, State: "ok", LatencyMs: ms(s.now().Sub(start))})
@@ -334,9 +337,9 @@ func (s *Service) system(ctx context.Context) System {
 		check("redis", func(c context.Context) error { return s.rdb.Ping(c).Err() })
 	}
 	if s.set.Features.BlobS3 {
-		configured("files", true, "объектное хранилище")
+		configured("files", true, i18n.T(lang, "dashboard.objectStorage"))
 	} else {
-		configured("files", true, "в базе данных")
+		configured("files", true, i18n.T(lang, "dashboard.inDatabase"))
 	}
 	if s.set.Features.TURN && len(s.set.TURNURLs) > 0 {
 		check("turn", func(c context.Context) error { return stunProbe(c, s.set.TURNURLs[0]) })

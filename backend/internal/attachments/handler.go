@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/i18n"
 	"kisy-backend/internal/platform/filehttp"
 	"kisy-backend/internal/quarantine"
 	"kisy-backend/internal/quota"
@@ -258,7 +259,7 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, ErrTooLarge):
 		httpresponse.Fail(w, r, http.StatusRequestEntityTooLarge, httpresponse.ErrValidationFailed, "file too large")
 	case quota.Is(err):
-		status, msg, _ := quota.Describe(err)
+		status, msg, _ := quota.Describe(err, i18n.FromRequest(r))
 		httpresponse.Fail(w, r, status, httpresponse.ErrQuotaExceeded, msg)
 	case errors.Is(err, ErrEmpty):
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "empty file")

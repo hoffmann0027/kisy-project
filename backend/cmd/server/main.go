@@ -21,6 +21,7 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 
 	"kisy-backend/internal/config"
+	"kisy-backend/internal/i18n"
 	"kisy-backend/internal/platform/logger"
 	"kisy-backend/internal/platform/metrics"
 	"kisy-backend/internal/platform/postgres"
@@ -181,6 +182,8 @@ func newRouter(d routerDeps) http.Handler {
 	r.Use(security.Headers)
 	r.Use(metrics.Middleware)
 	r.Use(requestLogger(d.log))
+	// The language the app on the other end shows: refusals are written in it.
+	r.Use(i18n.Middleware)
 	r.Use(middleware.Timeout(30 * time.Second))
 
 	// Prometheus scrape endpoint. "Internal only" used to be the whole
@@ -240,6 +243,8 @@ func newRouter(d routerDeps) http.Handler {
 			r.Use(m.accountLimits.Middleware(claimsIdentity, accountLimitedScope))
 			// Which build of the app each account runs (X-Kisy-App-Version).
 			r.Use(m.clientVersions.Middleware(claimsUserID))
+			// Which language each account's app shows (X-Kisy-Lang), for pushes.
+			r.Use(m.locales.Middleware(claimsUserID))
 
 			r.Route("/users", func(r chi.Router) {
 				m.usersHandler.Routes(r)

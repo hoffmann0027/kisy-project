@@ -2,13 +2,13 @@ package feedback
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/i18n"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
 )
@@ -38,9 +38,9 @@ func fail(w http.ResponseWriter, r *http.Request, err error, what string) {
 		w.Header().Set("Retry-After", strconv.Itoa(int(limit.RetryAfter.Seconds())+1))
 		// Written for the screen (QUOTA_EXCEEDED is a user-facing code).
 		hours := int(limit.RetryAfter.Hours())
-		msg := "Отзыв можно оставлять раз в сутки. Следующий — меньше чем через час"
+		msg := i18n.T(i18n.FromRequest(r), "feedback.nextSoon")
 		if hours >= 1 {
-			msg = fmt.Sprintf("Отзыв можно оставлять раз в сутки. Следующий — через %d ч", hours+1)
+			msg = i18n.T(i18n.FromRequest(r), "feedback.nextInHours", hours+1)
 		}
 		httpresponse.Fail(w, r, http.StatusTooManyRequests, httpresponse.ErrQuotaExceeded, msg)
 	case errors.Is(err, ErrEmpty):

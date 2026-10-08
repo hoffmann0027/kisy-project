@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/i18n"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
 )
@@ -180,7 +181,7 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, ErrQuota):
 		// Written for the screen (QUOTA_EXCEEDED is a user-facing code).
 		httpresponse.Fail(w, r, http.StatusTooManyRequests, httpresponse.ErrQuotaExceeded,
-			fmt.Sprintf("Лимит на сутки исчерпан: не больше %d рассылок и %d личных уведомлений за 24 часа", BroadcastsPerDay, PersonalPerDay))
+			i18n.T(i18n.FromRequest(r), "announcements.dailyLimit", BroadcastsPerDay, PersonalPerDay))
 	case errors.Is(err, ErrNotFound):
 		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "announcement not found")
 	default:

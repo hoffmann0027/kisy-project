@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/i18n"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
 )
@@ -178,19 +179,19 @@ func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, ErrForbidden):
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "not permitted")
 	case errors.Is(err, ErrReasonRequired):
-		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "Укажите причину")
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, i18n.T(i18n.FromRequest(r), "moderation.reasonRequired"))
 	case errors.Is(err, ErrReasonTooLong):
-		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "Причина — не длиннее 1000 символов")
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, i18n.T(i18n.FromRequest(r), "moderation.reasonTooLong"))
 	case errors.Is(err, ErrInvalidKind), errors.Is(err, ErrInvalidDuration):
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, err.Error())
 	case errors.Is(err, ErrGroupDeleted):
-		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrValidationFailed, "Сообщество удалено — сначала восстановите его")
+		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrValidationFailed, i18n.T(i18n.FromRequest(r), "moderation.restoreFirst"))
 	case errors.Is(err, ErrNotDeleted):
-		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrValidationFailed, "Сообщество не удалено")
+		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrValidationFailed, i18n.T(i18n.FromRequest(r), "moderation.notDeleted"))
 	case errors.Is(err, ErrNotRevocable):
-		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrValidationFailed, "Эту санкцию нельзя снять")
+		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrValidationFailed, i18n.T(i18n.FromRequest(r), "moderation.sanctionPermanent"))
 	case errors.Is(err, ErrRestoreExpired):
-		httpresponse.Fail(w, r, http.StatusGone, httpresponse.ErrResourceNotFound, "Срок восстановления истёк")
+		httpresponse.Fail(w, r, http.StatusGone, httpresponse.ErrResourceNotFound, i18n.T(i18n.FromRequest(r), "moderation.restoreExpired"))
 	default:
 		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"kisy-backend/internal/i18n"
 	"kisy-backend/internal/platform/db"
 )
 
@@ -137,7 +138,7 @@ type MentionSink interface {
 // Pusher sends a Web Push notification to a user's browsers. Injected to avoid
 // a notifications→push import cycle; nil disables push.
 type Pusher interface {
-	Notify(ctx context.Context, userID uuid.UUID, title, body, url string)
+	Notify(ctx context.Context, userID uuid.UUID, title, body i18n.Msg, url string)
 }
 
 // Preferences gates notifications by the recipient's mute state and group
@@ -183,10 +184,10 @@ func NewService(pool *pgxpool.Pool, repo Repository, recipients RecipientResolve
 type Announcement struct {
 	Type    string
 	Payload map[string]any
-	// PushTitle / PushBody are the device notification; URL is where tapping it
-	// leads, an in-app path.
-	PushTitle string
-	PushBody  string
+	// PushTitle / PushBody are the device notification, worded in each
+	// recipient's language; URL is where tapping it leads, an in-app path.
+	PushTitle i18n.Msg
+	PushBody  i18n.Msg
 	URL       string
 }
 
@@ -209,7 +210,7 @@ func (s *Service) Announce(ctx context.Context, recipients []uuid.UUID, a Announ
 			}
 			s.ws.PublishNotification(id, live)
 		}
-		if s.pusher != nil && a.PushBody != "" {
+		if s.pusher != nil && !a.PushBody.IsZero() {
 			// #nosec G118 -- deliberate: the push must outlive the request that
 			// raised it. Bounded by push.notifyTimeout (30 s for the whole
 			// fan-out) and a 10 s client per delivery (audit A-17, D-07).

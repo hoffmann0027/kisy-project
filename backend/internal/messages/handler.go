@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/i18n"
 	"kisy-backend/internal/platform/ratelimit"
 	"kisy-backend/internal/quota"
 	"kisy-backend/pkg/httpjson"
@@ -286,10 +287,6 @@ type encryptedTextRequest struct {
 	Epoch      *int64 `json:"epoch"`
 }
 
-// EncryptionRequiredMessage is what a client shows when it tried to put text
-// into a private chat without encrypting it.
-const EncryptionRequiredMessage = "Личные сообщения отправляются только зашифрованными. Обновите приложение."
-
 func (h *Handler) forward(w http.ResponseWriter, r *http.Request) {
 	actor, ok := h.actor(r)
 	if !ok {
@@ -466,16 +463,16 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 	case errors.Is(err, ErrBadChatType):
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "unknown chat type")
 	case errors.Is(err, ErrEncryptionRequired):
-		httpresponse.Fail(w, r, http.StatusUnprocessableEntity, httpresponse.ErrE2EERequired, EncryptionRequiredMessage)
+		httpresponse.Fail(w, r, http.StatusUnprocessableEntity, httpresponse.ErrE2EERequired, i18n.T(i18n.FromRequest(r), "messages.encryptionRequired"))
 	case quota.Is(err):
-		status, msg, _ := quota.Describe(err)
+		status, msg, _ := quota.Describe(err, i18n.FromRequest(r))
 		httpresponse.Fail(w, r, status, httpresponse.ErrQuotaExceeded, msg)
 	case errors.Is(err, ErrForwardBroadens):
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "cannot forward to a broader audience")
 	case errors.Is(err, ErrForwardEncrypted):
 		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrValidationFailed, "encrypted messages are forwarded from the app")
 	case errors.Is(err, ErrBlocked):
-		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrBlockedByUser, "Пользователь ограничил переписку")
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrBlockedByUser, i18n.T(i18n.FromRequest(r), "chats.restricted"))
 	case errors.Is(err, ErrForbidden):
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "not permitted")
 	case errors.Is(err, ErrNotFound):

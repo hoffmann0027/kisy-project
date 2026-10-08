@@ -38,6 +38,7 @@ import (
 	"kisy-backend/internal/groups"
 	"kisy-backend/internal/invitations"
 	"kisy-backend/internal/linkpreview"
+	"kisy-backend/internal/locales"
 	"kisy-backend/internal/messages"
 	"kisy-backend/internal/moderation"
 	"kisy-backend/internal/notes"
@@ -92,6 +93,7 @@ type modules struct {
 	announcementsHandler *announcements.Handler
 	dashboardHandler     *dashboard.Handler
 	clientVersions       *clientversions.Recorder
+	locales              *locales.Recorder
 	notifprefsHandler    *notifprefs.Handler
 	boardsHandler        *boards.Handler
 	calendarHandler      *calendar.Handler
@@ -735,6 +737,8 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		pushSvc.SetFCM(fcm)
 		log.Info("mobile push enabled", "firebase_project", fcm.ProjectID())
 	}
+	// Every push is written in its recipient's language.
+	pushSvc.SetLocaleOf(locales.Of(pool))
 	notificationsSvc.SetPusher(pushSvc)
 	// "Your feedback was answered" goes through the same pipeline.
 	feedbackSvc.SetNotifier(notificationsSvc)
@@ -1029,6 +1033,8 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	announcementsSvc.SetPusher(pushSvc)
 	// Which app builds people run, for "New Update" (X-Kisy-App-Version).
 	clientVersions := clientversions.NewRecorder(pool, rdb, log)
+	// The language each account's app shows, so pushes reach people in it.
+	localeRecorder := locales.NewRecorder(pool, rdb, log)
 	announcementsHandler := announcements.NewHandler(announcementsSvc, func(r *http.Request) (announcements.ActorMeta, bool) {
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {
@@ -1100,6 +1106,7 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		announcementsHandler: announcementsHandler,
 		dashboardHandler:     dashboardHandler,
 		clientVersions:       clientVersions,
+		locales:              localeRecorder,
 		notifprefsHandler:    notifprefsHandler,
 		boardsHandler:        boardsHandler,
 		calendarHandler:      calendarHandler,

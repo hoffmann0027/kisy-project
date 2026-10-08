@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/i18n"
 	"kisy-backend/internal/platform/filehttp"
 	"kisy-backend/internal/quarantine"
 	"kisy-backend/internal/quota"
@@ -259,20 +260,20 @@ func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, ErrNotFound):
 		notFound(w, r)
 	case errors.Is(err, ErrTooLarge):
-		httpresponse.Fail(w, r, http.StatusRequestEntityTooLarge, httpresponse.ErrValidationFailed, "файл слишком большой")
+		httpresponse.Fail(w, r, http.StatusRequestEntityTooLarge, httpresponse.ErrValidationFailed, i18n.T(i18n.FromRequest(r), "posts.fileTooLarge"))
 	case quota.Is(err):
-		status, msg, _ := quota.Describe(err)
+		status, msg, _ := quota.Describe(err, i18n.FromRequest(r))
 		httpresponse.Fail(w, r, status, httpresponse.ErrQuotaExceeded, msg)
 	case errors.Is(err, ErrMembersOnly):
-		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "сообщество закрытое: записи видят только участники")
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, i18n.T(i18n.FromRequest(r), "posts.membersOnly"))
 	case errors.Is(err, ErrForbidden):
-		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, "у вас нет прав публиковать здесь")
+		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrAccessDenied, i18n.T(i18n.FromRequest(r), "posts.noRights"))
 	case errors.Is(err, ErrNotCommunity):
-		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "это группа, а не сообщество")
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, i18n.T(i18n.FromRequest(r), "posts.notCommunity"))
 	case errors.Is(err, ErrEmpty):
-		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "пост не может быть пустым")
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, i18n.T(i18n.FromRequest(r), "posts.empty"))
 	case errors.Is(err, ErrTooLong):
-		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "пост слишком длинный")
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, i18n.T(i18n.FromRequest(r), "posts.tooLong"))
 	default:
 		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
 	}

@@ -17,6 +17,7 @@ import (
 
 	"kisy-backend/internal/auth/password"
 	"kisy-backend/internal/consent"
+	"kisy-backend/internal/i18n"
 	"kisy-backend/internal/platform/clientip"
 	"kisy-backend/internal/platform/ratelimit"
 	"kisy-backend/internal/platform/turnstile"
@@ -155,7 +156,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validPassword(req.Password) {
-		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, password.RuleText)
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, i18n.T(i18n.FromRequest(r), "auth.passwordRule"))
 		return
 	}
 	accepted := consent.Acceptance{PrivacyVersion: req.PrivacyVersion, RulesVersion: req.RulesVersion}
@@ -290,7 +291,7 @@ func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validPassword(req.NewPassword) {
-		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, password.RuleText)
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, i18n.T(i18n.FromRequest(r), "auth.passwordRule"))
 		return
 	}
 
@@ -314,10 +315,10 @@ func (h *Handler) checkCaptcha(w http.ResponseWriter, r *http.Request, token str
 	case errors.Is(err, turnstile.ErrUnavailable):
 		slog.ErrorContext(r.Context(), "turnstile: verification unavailable", "error", err)
 		httpresponse.Fail(w, r, http.StatusServiceUnavailable, httpresponse.ErrCaptchaUnavailable,
-			"Проверка недоступна, попробуйте через минуту")
+			i18n.T(i18n.FromRequest(r), "auth.captchaUnavailable"))
 	default:
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrCaptchaFailed,
-			"Не удалось подтвердить, что вы не робот. Обновите страницу и попробуйте ещё раз")
+			i18n.T(i18n.FromRequest(r), "auth.captchaFailed"))
 	}
 	return false
 }

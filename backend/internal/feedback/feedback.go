@@ -28,6 +28,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"kisy-backend/internal/access"
+	"kisy-backend/internal/i18n"
 	"kisy-backend/internal/notifications"
 	"kisy-backend/internal/platform/db"
 )
@@ -403,8 +404,8 @@ func (s *Service) Reply(ctx context.Context, actor Actor, id uuid.UUID, body str
 				"reply":      body,
 				"by":         map[string]any{"id": actor.UserID, "displayName": name, "roleLevel": level},
 			},
-			PushTitle: "Ответ на ваш отзыв",
-			PushBody:  name + ": " + excerpt(body, 160),
+			PushTitle: i18n.M("feedback.replyPushTitle"),
+			PushBody:  i18n.Raw(name + ": " + excerpt(body, 160)),
 			URL:       "/hub",
 		})
 	}

@@ -35,6 +35,7 @@ import (
 
 	"kisy-backend/internal/access"
 	"kisy-backend/internal/audit"
+	"kisy-backend/internal/i18n"
 )
 
 // Audiences.
@@ -131,7 +132,7 @@ type Publisher interface {
 
 // Pusher sends a push to a user's devices. Satisfied by *push.Service.
 type Pusher interface {
-	Notify(ctx context.Context, userID uuid.UUID, title, body, url string)
+	Notify(ctx context.Context, userID uuid.UUID, title, body i18n.Msg, url string)
 }
 
 // pushWorkers bounds how many recipients are pushed to at once: an
@@ -386,12 +387,12 @@ func reachable(ctx context.Context, tx pgx.Tx, author uuid.UUID, authorLevel int
 // deliver sends the live event to everyone at once and the push through a
 // small pool of workers, after the request has been answered.
 func (s *Service) deliver(recipients []uuid.UUID, a *Announcement, payload map[string]any) {
-	s.fanOut(recipients, NotificationType, payload, a.Title, a.Author.DisplayName+": "+a.Body, "/")
+	s.fanOut(recipients, NotificationType, payload, i18n.Raw(a.Title), i18n.Raw(a.Author.DisplayName+": "+a.Body), "/")
 }
 
 // fanOut sends a stored notification live to everyone at once and as a push
 // through a small pool of workers, after the request has been answered.
-func (s *Service) fanOut(recipients []uuid.UUID, typ string, payload map[string]any, title, body, url string) {
+func (s *Service) fanOut(recipients []uuid.UUID, typ string, payload map[string]any, title, body i18n.Msg, url string) {
 	if s.pub != nil {
 		live := map[string]any{"type": typ}
 		for k, v := range payload {

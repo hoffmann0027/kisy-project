@@ -12,6 +12,7 @@ import (
 
 	"kisy-backend/internal/access"
 	"kisy-backend/internal/audit"
+	"kisy-backend/internal/i18n"
 	"kisy-backend/internal/platform/db"
 )
 
@@ -33,8 +34,9 @@ const (
 type Notice struct {
 	Recipients []uuid.UUID
 	Payload    map[string]any
-	Text       string
-	URL        string
+	// Text is the push, worded in each recipient's language.
+	Text i18n.Msg
+	URL  string
 }
 
 // Notifier delivers a Notice (stored notification, live event, push).

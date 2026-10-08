@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"kisy-backend/internal/i18n"
 	"kisy-backend/internal/platform/db"
 )
 
@@ -28,7 +29,9 @@ type Publisher interface {
 }
 
 // Default columns seeded when a board is created.
-var defaultColumns = []string{"К выполнению", "В работе", "Готово"}
+// defaultColumns are the columns a new board starts with, named in the
+// language of whoever creates it.
+var defaultColumns = []string{"boards.columnTodo", "boards.columnDoing", "boards.columnDone"}
 
 // Actor identifies the acting user.
 type Actor struct {
@@ -104,7 +107,7 @@ func (s *Service) Create(ctx context.Context, groupID uuid.UUID, title string, a
 	}
 	title = strings.TrimSpace(title)
 	if title == "" {
-		title = "Доска задач"
+		title = i18n.T(i18n.FromContext(ctx), "boards.defaultTitle")
 	}
 
 	tx, err := s.pool.Begin(ctx)
@@ -117,8 +120,9 @@ func (s *Service) Create(ctx context.Context, groupID uuid.UUID, title string, a
 	if err := s.repo.CreateBoard(ctx, tx, board); err != nil {
 		return nil, err
 	}
-	for i, name := range defaultColumns {
-		if err := s.repo.CreateColumn(ctx, tx, &Column{BoardID: board.ID, Title: name, Position: i}); err != nil {
+	lang := i18n.FromContext(ctx)
+	for i, key := range defaultColumns {
+		if err := s.repo.CreateColumn(ctx, tx, &Column{BoardID: board.ID, Title: i18n.T(lang, key), Position: i}); err != nil {
 			return nil, err
 		}
 	}

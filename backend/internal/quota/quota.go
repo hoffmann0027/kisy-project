@@ -24,6 +24,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"kisy-backend/internal/access"
+	"kisy-backend/internal/i18n"
 	"kisy-backend/internal/platform/db"
 )
 
@@ -207,23 +208,23 @@ func (c *Checker) ReservePost(ctx context.Context, q db.DBTX, userID uuid.UUID) 
 	return nil
 }
 
-// Describe maps a quota error to the HTTP status and user-facing message every
-// handler answers with, so the wording is written once. ok is false for any
-// other error.
-func Describe(err error) (status int, message string, ok bool) {
+// Describe maps a quota error to the HTTP status and user-facing message, in
+// lang, every handler answers with, so the wording is written once. ok is
+// false for any other error.
+func Describe(err error, lang i18n.Lang) (status int, message string, ok bool) {
 	switch {
 	case errors.Is(err, ErrUserStorage):
-		return http.StatusRequestEntityTooLarge, "Место для ваших файлов закончилось: удалите старые вложения или заметки", true
+		return http.StatusRequestEntityTooLarge, i18n.T(lang, "quota.userStorage"), true
 	case errors.Is(err, ErrCommunityStorage):
-		return http.StatusRequestEntityTooLarge, "Место для медиа в этом сообществе закончилось", true
+		return http.StatusRequestEntityTooLarge, i18n.T(lang, "quota.communityStorage"), true
 	case errors.Is(err, ErrPostRate):
-		return http.StatusTooManyRequests, "Слишком много постов за час — попробуйте позже", true
+		return http.StatusTooManyRequests, i18n.T(lang, "quota.postRate"), true
 	}
 	return 0, "", false
 }
 
 // Is reports whether err is one of this package's limits.
 func Is(err error) bool {
-	_, _, ok := Describe(err)
+	_, _, ok := Describe(err, i18n.Default)
 	return ok
 }

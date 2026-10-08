@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/i18n"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
 )
@@ -68,7 +69,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, ErrBadTarget), errors.Is(err, ErrBadReason):
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "unknown target or reason")
 	case errors.Is(err, ErrSelf):
-		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "нельзя пожаловаться на себя")
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, i18n.T(i18n.FromRequest(r), "reports.self"))
 	case errors.Is(err, ErrNotFound):
 		// Nothing there — or nothing this account may see. Deliberately one
 		// answer for both.

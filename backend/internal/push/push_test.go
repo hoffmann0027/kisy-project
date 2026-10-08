@@ -2,13 +2,17 @@ package push
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"kisy-backend/internal/i18n"
 )
 
 // fakeRepo keeps devices in memory. The pool argument is unused: these tests
@@ -57,7 +61,7 @@ func TestNotifyWithoutTransportsDoesNothing(t *testing.T) {
 	if svc.Enabled() || svc.MobileEnabled() {
 		t.Fatal("service reports a transport it does not have")
 	}
-	svc.Notify(context.Background(), uuid.New(), "t", "b", "/chats/1")
+	svc.Notify(context.Background(), uuid.New(), i18n.Raw("t"), i18n.Raw("b"), "/chats/1")
 	if len(repo.deleted) != 0 {
 		t.Fatalf("deleted %v with no transport configured", repo.deleted)
 	}
@@ -73,7 +77,7 @@ func TestNotifyDeliversToEveryDeviceWithoutWebPush(t *testing.T) {
 	svc := NewService(nil, repo, quietLogger(), "", "", "")
 	svc.SetFCM(newTestFCM(t, srv))
 
-	svc.Notify(context.Background(), uuid.New(), "Иван", "Привет", "/chats/7")
+	svc.Notify(context.Background(), uuid.New(), i18n.Raw("Иван"), i18n.Raw("Привет"), "/chats/7")
 
 	if got := srv.sendCalls.Load(); got != 2 {
 		t.Fatalf("sends = %d, want 2", got)
@@ -92,7 +96,7 @@ func TestNotifyPrunesUnregisteredDevices(t *testing.T) {
 	svc := NewService(nil, repo, quietLogger(), "", "", "")
 	svc.SetFCM(newTestFCM(t, srv))
 
-	svc.Notify(context.Background(), uuid.New(), "t", "b", "")
+	svc.Notify(context.Background(), uuid.New(), i18n.Raw("t"), i18n.Raw("b"), "")
 
 	if len(repo.deleted) != 1 || repo.deleted[0] != "stale" {
 		t.Fatalf("deleted = %v, want [stale]", repo.deleted)
@@ -111,9 +115,32 @@ func TestNotifyKeepsDevicesOnTransientFailure(t *testing.T) {
 	svc := NewService(nil, repo, quietLogger(), "", "", "")
 	svc.SetFCM(newTestFCM(t, srv))
 
-	svc.Notify(context.Background(), uuid.New(), "t", "b", "")
+	svc.Notify(context.Background(), uuid.New(), i18n.Raw("t"), i18n.Raw("b"), "")
 
 	if len(repo.deleted) != 0 {
 		t.Fatalf("an outage cost the user a registration: %v", repo.deleted)
+	}
+}
+
+// A push is written in its recipient's language, not the sender's: whoever
+// mentions you in Russian, your English phone says "New message".
+func TestNotifySpeaksTheRecipientsLanguage(t *testing.T) {
+	srv := newFCMServer(t)
+	repo := &fakeRepo{devices: []Device{{Token: "phone", Platform: "android"}}}
+	svc := NewService(nil, repo, quietLogger(), "", "", "")
+	svc.SetFCM(newTestFCM(t, srv))
+	recipient := uuid.New()
+	svc.SetLocaleOf(func(_ context.Context, id uuid.UUID) i18n.Lang {
+		if id != recipient {
+			t.Errorf("language looked up for %v, want the recipient", id)
+		}
+		return "en"
+	})
+
+	svc.Notify(context.Background(), recipient, i18n.Raw("KISY"), i18n.M("push.newMessage"), "/")
+
+	body, _ := srv.lastBody.Load().(json.RawMessage)
+	if !strings.Contains(string(body), "New message") {
+		t.Fatalf("push body = %s, want it in English", body)
 	}
 }

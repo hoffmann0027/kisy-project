@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/i18n"
 	"kisy-backend/internal/platform/ratelimit"
 	"kisy-backend/internal/quarantine"
 	"kisy-backend/pkg/httpjson"
@@ -75,7 +76,7 @@ func (h *Handler) open(w http.ResponseWriter, r *http.Request) {
 	}
 	if errors.Is(err, ErrBlocked) {
 		httpresponse.Fail(w, r, http.StatusForbidden, httpresponse.ErrBlockedByUser,
-			"Пользователь ограничил переписку")
+			i18n.T(i18n.FromRequest(r), "chats.restricted"))
 		return
 	}
 	switch {

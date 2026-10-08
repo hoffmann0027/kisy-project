@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kisy-backend/internal/i18n"
 	"kisy-backend/pkg/httpjson"
 	"kisy-backend/pkg/httpresponse"
 )
@@ -147,7 +148,12 @@ func (h *Handler) exportCSV(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte{0xEF, 0xBB, 0xBF})
 
 	cw := csv.NewWriter(w)
-	_ = cw.Write([]string{"Дата", "Проект", "Задача", "Доход", "Расход", "Прибыль", "Автор", "Комментарий"})
+	lang := i18n.FromRequest(r)
+	header := make([]string, 0, 8)
+	for _, k := range []string{"date", "project", "task", "income", "expense", "profit", "author", "comment"} {
+		header = append(header, i18n.T(lang, "rating.csv."+k))
+	}
+	_ = cw.Write(header)
 	for _, row := range rows {
 		task, note := "", ""
 		if row.TaskTitle != nil {

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 
+	"kisy-backend/internal/i18n"
 	"kisy-backend/internal/moderation"
 	"kisy-backend/internal/notifications"
 )
@@ -17,7 +18,7 @@ func (n moderationNotifier) Notify(ctx context.Context, notice moderation.Notice
 	return n.notifications.Announce(ctx, notice.Recipients, notifications.Announcement{
 		Type:      notifications.TypeGroupSanction,
 		Payload:   notice.Payload,
-		PushTitle: "KISY",
+		PushTitle: i18n.Raw("KISY"),
 		PushBody:  notice.Text,
 		URL:       notice.URL,
 	})
