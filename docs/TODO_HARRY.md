@@ -64,7 +64,7 @@ curl -s https://kisy.onrender.com/ready | grep -o '"turnstile":[a-z]*'
 
 | Поле | Что не работает | Что задать |
 |---|---|---|
-| `webpush` | Уведомления в браузере (в приложении пуши идут через FCM и работают) | `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` — **новую** пару (`npx web-push generate-vapid-keys`), старая сожжена; плюс `VAPID_SUBJECT=mailto:kisyandco@gmail.com` |
+| `webpush` ✅ 08.10.2026 | Уведомления в браузере (в приложении пуши идут через FCM и работают) — новая пара VAPID задана на Render | `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` — **новую** пару (`npx web-push generate-vapid-keys`), старая сожжена; плюс `VAPID_SUBJECT=mailto:kisyandco@gmail.com` |
 | `turn` | Звонки через симметричный NAT (мобильный интернет, корпоративный Wi-Fi): не соединяются | `TURN_URLS` + `TURN_SECRET` своего coturn. Без своего сервера — пункт откладывается, звонки в простых сетях работают |
 | `blob_s3` | Файлы лежат в Postgres Neon, а не в объектном хранилище: бесплатный лимит базы съедается вложениями | `BLOB_S3_ENDPOINT`, `BLOB_S3_BUCKET`, `BLOB_S3_ACCESS_KEY`, `BLOB_S3_SECRET_KEY` (подойдёт тот же Cloudflare R2, что и для бэкапов, отдельный бакет) |
 
