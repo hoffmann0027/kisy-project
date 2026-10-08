@@ -732,6 +732,8 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 		log.Info("mobile push enabled", "firebase_project", fcm.ProjectID())
 	}
 	notificationsSvc.SetPusher(pushSvc)
+	// "Your feedback was answered" goes through the same pipeline.
+	feedbackSvc.SetNotifier(notificationsSvc)
 	pushHandler := push.NewHandler(pushSvc, func(r *http.Request) (uuid.UUID, bool) {
 		claims, ok := auth.ClaimsFromContext(r.Context())
 		if !ok {

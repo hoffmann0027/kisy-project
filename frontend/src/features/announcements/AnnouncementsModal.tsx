@@ -39,7 +39,7 @@ export function AnnouncementsModal({ open, onClose, authorLevel }: Props) {
   const [tab, setTab] = useState<"new" | "sent">("new");
   return (
     <Modal open={open} title="Уведомления от руководства" onClose={onClose}>
-      <div className="announce-tabs" role="tablist">
+      <div className="ui-tabs" role="tablist">
         <button role="tab" aria-selected={tab === "new"} className={tab === "new" ? "is-active" : ""} onClick={() => setTab("new")}>
           Новое
         </button>

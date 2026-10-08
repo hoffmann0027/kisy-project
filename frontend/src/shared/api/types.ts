@@ -412,9 +412,18 @@ export interface Invitation {
 export interface FeedbackAuthor {
   id: string;
   displayName: string;
-  username: string;
+  username?: string;
   avatarUrl: string | null;
-  roleLevel: number;
+  /** Null for an account outside the hierarchy. */
+  roleLevel: number | null;
+}
+
+/** Leadership's answer to an entry. */
+export interface FeedbackReply {
+  body: string;
+  at: string;
+  /** Null when whoever answered has since been removed. */
+  by: FeedbackAuthor | null;
 }
 
 export interface FeedbackItem {
@@ -422,7 +431,11 @@ export interface FeedbackItem {
   body: string;
   author: FeedbackAuthor;
   createdAt: string;
+  reply: FeedbackReply | null;
 }
+
+/** "mine": the caller's own entries; "inbox": unanswered ones, levels 1-3 only. */
+export type FeedbackScope = "mine" | "inbox";
 
 export interface FeedbackPage {
   items: FeedbackItem[];

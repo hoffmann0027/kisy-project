@@ -29,24 +29,21 @@ func TestFeedbackDoesNotMapTheCompanyForABasicAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	basic := feedback.Actor{UserID: uuid.New(), RoleLevel: 0}
-	page, err := svc.List(ctx, basic, "", 10)
-	if err != nil || len(page.Items) != 1 {
-		t.Fatalf("list: %v %d", err, len(page.Items))
-	}
-	author := page.Items[0].Author
-	if author.Username != "" || author.RoleLevel != nil {
-		t.Fatalf("a basic account saw an author's login %q and level %v", author.Username, author.RoleLevel)
-	}
-	if author.DisplayName == "" {
-		t.Fatal("the display name is public and should stay")
+	// Since October 2026 feedback is a private line to leadership: nobody
+	// outside levels 1-3 sees anyone else's entry at all, so there is no
+	// author to leak.
+	for _, viewer := range []feedback.Actor{{UserID: uuid.New(), RoleLevel: 0}, {UserID: uuid.New(), RoleLevel: 5}} {
+		page, err := svc.List(ctx, viewer, "", "", 10)
+		if err != nil || len(page.Items) != 0 {
+			t.Fatalf("level %d saw someone else's feedback: %v %+v", viewer.RoleLevel, err, page.Items)
+		}
 	}
 
-	// Someone in the hierarchy still sees who is who.
-	invited := feedback.Actor{UserID: uuid.New(), RoleLevel: 5}
-	page, err = svc.List(ctx, invited, "", 10)
-	if err != nil || page.Items[0].Author.Username == "" || page.Items[0].Author.RoleLevel == nil {
-		t.Fatalf("an invited account lost the author's identity: %+v %v", page.Items[0].Author, err)
+	// Leadership, who answer it, still see who wrote what.
+	ceo := testdb.SeedUser(t, pool, "ceo_"+uuid.NewString()[:6], 1)
+	page, err := svc.List(ctx, feedback.Actor{UserID: ceo}, feedback.ScopeInbox, "", 10)
+	if err != nil || len(page.Items) != 1 || page.Items[0].Author.Username == "" || page.Items[0].Author.RoleLevel == nil {
+		t.Fatalf("the CEO lost the author's identity: %v %+v", err, page.Items)
 	}
 }
 

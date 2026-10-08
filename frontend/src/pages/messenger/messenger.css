@@ -819,8 +819,40 @@
   border-radius: var(--radius-sm);
 }
 .feedback__delete:hover {
-  color: #ff6b6b;
-  background: rgba(255, 107, 107, 0.12);
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+.feedback__hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}
+.feedback__reply {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--color-accent);
+  background: var(--color-accent-soft);
+}
+.feedback__reply-who {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-bottom: 2px;
+}
+.feedback__waiting {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}
+.feedback__answer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.feedback__answer-actions {
+  display: flex;
+  gap: 8px;
 }
 .bubble__actions {
   position: absolute;

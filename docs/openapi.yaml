@@ -3196,7 +3196,13 @@ paths:
     get:
       tags: [feedback]
       summary: List feedback & suggestions (newest first, cursor-paginated)
+      description: >
+        Feedback is a private line to leadership. By default (scope=mine) the
+        caller's own entries, each with its reply when there is one. scope=inbox
+        is every entry nobody has answered yet, for levels 1-3 only (judged from
+        the live level in the database); anyone else gets 403.
       parameters:
+        - { name: scope, in: query, required: false, schema: { type: string, enum: [mine, inbox], default: mine } }
         - { name: cursor, in: query, required: false, schema: { type: string }, description: createdAt of the last seen item (RFC3339). }
         - { name: limit, in: query, required: false, schema: { type: integer, default: 20, maximum: 50 } }
       responses:
@@ -3215,9 +3221,13 @@ paths:
                           nextCursor: { type: [string, 'null'] }
                           hasMore: { type: boolean }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: scope=inbox from someone outside levels 1-3 }
     post:
       tags: [feedback]
-      summary: Submit feedback (any authenticated user)
+      summary: Submit feedback (any authenticated user, once per 24 hours)
+      description: >
+        One entry per author in any 24 hours; a second one is refused with 429
+        QUOTA_EXCEEDED (message written for the screen) and Retry-After.
       requestBody:
         required: true
         content:
@@ -3242,6 +3252,35 @@ paths:
                           feedback: { $ref: '#/components/schemas/Feedback' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { description: Already wrote within the last 24 hours (QUOTA_EXCEEDED, Retry-After) }
+
+  /feedback/{id}/reply:
+    post:
+      tags: [feedback]
+      summary: Answer an entry (levels 1-3, once)
+      description: >
+        Levels 1-3 only, from the live level. The entry leaves the inbox, its
+        author sees the reply in their list and receives a notification of type
+        feedback_reply (payload feedbackId, feedback excerpt, reply, by) with a
+        push. A second answer is refused with 409.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '200': { description: Answered, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: Already answered }
 
   /feedback/{id}:
     delete:
@@ -4736,6 +4775,18 @@ components:
             username: { type: string }
             avatarUrl: { type: [string, 'null'] }
             roleLevel: { type: integer }
+        reply:
+          type: [object, 'null']
+          properties:
+            body: { type: string }
+            at: { type: string, format: date-time }
+            by:
+              type: [object, 'null']
+              properties:
+                id: { type: string, format: uuid }
+                displayName: { type: string }
+                avatarUrl: { type: [string, 'null'] }
+                roleLevel: { type: [integer, 'null'] }
     RatingTask:
       type: object
       properties:

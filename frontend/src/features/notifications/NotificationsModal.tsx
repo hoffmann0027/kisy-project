@@ -36,6 +36,23 @@ function AnnouncementView({ payload }: { payload: Record<string, unknown> }) {
   );
 }
 
+/** Leadership answered the reader's feedback: what they wrote, and the answer. */
+function FeedbackReplyView({ payload }: { payload: Record<string, unknown> }) {
+  const by = (payload.by ?? {}) as { displayName?: string; roleLevel?: number };
+  const role = roleLabel(by.roleLevel || null);
+  return (
+    <div className="announce-note">
+      <div className="announce-note__title">Ответ на ваш отзыв</div>
+      {typeof payload.feedback === "string" && <div className="announce-note__quote">«{payload.feedback}»</div>}
+      <div className="announce-note__body">{String(payload.reply ?? "")}</div>
+      <div className="announce-note__author">
+        {by.displayName ?? ""}
+        {role && ` · ${role}`}
+      </div>
+    </div>
+  );
+}
+
 export function NotificationsModal({ open, onClose }: Props) {
   const { data, isPending } = useNotifications();
   const markRead = useMarkNotificationsRead();
@@ -80,6 +97,8 @@ export function NotificationsModal({ open, onClose }: Props) {
           >
             {n.type === "announcement" ? (
               <AnnouncementView payload={n.payload} />
+            ) : n.type === "feedback_reply" ? (
+              <FeedbackReplyView payload={n.payload} />
             ) : (
               <div style={{ fontSize: 14 }}>{describe(n.type, n.payload)}</div>
             )}
