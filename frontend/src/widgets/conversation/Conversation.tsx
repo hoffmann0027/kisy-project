@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { intlLocale, t } from "@shared/i18n";
 import { cn } from "@shared/lib/cn";
 import { useCallControls } from "@features/call/CallProvider";
-import { formatDay } from "@shared/lib/format";
+import { formatDay, hourStyle } from "@shared/lib/format";
 import { useVisualViewport } from "@shared/lib/useVisualViewport";
 import { Avatar, Button, Spinner, toast } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
@@ -219,7 +219,7 @@ export function Conversation({ target, headerActions, readOnly, banner }: Props)
         onSuccess: () =>
           toast.success(
             t("chat.conv.scheduled", {
-              when: sendAt.toLocaleString(intlLocale(), { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }),
+              when: sendAt.toLocaleString(intlLocale(), { day: "numeric", month: "long", hour: hourStyle(), minute: "2-digit" }),
             }),
           ),
         onError: (e) => toast.error(userFacingError(e, t("chat.conv.scheduleFailed"))),

@@ -3,6 +3,7 @@
 // time, reschedule and cancel controls.
 import { useEffect, useState } from "react";
 import { intlLocale, t } from "@shared/i18n";
+import { hourStyle } from "@shared/lib/format";
 import { Modal, toast } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import type { ScheduledMessage } from "@shared/api/types";
@@ -27,7 +28,7 @@ function formatSendAt(iso: string): string {
   return new Date(iso).toLocaleString(intlLocale(), {
     day: "numeric",
     month: "long",
-    hour: "2-digit",
+    hour: hourStyle(),
     minute: "2-digit",
   });
 }

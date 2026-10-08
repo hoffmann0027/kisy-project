@@ -45,3 +45,16 @@ describe("midSentence", () => {
     applyDictionary("ru", ru);
   });
 });
+
+describe("hourStyle", () => {
+  it("drops the leading zero only on a 12-hour clock", async () => {
+    const { applyDictionary, loadDictionary } = await import("@shared/i18n");
+    const { ru } = await import("@shared/i18n/locales/ru");
+    const { hourStyle } = await import("./format");
+    expect(hourStyle()).toBe("2-digit");
+    applyDictionary("en", await loadDictionary("en"));
+    // jsdom's navigator.language is en-US: a 12-hour clock.
+    expect(hourStyle()).toBe("numeric");
+    applyDictionary("ru", ru);
+  });
+});

@@ -1,8 +1,17 @@
 // Time and text formatting helpers, in the language on screen.
 import { currentLang, intlLocale, t } from "@shared/i18n";
 
+/**
+ * How the hour is written: "09:05" on a 24-hour clock, "9:05 AM" — not
+ * "09:05 AM" — on a 12-hour one.
+ */
+export function hourStyle(): "2-digit" | "numeric" {
+  const cycle = new Intl.DateTimeFormat(intlLocale(), { hour: "numeric" }).resolvedOptions().hourCycle;
+  return cycle === "h11" || cycle === "h12" ? "numeric" : "2-digit";
+}
+
 export function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(intlLocale(), { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString(intlLocale(), { hour: hourStyle(), minute: "2-digit" });
 }
 
 export function formatDay(iso: string): string {
