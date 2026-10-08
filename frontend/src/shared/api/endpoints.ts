@@ -58,6 +58,8 @@ import type {
   UploadLimit,
   UploadSession,
   User,
+  Announcement,
+  SendAnnouncementInput,
 } from "./types";
 
 // On native the backend also returns the raw tokens (the app has no cookie
@@ -523,6 +525,12 @@ export const notificationsApi = {
   list: (limit = 50) =>
     apiClient.get<{ notifications: Notification[]; unreadCount: number }>(`/notifications?limit=${limit}`),
   markRead: (id?: string) => apiClient.post<{ ok: boolean }>("/notifications/read", id ? { id } : {}),
+};
+
+export const announcementsApi = {
+  list: () => apiClient.get<{ announcements: Announcement[] }>("/announcements"),
+  send: (input: SendAnnouncementInput) => apiClient.post<{ announcement: Announcement }>("/announcements", input),
+  revoke: (id: string) => apiClient.del<{ revoked: boolean }>(`/announcements/${id}`),
 };
 
 export const feedbackApi = {

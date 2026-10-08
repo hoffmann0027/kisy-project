@@ -369,6 +369,40 @@ export interface Notification {
   createdAt: string;
 }
 
+/** Who an announcement goes to. */
+export type AnnouncementAudience = "all" | "basic" | "levels" | "user";
+
+/** The author as recipients see them: an announcement is always from a person. */
+export interface AnnouncementAuthor {
+  id: string;
+  displayName: string;
+  /** 0 for a basic account. */
+  roleLevel: number;
+}
+
+/** A sent announcement, as its author (or the CEO) sees it. */
+export interface Announcement {
+  id: string;
+  author: AnnouncementAuthor;
+  audience: AnnouncementAudience;
+  levels?: number[];
+  targetUserId?: string;
+  targetName?: string;
+  title: string;
+  body: string;
+  recipientCount: number;
+  createdAt: string;
+  revokedAt?: string;
+}
+
+export interface SendAnnouncementInput {
+  audience: AnnouncementAudience;
+  levels?: number[];
+  userId?: string;
+  title: string;
+  body: string;
+}
+
 export interface Invitation {
   token: string;
   creatorId: string;

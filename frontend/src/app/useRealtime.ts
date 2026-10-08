@@ -215,6 +215,10 @@ export function useRealtime() {
         case "notification.created":
           qc.invalidateQueries({ queryKey: notificationKeys.list });
           break;
+        case "notification.revoked":
+          // An announcement was taken back by its author or the CEO.
+          qc.invalidateQueries({ queryKey: notificationKeys.list });
+          break;
         case "board.changed":
           qc.invalidateQueries({ queryKey: ["board", ev.data.groupId] });
           break;
