@@ -16,7 +16,7 @@ ENV VITE_WS_BASE_URL=/ws
 RUN npm run build
 
 # --- backend build ---
-FROM golang:1.26-alpine AS backend
+FROM golang:1.26.9-alpine AS backend
 WORKDIR /src
 RUN apk add --no-cache git
 COPY backend/go.mod backend/go.sum ./
