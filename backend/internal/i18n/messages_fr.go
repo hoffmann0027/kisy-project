@@ -87,6 +87,7 @@ var fr = Catalog{
 	"dashboard.down":          "ne répond pas",
 	"dashboard.objectStorage": "stockage objet",
 	"dashboard.inDatabase":    "dans la base de données",
+	"rating.memberCannotSee":  "Cet utilisateur ne voit pas le projet : son niveau est inférieur au niveau d'accès du projet",
 	"rating.csv.date":         "Date",
 	"rating.csv.project":      "Projet",
 	"rating.csv.task":         "Tâche",

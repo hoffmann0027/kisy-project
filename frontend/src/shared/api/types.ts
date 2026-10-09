@@ -629,6 +629,8 @@ export interface RatingProject {
   totalExpenseKopecks: number;
   totalProfitKopecks: number;
   tasks: RatingTask[];
+  /** Who answers for the project and records its money; changed by its creator (levels 1–4) or the CEO. */
+  members: RatingAssignee[];
   createdAt: string;
   /** When anything last happened: a task moved, money recorded, the project completed. */
   updatedAt: string;

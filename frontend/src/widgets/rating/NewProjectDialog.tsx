@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button, Modal, toast } from "@shared/ui";
 import { t } from "@shared/i18n";
 import type { useRatingMutations } from "@entities/rating/queries";
+import { useAuthStore } from "@shared/store/auth";
 
 interface Props {
   m: ReturnType<typeof useRatingMutations>;
@@ -14,6 +15,8 @@ export function NewProjectDialog({ m, open, onClose }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [minLevel, setMinLevel] = useState(10);
+  // Not above the creator's own clearance — they could not see it.
+  const lowest = useAuthStore((s) => s.user?.roleLevel ?? 1);
 
   const submit = () => {
     const name = title.trim();
@@ -40,11 +43,13 @@ export function NewProjectDialog({ m, open, onClose }: Props) {
         <label className="rating-form__field">
           <span>{t("work.rating.accessLevelHint")}</span>
           <select className="ui-input" value={minLevel} onChange={(e) => setMinLevel(Number(e.target.value))}>
-            {Array.from({ length: 10 }, (_, i) => i + 1).map((lvl) => (
-              <option key={lvl} value={lvl}>
-                {t("work.rating.levelOption", { level: lvl })}
-              </option>
-            ))}
+            {Array.from({ length: 10 }, (_, i) => i + 1)
+              .filter((lvl) => lvl >= lowest)
+              .map((lvl) => (
+                <option key={lvl} value={lvl}>
+                  {t("work.rating.levelOption", { level: lvl })}
+                </option>
+              ))}
           </select>
         </label>
         <div className="rating-form__actions">

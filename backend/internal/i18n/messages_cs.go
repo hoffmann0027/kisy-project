@@ -88,6 +88,7 @@ var cs = Catalog{
 	"dashboard.down":          "neodpovídá",
 	"dashboard.objectStorage": "objektové úložiště",
 	"dashboard.inDatabase":    "v databázi",
+	"rating.memberCannotSee":  "Tento uživatel projekt nevidí: jeho úroveň je nižší než úroveň přístupu projektu",
 	"rating.csv.date":         "Datum",
 	"rating.csv.project":      "Projekt",
 	"rating.csv.task":         "Úkol",

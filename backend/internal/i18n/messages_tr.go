@@ -88,6 +88,7 @@ var tr = Catalog{
 	"dashboard.down":          "yanıt vermiyor",
 	"dashboard.objectStorage": "nesne depolama",
 	"dashboard.inDatabase":    "veritabanında",
+	"rating.memberCannotSee":  "Bu kullanıcı projeyi göremiyor: seviyesi projenin erişim seviyesinin altında",
 	"rating.csv.date":         "Tarih",
 	"rating.csv.project":      "Proje",
 	"rating.csv.task":         "Görev",

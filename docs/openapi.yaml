@@ -3659,7 +3659,7 @@ paths:
   /rating/projects:
     post:
       tags: [rating]
-      summary: Create a project (CEO only)
+      summary: Create a project (CEO, or a manager at levels 1–4 — not above their own clearance)
       requestBody:
         required: true
         content:
@@ -3680,7 +3680,7 @@ paths:
   /rating/projects/{id}:
     delete:
       tags: [rating]
-      summary: Delete a project and its tasks/ledger (CEO only)
+      summary: Delete a project and its tasks/ledger (its creator at levels 1–4, or the CEO)
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       responses:
         '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
@@ -3690,7 +3690,7 @@ paths:
   /rating/projects/{id}/level:
     patch:
       tags: [rating]
-      summary: Change a project's access level at any stage (CEO only)
+      summary: Change a project's access level at any stage (its creator at levels 1–4, not above their own clearance, or the CEO)
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       requestBody:
         required: true
@@ -3703,10 +3703,48 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /rating/projects/{id}/members:
+    post:
+      tags: [rating]
+      summary: Put a user on the project (its creator at levels 1–4, or the CEO)
+      description: >
+        Members record the project's income and expenses. The user must be
+        able to see the project — a clearance above its threshold answers 409.
+        Adding twice is harmless.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId: { type: string, format: uuid }
+      responses:
+        '200': { description: Added, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /rating/projects/{id}/members/{userID}:
+    delete:
+      tags: [rating]
+      summary: Take a user off the project (its creator at levels 1–4, or the CEO)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: userID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Removed, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /rating/projects/{id}/tasks:
     post:
       tags: [rating]
-      summary: Add a task to a project (CEO only)
+      summary: Add a task to a project (its creator at levels 1–4, or the CEO)
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       requestBody:
         required: true
@@ -3753,7 +3791,7 @@ paths:
   /rating/tasks/{id}:
     delete:
       tags: [rating]
-      summary: Delete a task at any stage (CEO only)
+      summary: Delete a task at any stage (the project's creator at levels 1–4, or the CEO)
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       responses:
         '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
@@ -3762,7 +3800,7 @@ paths:
   /rating/projects/{id}/finance:
     post:
       tags: [rating]
-      summary: Record income/expense against a project's profit ledger (CEO only; EUR cents)
+      summary: Record income/expense against a project's profit ledger (its members, its creator or the CEO; EUR cents)
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       requestBody:
         required: true
@@ -5018,6 +5056,15 @@ components:
         totalExpenseKopecks: { type: integer, format: int64, description: Recorded expense in euro cents. }
         totalProfitKopecks: { type: integer, format: int64, description: Profit in euro cents (income − expense). }
         tasks: { type: array, items: { $ref: '#/components/schemas/RatingTask' } }
+        members:
+          type: array
+          description: Who answers for the project and records its money. Changed by its creator (levels 1–4) or the CEO.
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              displayName: { type: string }
+              avatarUrl: { type: [string, 'null'] }
         createdAt: { type: string, format: date-time }
         updatedAt:
           type: string

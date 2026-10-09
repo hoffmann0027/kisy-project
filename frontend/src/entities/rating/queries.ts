@@ -51,5 +51,13 @@ export function useRatingMutations() {
         ratingApi.addFinance(a.projectId, a.incomeKopecks, a.expenseKopecks, a.note),
       onSuccess: refresh,
     }),
+    addMember: useMutation({
+      mutationFn: (a: { projectId: string; userId: string }) => ratingApi.addMember(a.projectId, a.userId),
+      onSuccess: refresh,
+    }),
+    removeMember: useMutation({
+      mutationFn: (a: { projectId: string; userId: string }) => ratingApi.removeMember(a.projectId, a.userId),
+      onSuccess: refresh,
+    }),
   };
 }

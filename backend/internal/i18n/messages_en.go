@@ -87,6 +87,7 @@ var en = Catalog{
 	"dashboard.down":          "not responding",
 	"dashboard.objectStorage": "object storage",
 	"dashboard.inDatabase":    "in the database",
+	"rating.memberCannotSee":  "This user cannot see the project: their level is below the project's access level",
 	"rating.csv.date":         "Date",
 	"rating.csv.project":      "Project",
 	"rating.csv.task":         "Task",

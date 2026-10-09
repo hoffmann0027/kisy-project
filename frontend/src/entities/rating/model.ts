@@ -29,11 +29,41 @@ export function projectProgress(p: RatingProject): number {
   return Math.round(sum / p.tasks.length);
 }
 
-/** Everyone on the project's tasks, each once. */
+/** The project's team: its members first, then whoever holds its tasks, each once. */
 export function projectTeam(p: RatingProject): RatingAssignee[] {
   const seen = new Map<string, RatingAssignee>();
+  for (const m of p.members) seen.set(m.id, m);
   for (const t of p.tasks) if (t.assignee && !seen.has(t.assignee.id)) seen.set(t.assignee.id, t.assignee);
   return [...seen.values()];
+}
+
+/** The signed-in account, as far as the board's rules care. */
+export interface Viewer {
+  id: string;
+  roleLevel: number | null;
+}
+
+/** The weakest clearance that runs projects of its own (backend rating.ManagerMaxLevel). */
+export const MANAGER_MAX_LEVEL = 4;
+
+/** Levels 1–4 create projects; the CEO is level 1. */
+export function canCreateProject(me: Viewer): boolean {
+  return me.roleLevel !== null && me.roleLevel >= 1 && me.roleLevel <= MANAGER_MAX_LEVEL;
+}
+
+/** Who runs a project — tasks, members, level, deletion: its creator at levels 1–4, or the CEO. */
+export function canManageProject(p: RatingProject, me: Viewer): boolean {
+  return me.roleLevel === 1 || (canCreateProject(me) && p.createdBy === me.id);
+}
+
+/** Who records the project's money: whoever runs it, and its members. */
+export function canRecordFinance(p: RatingProject, me: Viewer): boolean {
+  return canManageProject(p, me) || p.members.some((m) => m.id === me.id);
+}
+
+/** Whether the account is on the project — a member, or holding one of its tasks. */
+export function isOnProject(p: RatingProject, meId: string): boolean {
+  return p.members.some((m) => m.id === meId) || p.tasks.some((t) => t.assignee?.id === meId);
 }
 
 export function monthKey(d: Date): string {
@@ -155,7 +185,7 @@ export function filterProjects(projects: RatingProject[], filter: ProjectFilter,
   const q = query.trim().toLocaleLowerCase();
   return projects.filter((p) => {
     if (filter === "mine") {
-      if (!p.tasks.some((t) => t.assignee?.id === meId)) return false;
+      if (!isOnProject(p, meId)) return false;
     } else if (filter !== "all" && projectState(p) !== filter) {
       return false;
     }

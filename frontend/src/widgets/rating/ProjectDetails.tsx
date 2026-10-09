@@ -6,27 +6,34 @@ import { formatKopecks } from "@shared/lib/money";
 import { formatDay } from "@shared/lib/format";
 import type { RatingProject, RatingTask } from "@shared/api/types";
 import type { useRatingMutations } from "@entities/rating/queries";
+import { canManageProject, canRecordFinance, type Viewer } from "@entities/rating/model";
 import { FinanceDialog } from "./FinanceDialog";
+import { MemberPicker } from "./MemberPicker";
 
 type Mutations = ReturnType<typeof useRatingMutations>;
 
 interface Props {
   project: RatingProject;
   m: Mutations;
-  isCEO: boolean;
-  meId: string;
+  me: Viewer;
 }
 
 /**
- * What opens under a project's row: its description and tasks, and the
- * controls each person has — take a task, move your own along, return it;
- * for the CEO also add tasks, record money, set the level, delete.
+ * What opens under a project's row: its description, members and tasks, and
+ * the controls each person has — take a task, move your own along, return
+ * it; a member records money; whoever runs the project (its creator at
+ * levels 1–4, or the CEO) also adds tasks and members, sets the level and
+ * deletes it.
  */
-export function ProjectDetails({ project, m, isCEO, meId }: Props) {
+export function ProjectDetails({ project, m, me }: Props) {
   const [taskTitle, setTaskTitle] = useState("");
   const [addingTask, setAddingTask] = useState(false);
+  const [addingMember, setAddingMember] = useState(false);
   const [finance, setFinance] = useState(false);
   const done = project.status === "done";
+  const manage = canManageProject(project, me);
+  const money = canRecordFinance(project, me);
+  const isCEO = me.roleLevel === 1;
 
   const addTask = () => {
     const title = taskTitle.trim();
@@ -54,6 +61,19 @@ export function ProjectDetails({ project, m, isCEO, meId }: Props) {
     m.setProjectLevel.mutate({ id: project.id, minLevel }, { onError: () => toast.error(t("work.rating.levelChangeFailed")) });
   };
 
+  const removeMember = (userId: string, name: string) => {
+    m.removeMember.mutate(
+      { projectId: project.id, userId },
+      {
+        onSuccess: () => toast.success(t("work.rating.memberRemoved", { name })),
+        onError: () => toast.error(t("work.rating.removeMemberFailed")),
+      },
+    );
+  };
+
+  // A manager may not raise the project above their own clearance.
+  const lowestLevel = isCEO ? 1 : (me.roleLevel ?? 1);
+
   return (
     <div className="rt__details">
       {project.description && <p className="rt__desc-full">{project.description}</p>}
@@ -61,7 +81,7 @@ export function ProjectDetails({ project, m, isCEO, meId }: Props) {
       <div className="rt__facts">
         <span className="rt__fact">
           <span className="rt__fact-label">{t("work.rating.levelLabel")}</span>
-          {isCEO ? (
+          {manage ? (
             <select
               className="rating-level-select"
               title={t("work.rating.accessLevelHint")}
@@ -69,11 +89,13 @@ export function ProjectDetails({ project, m, isCEO, meId }: Props) {
               disabled={m.setProjectLevel.isPending}
               onChange={(e) => changeLevel(Number(e.target.value))}
             >
-              {Array.from({ length: 10 }, (_, i) => i + 1).map((lvl) => (
-                <option key={lvl} value={lvl}>
-                  {t("work.rating.levelShort", { level: lvl })}
-                </option>
-              ))}
+              {Array.from({ length: 10 }, (_, i) => i + 1)
+                .filter((lvl) => lvl >= lowestLevel)
+                .map((lvl) => (
+                  <option key={lvl} value={lvl}>
+                    {t("work.rating.levelShort", { level: lvl })}
+                  </option>
+                ))}
             </select>
           ) : (
             <span className="rchip rchip--level" title={t("work.rating.levelBadgeTitle", { level: project.minLevel })}>
@@ -93,12 +115,50 @@ export function ProjectDetails({ project, m, isCEO, meId }: Props) {
         )}
       </div>
 
+      <div className="rmembers">
+        <div className="rtasks__head">
+          {t("work.rating.membersTitle")}
+          <span className="rmembers__hint"> · {t("work.rating.membersHint")}</span>
+        </div>
+        {project.members.length === 0 && !addingMember && <div className="rtasks__none">{t("work.rating.noMembers")}</div>}
+        {project.members.length > 0 && (
+          <ul className="rmembers__list">
+            {project.members.map((u) => (
+              <li key={u.id} className="rmembers__item">
+                <Avatar name={u.displayName} url={u.avatarUrl} size={26} />
+                <span className="rmembers__name">{u.displayName}</span>
+                {manage && (
+                  <button
+                    type="button"
+                    className="rmembers__remove"
+                    title={t("work.rating.removeMember")}
+                    aria-label={`${t("work.rating.removeMember")}: ${u.displayName}`}
+                    disabled={m.removeMember.isPending}
+                    onClick={() => removeMember(u.id, u.displayName)}
+                  >
+                    <Icon.X size={14} />
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        {manage &&
+          (addingMember ? (
+            <MemberPicker project={project} m={m} onDone={() => setAddingMember(false)} />
+          ) : (
+            <Button variant="secondary" onClick={() => setAddingMember(true)}>
+              <Icon.Plus size={16} /> {t("work.rating.addMember")}
+            </Button>
+          ))}
+      </div>
+
       {!done && (
         <div className="rtasks">
           <div className="rtasks__head">{t("work.rating.tasksTitle")}</div>
           {project.tasks.length === 0 && <div className="rtasks__none">{t("work.rating.noTasks")}</div>}
           {project.tasks.map((task) => (
-            <TaskRow key={task.id} task={task} m={m} isCEO={isCEO} mine={task.assignee?.id === meId} />
+            <TaskRow key={task.id} task={task} m={m} manage={manage} isCEO={isCEO} mine={task.assignee?.id === me.id} />
           ))}
           {project.tasks.length > 0 && project.tasks.every((task) => task.status !== "backlog") && (
             <div className="rtasks__none">{t("work.rating.allTasksTaken")}</div>
@@ -106,9 +166,10 @@ export function ProjectDetails({ project, m, isCEO, meId }: Props) {
         </div>
       )}
 
-      {isCEO && (
+      {(manage || money) && (
         <div className="rt__ceo">
-          {!done &&
+          {manage &&
+            !done &&
             (addingTask ? (
               <div className="rt__addtask">
                 <input
@@ -131,20 +192,24 @@ export function ProjectDetails({ project, m, isCEO, meId }: Props) {
                 <Icon.Plus size={16} /> {t("work.rating.addTask")}
               </Button>
             ))}
-          <Button variant="secondary" onClick={() => setFinance(true)}>
-            {t("work.rating.addFinance")}
-          </Button>
-          <Button variant="danger" onClick={remove} loading={m.deleteProject.isPending}>
-            {t("work.rating.deleteProject")}
-          </Button>
-          <FinanceDialog project={project} m={m} open={finance} onClose={() => setFinance(false)} />
+          {money && (
+            <Button variant="secondary" onClick={() => setFinance(true)}>
+              {t("work.rating.addFinance")}
+            </Button>
+          )}
+          {manage && (
+            <Button variant="danger" onClick={remove} loading={m.deleteProject.isPending}>
+              {t("work.rating.deleteProject")}
+            </Button>
+          )}
+          {money && <FinanceDialog project={project} m={m} open={finance} onClose={() => setFinance(false)} />}
         </div>
       )}
     </div>
   );
 }
 
-function TaskRow({ task, m, isCEO, mine }: { task: RatingTask; m: Mutations; isCEO: boolean; mine: boolean }) {
+function TaskRow({ task, m, manage, isCEO, mine }: { task: RatingTask; m: Mutations; manage: boolean; isCEO: boolean; mine: boolean }) {
   const step = (delta: number) => {
     const next = Math.max(0, Math.min(100, task.progress + delta));
     if (next === task.progress) return;
@@ -189,12 +254,13 @@ function TaskRow({ task, m, isCEO, mine }: { task: RatingTask; m: Mutations; isC
             </Button>
           </>
         )}
+        {/* Returning a task to the backlog: its holder, or the CEO. */}
         {(mine || isCEO) && !backlog && (
           <Button variant="ghost" onClick={() => m.returnTask.mutate(task.id)}>
             {t("work.rating.returnTask")}
           </Button>
         )}
-        {isCEO && (
+        {manage && (
           <button
             type="button"
             className="ui-icon-btn rtask__delete"

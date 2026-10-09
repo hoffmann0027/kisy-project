@@ -17,7 +17,15 @@ var (
 	ErrForbidden      = errors.New("rating: not permitted")
 	ErrValidation     = errors.New("rating: invalid input")
 	ErrAlreadyClaimed = errors.New("rating: task already has an assignee")
+	// ErrOutOfReach refuses a member who could not see the project: its
+	// threshold is above their clearance.
+	ErrOutOfReach = errors.New("rating: the user cannot see this project")
 )
+
+// ManagerMaxLevel is the weakest clearance that runs projects of its own:
+// levels 1–4 create projects, and in those they created they add tasks and
+// members and record money. The CEO does all of that everywhere.
+const ManagerMaxLevel = 4
 
 // Task lifecycle columns.
 const (
@@ -42,6 +50,23 @@ type Actor struct {
 }
 
 func (a Actor) isCEO() bool { return a.RoleLevel == 1 }
+
+// isManager reports whether the actor may create projects of their own.
+func (a Actor) isManager() bool { return a.RoleLevel >= 1 && a.RoleLevel <= ManagerMaxLevel }
+
+// ProjectRow is the project state authorization is decided on.
+type ProjectRow struct {
+	ID        uuid.UUID
+	CreatedBy uuid.UUID
+	MinLevel  int
+	Status    string
+}
+
+// canManage reports whether the actor runs the project: the CEO, or a
+// manager who created it.
+func (a Actor) canManage(p ProjectRow) bool {
+	return a.isCEO() || (a.isManager() && p.CreatedBy == a.UserID)
+}
 
 // Assignee is the public identity of a task's executor.
 type Assignee struct {
@@ -78,7 +103,10 @@ type ProjectDTO struct {
 	TotalExpenseKopecks int64     `json:"totalExpenseKopecks"`
 	TotalProfitKopecks  int64     `json:"totalProfitKopecks"`
 	Tasks               []TaskDTO `json:"tasks"`
-	CreatedAt           time.Time `json:"createdAt"`
+	// Members answer for the project: they record its money. Who may change
+	// the list is the project's creator (a manager) or the CEO.
+	Members   []Assignee `json:"members"`
+	CreatedAt time.Time  `json:"createdAt"`
 	// UpdatedAt is when anything last happened to the project: a task taken,
 	// moved or returned, money recorded, the project completed.
 	UpdatedAt   time.Time  `json:"updatedAt"`

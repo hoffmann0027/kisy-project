@@ -840,6 +840,8 @@ func buildModules(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 
 	// --- rating board (projects → in progress → done + profit ledger) ---
 	ratingSvc := rating.NewService(pool, rating.NewPostgresRepository())
+	// A project's member has to be able to see the project.
+	ratingSvc.SetUserLookup(userLevel)
 	ratingSvc.SetChangePublisher(wsPublisher.PublishRatingChanged)
 	ratingHandler := rating.NewHandler(ratingSvc, func(r *http.Request) (rating.Actor, bool) {
 		claims, ok := auth.ClaimsFromContext(r.Context())

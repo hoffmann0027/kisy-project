@@ -34,7 +34,18 @@ type Repository interface {
 	SetProjectLevel(ctx context.Context, q db.DBTX, id uuid.UUID, minLevel int) error
 	DeleteProject(ctx context.Context, q db.DBTX, id uuid.UUID) error
 	ProjectExists(ctx context.Context, q db.DBTX, id uuid.UUID) (bool, error)
+	// GetProject returns what authorization needs to know about a project,
+	// or ErrNotFound.
+	GetProject(ctx context.Context, q db.DBTX, id uuid.UUID) (ProjectRow, error)
 	CreateTask(ctx context.Context, q db.DBTX, projectID uuid.UUID, title string) (uuid.UUID, error)
+
+	// ListMembers returns the members of every project the actor may see.
+	ListMembers(ctx context.Context, q db.DBTX, actorLevel int) ([]MemberRow, error)
+	// AddMember puts a user on a project; adding twice is harmless.
+	AddMember(ctx context.Context, q db.DBTX, projectID, userID, addedBy uuid.UUID) error
+	// RemoveMember takes a user off a project; ErrNotFound when they were not on it.
+	RemoveMember(ctx context.Context, q db.DBTX, projectID, userID uuid.UUID) error
+	IsMember(ctx context.Context, q db.DBTX, projectID, userID uuid.UUID) (bool, error)
 
 	// GetTask returns a task only if the caller's clearance can see its
 	// project; otherwise ErrNotFound, which is also what a missing task gives
@@ -63,6 +74,12 @@ type Repository interface {
 	// ListFinance returns ledger entries (scoped to accessible projects) joined
 	// to project/task/author for CSV export, oldest first.
 	ListFinance(ctx context.Context, q db.DBTX, actorLevel int) ([]FinanceRow, error)
+}
+
+// MemberRow is one person on one project.
+type MemberRow struct {
+	ProjectID uuid.UUID
+	Assignee
 }
 
 // FinanceRow is one exported ledger line.
@@ -114,6 +131,7 @@ func (r *PostgresRepository) ListProjects(ctx context.Context, q db.DBTX, actorL
 			return nil, fmt.Errorf("rating: scan project: %w", err)
 		}
 		p.Tasks = []TaskDTO{}
+		p.Members = []Assignee{}
 		out = append(out, p)
 	}
 	return out, rows.Err()
@@ -270,6 +288,70 @@ func (r *PostgresRepository) ProjectExists(ctx context.Context, q db.DBTX, id uu
 		return false, fmt.Errorf("rating: project exists: %w", err)
 	}
 	return exists, nil
+}
+
+func (r *PostgresRepository) GetProject(ctx context.Context, q db.DBTX, id uuid.UUID) (ProjectRow, error) {
+	var p ProjectRow
+	err := q.QueryRow(ctx, `SELECT id, created_by, min_level, status FROM rating_projects WHERE id = $1`, id).
+		Scan(&p.ID, &p.CreatedBy, &p.MinLevel, &p.Status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ProjectRow{}, ErrNotFound
+	}
+	if err != nil {
+		return ProjectRow{}, fmt.Errorf("rating: get project: %w", err)
+	}
+	return p, nil
+}
+
+func (r *PostgresRepository) ListMembers(ctx context.Context, q db.DBTX, actorLevel int) ([]MemberRow, error) {
+	rows, err := q.Query(ctx, `
+		SELECT m.project_id, u.id, u.display_name, u.avatar_url
+		FROM rating_project_members m
+		JOIN rating_projects p ON p.id = m.project_id
+		JOIN users u ON u.id = m.user_id
+		WHERE p.min_level >= $1
+		ORDER BY m.created_at, u.display_name`, actorLevel)
+	if err != nil {
+		return nil, fmt.Errorf("rating: list members: %w", err)
+	}
+	defer rows.Close()
+	var out []MemberRow
+	for rows.Next() {
+		var m MemberRow
+		if err := rows.Scan(&m.ProjectID, &m.ID, &m.DisplayName, &m.AvatarURL); err != nil {
+			return nil, fmt.Errorf("rating: scan member: %w", err)
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+func (r *PostgresRepository) AddMember(ctx context.Context, q db.DBTX, projectID, userID, addedBy uuid.UUID) error {
+	if _, err := q.Exec(ctx, `
+		INSERT INTO rating_project_members (project_id, user_id, added_by) VALUES ($1, $2, $3)
+		ON CONFLICT (project_id, user_id) DO NOTHING`, projectID, userID, addedBy); err != nil {
+		return fmt.Errorf("rating: add member: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepository) RemoveMember(ctx context.Context, q db.DBTX, projectID, userID uuid.UUID) error {
+	tag, err := q.Exec(ctx, `DELETE FROM rating_project_members WHERE project_id = $1 AND user_id = $2`, projectID, userID)
+	if err != nil {
+		return fmt.Errorf("rating: remove member: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *PostgresRepository) IsMember(ctx context.Context, q db.DBTX, projectID, userID uuid.UUID) (bool, error) {
+	var member bool
+	if err := q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM rating_project_members WHERE project_id = $1 AND user_id = $2)`, projectID, userID).Scan(&member); err != nil {
+		return false, fmt.Errorf("rating: is member: %w", err)
+	}
+	return member, nil
 }
 
 func (r *PostgresRepository) CreateTask(ctx context.Context, q db.DBTX, projectID uuid.UUID, title string) (uuid.UUID, error) {

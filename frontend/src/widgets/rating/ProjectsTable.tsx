@@ -11,12 +11,14 @@ import type { useRatingMutations } from "@entities/rating/queries";
 import {
   PROJECT_STATES,
   filterProjects,
+  isOnProject,
   orderProjects,
   projectProgress,
   projectState,
   projectTeam,
   statusCounts,
   type ProjectFilter,
+  type Viewer,
 } from "@entities/rating/model";
 import { ProjectDetails } from "./ProjectDetails";
 import { STATE_LABEL } from "./StatusDonut";
@@ -24,7 +26,6 @@ import { STATE_LABEL } from "./StatusDonut";
 interface Props {
   projects: RatingProject[];
   m: ReturnType<typeof useRatingMutations>;
-  isCEO: boolean;
 }
 
 const FILTER_LABEL: Record<ProjectFilter, Key> = {
@@ -39,14 +40,16 @@ const FILTER_LABEL: Record<ProjectFilter, Key> = {
 const FILTERS: ProjectFilter[] = ["all", "mine", ...PROJECT_STATES];
 
 /** Every project as a row; a row opens into its tasks and controls. */
-export function ProjectsTable({ projects, m, isCEO }: Props) {
-  const meId = useAuthStore((s) => s.user?.id ?? "");
+export function ProjectsTable({ projects, m }: Props) {
+  const user = useAuthStore((s) => s.user);
+  const me: Viewer = { id: user?.id ?? "", roleLevel: user?.roleLevel ?? null };
+  const meId = me.id;
   const [filter, setFilter] = useState<ProjectFilter>("all");
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Set<string>>(() => new Set());
 
   const counts = useMemo(() => statusCounts(projects), [projects]);
-  const mine = useMemo(() => projects.filter((p) => p.tasks.some((task) => task.assignee?.id === meId)).length, [projects, meId]);
+  const mine = useMemo(() => projects.filter((p) => isOnProject(p, meId)).length, [projects, meId]);
   const rows = useMemo(() => orderProjects(filterProjects(projects, filter, query, meId)), [projects, filter, query, meId]);
 
   const countOf = (f: ProjectFilter) => (f === "all" ? projects.length : f === "mine" ? mine : counts[f]);
@@ -164,7 +167,7 @@ export function ProjectsTable({ projects, m, isCEO }: Props) {
                 <Icon.Chevron size={18} />
               </span>
             </div>
-            {expanded && <ProjectDetails project={p} m={m} isCEO={isCEO} meId={meId} />}
+            {expanded && <ProjectDetails project={p} m={m} me={me} />}
           </div>
         );
       })}

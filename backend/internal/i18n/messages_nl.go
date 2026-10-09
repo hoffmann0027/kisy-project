@@ -87,6 +87,7 @@ var nl = Catalog{
 	"dashboard.down":          "reageert niet",
 	"dashboard.objectStorage": "objectopslag",
 	"dashboard.inDatabase":    "in de database",
+	"rating.memberCannotSee":  "Deze gebruiker ziet het project niet: zijn niveau ligt onder het toegangsniveau van het project",
 	"rating.csv.date":         "Datum",
 	"rating.csv.project":      "Project",
 	"rating.csv.task":         "Taak",

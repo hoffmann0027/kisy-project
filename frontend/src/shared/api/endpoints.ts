@@ -586,6 +586,10 @@ export const ratingApi = {
   deleteTask: (taskId: string) => apiClient.del<{ deleted: boolean }>(`/rating/tasks/${taskId}`),
   addFinance: (projectId: string, incomeKopecks: number, expenseKopecks: number, note?: string) =>
     apiClient.post<{ ok: boolean }>(`/rating/projects/${projectId}/finance`, { incomeKopecks, expenseKopecks, note }),
+  addMember: (projectId: string, userId: string) =>
+    apiClient.post<{ added: boolean }>(`/rating/projects/${projectId}/members`, { userId }),
+  removeMember: (projectId: string, userId: string) =>
+    apiClient.del<{ removed: boolean }>(`/rating/projects/${projectId}/members/${userId}`),
 };
 
 export const notesApi = {

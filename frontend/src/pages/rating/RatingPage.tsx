@@ -4,7 +4,7 @@ import { Rail } from "@widgets/rail/Rail";
 import { Button, Spinner } from "@shared/ui";
 import { Icon } from "@shared/ui/icons";
 import { t } from "@shared/i18n";
-import { useCapabilities } from "@shared/lib/useCapabilities";
+import { useAuthStore } from "@shared/store/auth";
 import { ProfileModal } from "@features/profile/ProfileModal";
 import { useRatingAnalytics, useRatingBoard, useRatingMutations } from "@entities/rating/queries";
 import { RatingKpis } from "@widgets/rating/RatingKpis";
@@ -16,6 +16,7 @@ import { TopProjects } from "@widgets/rating/TopProjects";
 import { ProfitShare } from "@widgets/rating/ProfitShare";
 import { ProjectsTable } from "@widgets/rating/ProjectsTable";
 import { NewProjectDialog } from "@widgets/rating/NewProjectDialog";
+import { canCreateProject } from "@entities/rating/model";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
@@ -27,7 +28,9 @@ export function RatingPage() {
   const { data: board, isPending } = useRatingBoard();
   const { data: analytics } = useRatingAnalytics();
   const m = useRatingMutations();
-  const caps = useCapabilities();
+  const user = useAuthStore((s) => s.user);
+  // Levels 1–4 run projects of their own; the CEO runs them all.
+  const creator = canCreateProject({ id: user?.id ?? "", roleLevel: user?.roleLevel ?? null });
   const [profile, setProfile] = useState(false);
   const [creating, setCreating] = useState(false);
 
@@ -47,7 +50,7 @@ export function RatingPage() {
               <p className="rating__sub">{t("work.rating.subtitle")}</p>
             </div>
             <div className="rating__actions">
-              {caps.canAdmin && (
+              {creator && (
                 <Button variant="primary" onClick={() => setCreating(true)}>
                   <Icon.Plus size={18} /> {t("work.rating.newProject")}
                 </Button>
@@ -67,7 +70,7 @@ export function RatingPage() {
               <div className="rating-grid__main">
                 <RatingKpis projects={projects} monthly={monthly} />
                 <FinanceChart monthly={monthly} />
-                <ProjectsTable projects={projects} m={m} isCEO={caps.canAdmin} />
+                <ProjectsTable projects={projects} m={m} />
                 <div className="rating-grid__pair">
                   <TopProjects per={perProject} />
                   <ProfitShare per={perProject} />
@@ -84,7 +87,7 @@ export function RatingPage() {
       </main>
 
       <ProfileModal open={profile} onClose={() => setProfile(false)} />
-      {caps.canAdmin && <NewProjectDialog m={m} open={creating} onClose={() => setCreating(false)} />}
+      {creator && <NewProjectDialog m={m} open={creating} onClose={() => setCreating(false)} />}
     </div>
   );
 }

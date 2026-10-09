@@ -34,6 +34,8 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Delete("/projects/{id}", h.deleteProject)
 	r.Post("/projects/{id}/tasks", h.createTask)
 	r.Post("/projects/{id}/finance", h.addFinance)
+	r.Post("/projects/{id}/members", h.addMember)
+	r.Delete("/projects/{id}/members/{userID}", h.removeMember)
 	r.Post("/tasks/{id}/assign", h.assign)
 	r.Patch("/tasks/{id}/progress", h.setProgress)
 	r.Post("/tasks/{id}/return", h.returnTask)
@@ -85,6 +87,8 @@ func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
 		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "invalid input")
 	case errors.Is(err, ErrAlreadyClaimed):
 		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrValidationFailed, "task already has an assignee")
+	case errors.Is(err, ErrOutOfReach):
+		httpresponse.Fail(w, r, http.StatusConflict, httpresponse.ErrValidationFailed, i18n.T(i18n.FromRequest(r), "rating.memberCannotSee"))
 	default:
 		httpresponse.Fail(w, r, http.StatusInternalServerError, httpresponse.ErrInternal, "internal error")
 	}
@@ -344,4 +348,48 @@ func (h *Handler) addFinance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpresponse.OK(w, r, http.StatusCreated, map[string]any{"ok": true})
+}
+
+type addMemberRequest struct {
+	UserID uuid.UUID `json:"userId"`
+}
+
+func (h *Handler) addMember(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.auth(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "project not found")
+		return
+	}
+	var req addMemberRequest
+	if err := httpjson.Decode(w, r, &req); err != nil || req.UserID == uuid.Nil {
+		httpresponse.Fail(w, r, http.StatusBadRequest, httpresponse.ErrValidationFailed, "userId required")
+		return
+	}
+	if err := h.svc.AddMember(r.Context(), id, req.UserID, actor); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"added": true})
+}
+
+func (h *Handler) removeMember(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.auth(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	userID, err2 := uuid.Parse(chi.URLParam(r, "userID"))
+	if err != nil || err2 != nil {
+		httpresponse.Fail(w, r, http.StatusNotFound, httpresponse.ErrResourceNotFound, "project or member not found")
+		return
+	}
+	if err := h.svc.RemoveMember(r.Context(), id, userID, actor); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpresponse.OK(w, r, http.StatusOK, map[string]any{"removed": true})
 }

@@ -91,6 +91,7 @@ var uk = Catalog{
 	"dashboard.down":          "не відповідає",
 	"dashboard.objectStorage": "об’єктне сховище",
 	"dashboard.inDatabase":    "у базі даних",
+	"rating.memberCannotSee":  "Цей користувач не бачить проєкт: його рівень нижчий за рівень доступу проєкту",
 	"rating.csv.date":         "Дата",
 	"rating.csv.project":      "Проєкт",
 	"rating.csv.task":         "Завдання",

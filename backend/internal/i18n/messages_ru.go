@@ -91,6 +91,7 @@ var ru = Catalog{
 	"dashboard.down":          "не отвечает",
 	"dashboard.objectStorage": "объектное хранилище",
 	"dashboard.inDatabase":    "в базе данных",
+	"rating.memberCannotSee":  "Этот пользователь не видит проект: его уровень ниже уровня доступа проекта",
 	"rating.csv.date":         "Дата",
 	"rating.csv.project":      "Проект",
 	"rating.csv.task":         "Задача",

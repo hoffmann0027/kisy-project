@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { RatingAssignee, RatingProject, RatingTask } from "@shared/api/types";
 import {
   bucketMonthly,
+  canCreateProject,
+  canManageProject,
+  canRecordFinance,
   filterProjects,
+  isOnProject,
   kpis,
   orderProjects,
   projectProgress,
@@ -47,6 +51,7 @@ function project(over: Partial<RatingProject>): RatingProject {
     totalExpenseKopecks: 0,
     totalProfitKopecks: 0,
     tasks: [],
+    members: [],
     createdAt: "2026-10-01T10:00:00Z",
     updatedAt: "2026-10-01T10:00:00Z",
     completedAt: null,
@@ -69,9 +74,9 @@ describe("a project's state", () => {
     expect(projectProgress(p)).toBe(43);
   });
 
-  it("names each person on its tasks once", () => {
-    const p = project({ tasks: [task({ assignee: alex }), task({ assignee: alex }), task({ assignee: kate }), task({})] });
-    expect(projectTeam(p).map((a) => a.id)).toEqual(["u-alex", "u-kate"]);
+  it("names its members first, then each person on its tasks, once", () => {
+    const p = project({ members: [kate], tasks: [task({ assignee: alex }), task({ assignee: alex }), task({ assignee: kate }), task({})] });
+    expect(projectTeam(p).map((a) => a.id)).toEqual(["u-kate", "u-alex"]);
   });
 });
 
@@ -182,5 +187,42 @@ describe("the table", () => {
 
   it("lists live work first and completed projects last", () => {
     expect(orderProjects([done, idle, open, working]).map((p) => p.id)).toEqual(["w", "o", "i", "d"]);
+  });
+});
+
+// Levels 1–4 run the projects they created; the CEO runs them all; a member
+// records money; everyone else only sees.
+describe("who may do what", () => {
+  const ceo = { id: "u-ceo", roleLevel: 1 };
+  const lead = { id: "u-lead", roleLevel: 4 };
+  const otherLead = { id: "u-lead2", roleLevel: 3 };
+  const dev = { id: "u-dev", roleLevel: 8 };
+  const basic = { id: "u-basic", roleLevel: null };
+  const p = project({ createdBy: "u-lead", members: [{ id: "u-dev", displayName: "Dev", avatarUrl: null }] });
+
+  it("lets levels 1–4 create projects", () => {
+    expect(canCreateProject(ceo)).toBe(true);
+    expect(canCreateProject(lead)).toBe(true);
+    expect(canCreateProject({ id: "x", roleLevel: 5 })).toBe(false);
+    expect(canCreateProject(basic)).toBe(false);
+  });
+
+  it("lets the creator and the CEO run a project, not another manager", () => {
+    expect(canManageProject(p, lead)).toBe(true);
+    expect(canManageProject(p, ceo)).toBe(true);
+    expect(canManageProject(p, otherLead)).toBe(false);
+    expect(canManageProject(p, dev)).toBe(false);
+  });
+
+  it("lets members record money too", () => {
+    expect(canRecordFinance(p, dev)).toBe(true);
+    expect(canRecordFinance(p, lead)).toBe(true);
+    expect(canRecordFinance(p, otherLead)).toBe(false);
+  });
+
+  it("counts a member as being on the project", () => {
+    expect(isOnProject(p, "u-dev")).toBe(true);
+    expect(isOnProject(p, "u-lead2")).toBe(false);
+    expect(filterProjects([p], "mine", "", "u-dev")).toEqual([p]);
   });
 });
